@@ -16,4 +16,7 @@ md: |
     inter 'datapoint' linking.
     
     Markdown is parsed by Showdown and YAML is parsed by js-yaml.
+    
+    My primary goal is to use this information system as a replacement for how I currently
+    use my bookmarks in Google Chrome.
 
