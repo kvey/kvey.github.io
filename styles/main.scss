@@ -2,10 +2,21 @@
 
 body {
     background: #EEE;
+    padding-bottom: 100px;
 }
 
-.datapoint, .datapoint-info{
-    margin-left: 10px;
+p{
+    max-width: 500px;
+}
+
+.datapoint{
+    margin-top: 35px;
+    padding-bottom: 35px;
+    border-bottom: 1px solid #E0E0E0;
+
+    &:last-child{
+        border-bottom: none;
+    }
 }
 
 .navbar .brand{
@@ -14,11 +25,12 @@ body {
 
 .projects{
     padding: 10px;
-
     ul{
-        margin-left: 10px;
+        margin-left: 0;
         li{
             list-style: none;
+            margin-top: 5px;
+            margin-bottom: 5px;
         }
     }
 }

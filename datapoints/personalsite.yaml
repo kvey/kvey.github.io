@@ -1,0 +1,19 @@
+title: Personal Site
+projects:
+    - Personal Site
+tags:
+    - site
+    - webdev
+    - angularjs
+    - datapoint
+links:
+    - Web Development
+md: |
+    I've built this using Google's Angularjs.
+
+    Posts are written in a markdown section of YAML files. As are these data objects.
+    YAML is being used to wrap additional metadata such as tags, project association, and
+    inter 'datapoint' linking.
+    
+    Markdown is parsed by Showdown and YAML is parsed by js-yaml.
+

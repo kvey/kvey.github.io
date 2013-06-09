@@ -15,30 +15,28 @@ angular.module('kvey.siteApp')
       link: (scope, element, attrs) ->
         scope.isCollapsed = true
         template = """
-          <div class="datapoint">
-            <h3>{{point.datapoint.title}}</h3>
-            <div class="datapoint-info">
-              <div class="markdown" ng-bind-html-unsafe="point.datapoint.md"></div>
-              <div class="btn-group" ng-show="point.datapoint.projects">
-                <button class="btn btn-primary dropdown-toggle" data-toggle="dropdown">
-                  Projects <span class="caret"> </span>
-                </button>
-                <ul class="dropdown-menu">
-                  <li ng-repeat="project in point.datapoint.projects">
-                    <a ng-click="filterPoints('project', 'searchFilterProject', project)">{{project}}</a>
-                  </li>
-                </ul>
-              </div>
-              <div class="btn-group" ng-show="point.datapoint.links">
-                <button class="btn btn-primary dropdown-toggle" data-toggle="dropdown">
-                  Links <span class="caret"> </span>
-                </button>
-                <ul class="dropdown-menu">
-                  <li ng-repeat="link in point.datapoint.links">
-                    <a ng-click="filterPoints('point', 'searchFilterPoint', link)">{{link}}</a>
-                  </li>
-                </ul>
-              </div>
+          <h3>{{point.datapoint.title}}</h3>
+          <div class="datapoint-info">
+            <div class="markdown" ng-bind-html-unsafe="point.datapoint.md"></div>
+            <div class="btn-group" ng-show="point.datapoint.projects">
+              <button class="btn dropdown-toggle" data-toggle="dropdown">
+                Projects <span class="caret"> </span>
+              </button>
+              <ul class="dropdown-menu">
+                <li ng-repeat="project in point.datapoint.projects">
+                  <a ng-click="filterPoints('project', 'searchFilterProject', project)">{{project}}</a>
+                </li>
+              </ul>
+            </div>
+            <div class="btn-group" ng-show="point.datapoint.links">
+              <button class="btn dropdown-toggle" data-toggle="dropdown">
+                Links <span class="caret"> </span>
+              </button>
+              <ul class="dropdown-menu">
+                <li ng-repeat="link in point.datapoint.links">
+                  <a ng-click="filterPoints('point', 'searchFilterPoint', link)">{{link}}</a>
+                </li>
+              </ul>
             </div>
           </div>
           """
@@ -52,8 +50,8 @@ angular.module('kvey.siteApp')
           point = scope.point.datapoint
           point.md = converter.makeHtml(point.md)
           element.html(template).show()
+          element.attr("class", "datapoint")
           $compile(element.contents())(scope)
-          #element.html($compile(template)(point))
         else
           element.html("<div class='markdown'>No source was set</div>")
     }

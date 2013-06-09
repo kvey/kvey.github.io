@@ -6599,27 +6599,41 @@ a.label:hover, a.badge:hover {
 /* line 3, main.scss */
 body {
   background: #EEE;
+  padding-bottom: 100px;
 }
 
-/* line 7, main.scss */
-.datapoint, .datapoint-info {
-  margin-left: 10px;
+/* line 8, main.scss */
+p {
+  max-width: 500px;
 }
 
-/* line 11, main.scss */
+/* line 12, main.scss */
+.datapoint {
+  margin-top: 35px;
+  padding-bottom: 35px;
+  border-bottom: 1px solid #E0E0E0;
+}
+/* line 17, main.scss */
+.datapoint:last-child {
+  border-bottom: none;
+}
+
+/* line 22, main.scss */
 .navbar .brand {
   padding: 10px 0px 10px 10px;
 }
 
-/* line 15, main.scss */
+/* line 26, main.scss */
 .projects {
   padding: 10px;
 }
-/* line 18, main.scss */
+/* line 28, main.scss */
 .projects ul {
-  margin-left: 10px;
+  margin-left: 0;
 }
-/* line 20, main.scss */
+/* line 30, main.scss */
 .projects ul li {
   list-style: none;
+  margin-top: 5px;
+  margin-bottom: 5px;
 }
