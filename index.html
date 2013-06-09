@@ -25,16 +25,33 @@
     <![endif]-->
 
     <!-- Add your site or application content here -->
+    <div class="navbar">
+      <div class="navbar-inner">
+        <a class="brand" href="">Colton</a>
+        <ul class="nav">
+          <li><a href="/">Home</a></li>
+          <li><a href="#/information">Information</a></li>
+          <li><a href="#/posts">Posts</a></li>
+        </ul>
+      </div>
+    </div>
     <div class="container" ng-view></div>
 
+    <script src="http://code.jquery.com/jquery-1.9.1.js"></script>
     <script src="components/angular/angular.js"></script>
     <script src="components/angular-resource/angular-resource.js"></script>
     <script src="components/angular-cookies/angular-cookies.js"></script>
     <script src="components/angular-sanitize/angular-sanitize.js"></script>
+    <script src="components/showdown/compressed/showdown.js"></script>
+    <script src="scripts/libs/js-yaml/js-yaml.min.js"></script>
+    <script src="scripts/libs/angular-bootstrap-ui/ui-bootstrap-tpls-0.3.0.min.js"></script>
 
     <!-- build:js scripts/scripts.js -->
     <script src="scripts/app.js"></script>
     <script src="scripts/controllers/main.js"></script>
+    <script src="scripts/directives/markdown.js"></script>
+    <script src="scripts/controllers/info.js"></script>
+    <script src="scripts/directives/datapoint.js"></script>
     <!-- endbuild -->
 
     <!-- Google Analytics: change UA-XXXXX-X to be your site's ID. -->

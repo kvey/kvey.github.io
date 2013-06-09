@@ -1,0 +1,13 @@
+title: Other
+projects:
+    - diffProject
+    - projectTarget
+    - projectTarget
+tags:
+    - testItem
+    - test2
+links:
+    - linkTargetText
+md: |
+    some other markdown
+
