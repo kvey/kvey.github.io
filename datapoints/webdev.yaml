@@ -1,13 +1,14 @@
-title: Other
+title: Web Development
 projects:
     - diffProject
-    - projectTarget
     - projectTarget
 tags:
     - testItem
     - test2
+    - test2
 links:
     - linkTargetText
 md: |
-    some other markdown
+    Information pertaining to web development
+    and the sort of thing
 

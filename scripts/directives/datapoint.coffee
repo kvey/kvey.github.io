@@ -24,7 +24,9 @@ angular.module('kvey.siteApp')
                   Projects <span class="caret"> </span>
                 </button>
                 <ul class="dropdown-menu">
-                  <li ng-repeat="project in point.datapoint.projects"><a href="#">{{project}}</a></li>
+                  <li ng-repeat="project in point.datapoint.projects">
+                    <a ng-click="filterPoints('project', 'searchFilterProject', project)">{{project}}</a>
+                  </li>
                 </ul>
               </div>
               <div class="btn-group" ng-show="point.datapoint.links">
@@ -32,7 +34,9 @@ angular.module('kvey.siteApp')
                   Links <span class="caret"> </span>
                 </button>
                 <ul class="dropdown-menu">
-                  <li ng-repeat="link in point.datapoint.links"><a href="#">{{link}}</a></li>
+                  <li ng-repeat="link in point.datapoint.links">
+                    <a ng-click="filterPoints('point', 'searchFilterPoint', link)">{{link}}</a>
+                  </li>
                 </ul>
               </div>
             </div>

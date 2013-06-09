@@ -1,8 +1,8 @@
-title: Test
+title: Git
 tags:
     - testItem
 links:
-    - linkTargetText
+    - Other
 md: | 
     whole bunch of [Test](http://www.google.com) 
 

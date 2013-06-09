@@ -6605,3 +6605,21 @@ body {
 .datapoint, .datapoint-info {
   margin-left: 10px;
 }
+
+/* line 11, main.scss */
+.navbar .brand {
+  padding: 10px 0px 10px 10px;
+}
+
+/* line 15, main.scss */
+.projects {
+  padding: 10px;
+}
+/* line 18, main.scss */
+.projects ul {
+  margin-left: 10px;
+}
+/* line 20, main.scss */
+.projects ul li {
+  list-style: none;
+}

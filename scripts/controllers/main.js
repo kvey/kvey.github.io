@@ -2,9 +2,6 @@
 
 angular.module('kvey.siteApp')
   .controller('MainCtrl', function ($scope) {
-    $scope.awesomeThings = [
-      'HTML5 Boilerplate',
-      'AngularJS',
-      'Karma'
-    ];
+    $scope.$parent.nav = {};
+    $scope.$parent.nav.about = "active";
   });
