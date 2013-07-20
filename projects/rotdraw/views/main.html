@@ -1,10 +1,4 @@
-<div ng-canvas 
-  ng-canvas-draw="draw"
-  ng-canvas-setup="setup"
-  ng-canvas-height="400"
-  ng-canvas-width="800"
-  ng-canvas-frame-rate="1000/60"
-  ng-canvas-setup="setup">
+<div ng-canvas="" ng-canvas-draw="draw" ng-canvas-setup="setup" ng-canvas-height="400" ng-canvas-width="800" ng-canvas-frame-rate="1000/60" ng-canvas-setup="setup">
 </div>
 <a ng-click="clearPath()">Clear</a>
 <a ng-click="addNode()">Node</a>
@@ -12,21 +6,13 @@
   <ul>
     <li>
       <div> Angular Velocity: {{node.angular}} </div>
-      <div jslider="node.angular" 
-        jslider-min="-50" 
-        jslider-max="50" 
-        jslider-div="100" 
-        class="slider">
+      <div jslider="node.angular" jslider-min="-50" jslider-max="50" jslider-div="100" class="slider">
       </div>
     </li>
     <li>
-      <div> Length: <input type="" ng-model="node.len"/></div>
-      <div jslider="node._len" 
-        jslider-min="0" 
-        jslider-max="200" 
-        class="slider">
+      <div> Length: <input type="" ng-model="node.len"></div>
+      <div jslider="node._len" jslider-min="0" jslider-max="200" class="slider">
       </div>
     </li>
   </ul>
 </div>
-
