@@ -11,6 +11,10 @@ angular.module('kvey.siteApp', ["ui.bootstrap"])
         templateUrl: 'views/information.html',
         controller: 'InfoCtrl'
       })
+      .when('/projects', {
+        templateUrl: 'views/projects.html',
+        controller: 'ProjCtrl'
+      })
       .otherwise({
         redirectTo: '/'
       });
