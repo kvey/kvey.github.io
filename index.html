@@ -12,9 +12,9 @@ title: Colton Pierson - Kvey[kva]
     <p class="meta">
       {{ post.date | date: "%B %e, %Y" }}
     </p>
-    <p> {{ post.content | split:'breakkk' | first }} </p>
+    <p> {{ post.content | split:'<!-- break -->' | first }} </p>
     <p>
-        {% if post.content contains 'breakkk' %}
+        {% if post.content contains '<!-- break -->' %}
           <a href="{{ post.url }}">(read more)</a>
         {% endif %}
     </p>
