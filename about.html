@@ -5,7 +5,7 @@ permalink: about.html
 ---
 
 <p>
-  <a href="http://assembly.com"> Assembly</a> - CTO:
+  <a href="http://assembly.com"> Assembly (YCS15)</a> - CTO:
   <p>2014-2018: GetScale became Assembly. Fulfillment, Sourcing, and Process Control</p>
   <ul>
     <li>
@@ -59,30 +59,67 @@ permalink: about.html
   </ul>
 </p>
 <p>
-  <a href="http://getscale.com"> GetScale</a> - CTO:
+  <a href="http://getscale.com"> GetScale (YCS15)</a> - CTO:
   <p>2014: High volume consumer electronics manfacturing, tooling and management</p>
   <ul>
     <li>
       Quality Control system
       <br/>
+      * Our team designed and built semi-custom touchscreen terminals and
+        camera/sensor packages that were deployed into factories in China and
+        the US. These systems were used to data collection during quality
+        control processes. We built an international team for support and
+        management of this system.
+      <br/>
+      * Factories tend to be in rural areas with
+        less than ideal networking infrastructure in countries.
+    </li>
+    <li>
+      Bill of Materials Optimization
+      <br/>
+      * This allowed users to visualize the pricing of their bill of materials
+        at varying production quantities and then select appropriate quotations
+        from multiple vendors for pricing optimization at that target quantity.
+        We accounted for break bulk, minimum order quantities and unit
+        quotations and allowed users to interactively adjust part selections and
+        target quantities.
+      * The backend of this system was initially implemented in C and then later converted
+        to multithreaded Clojure as we extended support to a larger variety of suppliers.
+      * The frontend of this was implemented in ClojureScript and allowed
+        interactive zooming and exploration of the dataset across all parts in
+        the BoM.
+      <img src="/images/getscale-bom-optimization.png" width="200px" />
+      <img src="/images/getscale-bom-optimization-2.png" width="200px" />
     </li>
     <li>
       Product Lifecycle Management system
       <br/>
+      * The initial product we developed at GetScale was a PLM or Product Lifecycle Management system.
+        We provided a user interface for hierarchical bill of material management, version control, and
+        automated part quotation.
+      <img src="/images/getscale-plm.png" width="200px" />
     </li>
   </ul>
 </p>
 <p>
   <a href="http://circuithub.com"> CircuitHub</a> - Software Engineer:
-  <p>2013-2014: Small volume electronics manufacturing</p> 
+  <p>2013-2014: Small volume electronics manufacturing</p>
   <ul>
-    <li>
-      Footprint/symbol editor
-      <br/>
-    </li>
     <li>
       Library managemnt
       <br/>
+      * Worked with CEO and designer to re-design and implement a new library management
+        interface. Libraries in this context are collections of footprints and
+        symbols used by electrical engineers in their designs.
+      <img src="/images/circuithub-library.png" width="200px" />
+    </li>
+    <li>
+      Footprint/symbol editor
+      <br/>
+      * This allowed users to use Javascript and a small DSL to define and modify
+        symbols and footprints for use in the design of printed circuit boards (PCBs).
+        We provided a browser based interface for visualizing and iterating on designs
+        and a version control system for collaboration.
     </li>
   </ul>
 </p>
@@ -94,12 +131,13 @@ permalink: about.html
       Charter booking interface
       <br/>
       * Implemented charter booking, allowing users to select routes, aircraft
-      of choice, and manage the quote selection process
+        of choice, and manage the quote selection process
     </li>
     <li>
       Quote management
       <br/>
-      * Built infrastructure for managing quotes for charter flight
+      * Built infrastructure for managing quotes for charter flight. Implemented
+        PDF generation.
     </li>
   </ul>
 </p>
