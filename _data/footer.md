@@ -1,6 +1,6 @@
 ---
 layout: post
-title: meh
+title: footer
 ---
 
 [Github](https://github.com/kvey)
