@@ -50,7 +50,18 @@ permalink: about.html
   <p>
     <b>Event sourcing model with reactive queries</b>
     <br/>
-    * As we expanded to customers operating with teams in both China and the US
+    * To improve developer productivity and better support collaboration between
+      international teams we moved our management infrastructure to an
+      eventually consistent event sourcing model. On the client we allowed
+      queries to be defined in datascript and on the backend our configurations
+      were stored in Datomic. This allowed us to use not only a single language
+      (clojure/clojurescript) but a single query language (datalog). All events
+      dispatched on the client were handled on the server in the same format and
+      propagated to clients subscribed to those queries, code for this system
+      was shared on the client and server. Both the client and server were
+      operating over a normalized representation of the data in a datalog
+      database, where the client represented that user's accessible subset of
+      the data.
   </p>
   <p>
     <b>Delay tolerant networking infrastructure</b>
