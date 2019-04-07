@@ -45,3 +45,7 @@ p.meta {
 div.post {
   margin-bottom: 50px;
 }
+
+div.section {
+  margin-left: 5px;
+}
