@@ -8,16 +8,19 @@ permalink: about.html
 <p>2014-2018: GetScale became Assembly. Fulfillment, Sourcing, and Process Control</p>
 <div class="section">
   <p>
-    <b>Distributed Console Network</b>
+    <b>mDNS based local peer discovery and Console Network - 2017</b>
     <br/>
-  </p>
-  <p>
-    <b>Data cleaning processes and data visualization</b>
+    * This enabled our consoles to communicate internally within a client facility.
+      We needed to allow consoles further down an assembly line to be notified
+      when they encountered units that had failed particular criteria. This needed to
+      happen while it was possible that the consoles would not be able to
+      communicate out of the facility.
     <br/>
-  </p>
-  <p>
-    <b>mDNS based local peer discovery</b>
-    <br/>
+    * Consoles would broadcast over mDNS, perform leader election, and replicate
+    their logs across one another. Locally clients would query their log for the
+    state of units the network had encountered. Consoles would display
+    notifications when they had lost connection to the network or were otherwise
+    trailing behind the shared log of the network.
   </p>
   <p>
     <b>Source controlled Devops - 2017</b>
@@ -36,6 +39,7 @@ permalink: about.html
     * With the addition of warehousing services in the US in 2017 I managed the
       migration and handover of multiple warehousing clients to our service as we
       acquired the customer base of another organization.
+    <br/>
     * I particpated in sales and support calls both solo and with the support of
       our team with new and existing customers.
   </p>
@@ -49,6 +53,7 @@ permalink: about.html
       similar imagery from unit to unit and we exploited this feature by
       pre-training our compression libraries against these baselines and by
       shipping differences rather than whole resources.
+    <br/>
     * Download of updates to the procedures and software included on our
       consoles similarly used binary differences in their payloads rather than
       re-downloading full copies of their resources.
