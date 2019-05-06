@@ -2,21 +2,50 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Colton Pierson - Kvey[kva]</title>
+    <title>Colton Pierson</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css?family=Inconsolata" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css" />
+    <script type="text/javascript">
+      window.onload = function() {
+        let now = new Date();
+        let firstJan = new Date(now.getFullYear(), 0, 1);
+        let newDiff = (now - firstJan) + ((firstJan.getTimezoneOffset() - now.getTimezoneOffset()) * 60 * 1000);
+        let oneDay = 1000 * 60 * 60 * 24;
+        let dayOfYear = Math.floor(newDiff / oneDay);
+        let weekOfYear = Math.ceil( (((now - firstJan) / 86400000) + firstJan.getDay() + 1) / 7 );
+
+        let dateCycleThree = document.getElementById("date-cycle-3");
+        let dateCycleBiWeekly = document.getElementById("date-cycle-bi-weekly");
+        let pre = "width: 10px; height: 10px; display: inline-block; border: 1px solid #000;";
+
+        let weekColors = ["#1d6cf4", "#EEE"];
+        let threeColors = ["#1d6cf4", "#EEE", "#c40000"];
+
+        dateCycleThree.style = pre + "background: " + threeColors[dayOfYear % 3] + ";";
+        dateCycleBiWeekly.style =  pre + "background: " + weekColors[weekOfYear % 2] + ";";
+      };
+    </script>
   </head>
   <body>
     <div class="container">
-      <h1 class="site-title"> Colton Pierson </h1>
-      <p class="site-subtitle"> username: Kvey[kva] </p>
+      <h1 class="site-title">
+        Colton Pierson
+      </h1>
+      <div>
+        3 day cycle
+        <div id="date-cycle-3"></div>
+        -
+        2 week cycle
+        <div id="date-cycle-bi-weekly"></div>
+      </div>
+      <!-- <p class="site-subtitle"> username: Kvey[kva] </p> -->
       <div class="site-nav">
         <a href="/">home</a>
         <span> | </span>
         <a href="/about.html">about</a>
         <span> | </span>
-        <a href="https://github.com/kvey">Github</a> 
+        <a href="https://github.com/kvey">Github</a>
         <span> | </span>
         <a href="http://www.linkedin.com/pub/colton-pierson/48/ab2/a">Linkedin</a>
 

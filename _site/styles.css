@@ -45,3 +45,17 @@ p.meta {
 div.post {
   margin-bottom: 50px;
 }
+
+div.section {
+  margin-left: 10px;
+  margin-bottom: 40px;
+}
+
+.page-about p {
+  margin-bottom: 20px;
+}
+
+
+.page-about h3 {
+  margin-bottom: 5px;
+}

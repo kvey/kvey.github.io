@@ -1,3 +1,7 @@
+## Running locally
+`bundle install`
+`bundle exec jekyll serve`
+
 ## Jekyll Boilerplate
 
 A jekyll starting point. Based on [Jekyll Base](https://github.com/danielmcgraw/Jekyll-Base)
@@ -63,3 +67,6 @@ variables. You can also specify custom variables in the YAML Front Matter.
 
 This is used to render the site's index. It is essntially a post loop wrapped
 in your base layout.
+
+
+
