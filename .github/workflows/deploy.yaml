@@ -10,6 +10,6 @@ jobs:
       uses: shalzz/zola-deploy-action@master
       env:
         PAGES_BRANCH: master
-        TOKEN: 8b2324092f5d3c6116e5da86443c8480600e6945
+        TOKEN: ${{ secrets.TOKEN }}
 
 
