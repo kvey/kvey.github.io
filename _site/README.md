@@ -3,6 +3,13 @@
 A jekyll starting point. Based on [Jekyll Base](https://github.com/danielmcgraw/Jekyll-Base)
 by Daniel McGraw.
 
+### Running locally
+
+`bundle install`
+`bundle exec serve`
+
+
+
 ### Structure
 
 ```
