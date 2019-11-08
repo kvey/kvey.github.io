@@ -7,6 +7,13 @@
         </url>
     
         <url>
+            <loc>http://127.0.0.1:1111/about/</loc>
+            
+                <lastmod>2017-09-24</lastmod>
+            
+        </url>
+    
+        <url>
             <loc>http://127.0.0.1:1111/categories/</loc>
             
         </url>

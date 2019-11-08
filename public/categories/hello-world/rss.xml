@@ -12,6 +12,252 @@
             <item>
                 <title>What is Gutenberg - Colton</title>
                 <pubDate>Sun, 24 Sep 2017 00:00:00 +0000</pubDate>
+                <link>http://127.0.0.1:1111/about/</link>
+                <guid>http://127.0.0.1:1111/about/</guid>
+                <description>&lt;div class=&quot;page-about&quot;&gt;
+  &lt;h2&gt; Work &lt;&#x2F;h2&gt;
+  &lt;h3&gt; &lt;a href=&quot;http:&#x2F;&#x2F;assembly.com&quot;&gt; Assembly (YCS15)&lt;&#x2F;a&gt; - CTO: &lt;&#x2F;h3&gt;
+  &lt;p&gt;2014-2018: GetScale became Assembly. Fulfillment, Sourcing, and Process Control&lt;&#x2F;p&gt;
+  &lt;div class=&quot;section&quot;&gt;
+    &lt;p&gt;
+      From 2014 to 2018 I led an international team of engineers in Redwood
+      City, CA and Shanghai, China. I established practices around engineering,
+      security and operations. I participated in hiring and firing, building company
+      culture, and worked with sales and operations. Both participating in and
+      eventually leaving Assembly were some of the hardest things I&#x27;ve ever
+      done. I&#x27;m grateful for everyone I ever had the opprotunity to work with
+      there and to my co-founder Jonathan for all of their hard work and support
+      throughout the experience.
+      &lt;br&#x2F;&gt;
+      &lt;img src=&quot;&#x2F;images&#x2F;colton-jon.JPG&quot; width=&quot;200px&quot; &#x2F;&gt;
+      &lt;br&#x2F;&gt;
+      &lt;img src=&quot;&#x2F;images&#x2F;assembly.png&quot; width=&quot;200px&quot; &#x2F;&gt;
+    &lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;&quot;&gt;
+&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;b&amp;gt;mDNS based local peer discovery and Console Network - 2017&amp;lt;&#x2F;b&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * This enabled our consoles to communicate internally within a client facility.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  We needed to allow consoles further down an assembly line to be notified
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  when they encountered units that had failed particular criteria. This needed to
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  happen while it was possible that the consoles would not be able to
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  communicate out of the facility.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * Consoles would broadcast over mDNS, perform leader election, and replicate
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  their logs across one another. Locally clients would query their log for the
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  state of units the network had encountered. Consoles would display
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  notifications when they had lost connection to the network or were otherwise
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  trailing behind the shared log of the network.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;img src=&amp;quot;&#x2F;images&#x2F;console-network.JPG&amp;quot; width=&amp;quot;200px&amp;quot; &#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;&#x2F;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;b&amp;gt;Source controlled Devops - 2017&amp;lt;&#x2F;b&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * We imposed a requirement that all of our developer operational tools
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  exist and be documented in our source repository. This allowed any of our
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  engineers to view our current configuration and allowed auditable
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  management of changes to our infrastructure. Our infrastructure was
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  managed as kubernetes clusters in China and the US on separate cloud
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  providers, defined using initially CloudFormation in a clojure DSL and
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  then Terraform.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;&#x2F;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;b&amp;gt;Warehouse Service Sales and Support - 2017&amp;lt;&#x2F;b&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * With the addition of warehousing services in the US in 2017 I managed the
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  migration and handover of multiple warehousing clients to our service as we
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  acquired the customer base of another organization.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * I particpated in sales and support calls both solo and with the support of
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  our team with new and existing customers.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;img src=&amp;quot;&#x2F;images&#x2F;assembly-warehouse.JPG&amp;quot; width=&amp;quot;200px&amp;quot; &#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;&#x2F;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;b&amp;gt;Support for operating in bandwidth limited environments - 2016&amp;lt;&#x2F;b&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * Our customers were located in rural locations with hard bandwidth
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  limitations. For this reason our collection of video and image data
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  required support of bandwidth utiliziation tracking, and compression on
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  locally installed edge services. Our systems were collecting extremely
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  similar imagery from unit to unit and we exploited this feature by
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  pre-training our compression libraries against these baselines and by
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  shipping differences rather than whole resources.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * Downloads of updates to the procedures and software included on our
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  consoles similarly used binary differences in their payloads rather than
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  re-downloading full copies of their resources.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;&#x2F;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;b&amp;gt;LCD Character Recognition - 2016&amp;lt;&#x2F;b&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * In order to better instrument less sophisticated final assembly and QA
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  processes we built a system for running optical character recognititon on
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  liquid crystal displays commonly used on scales, calipers, and other
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  existing equipment. This was implemented using Tesseract and OpenCV.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;&#x2F;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;b&amp;gt;QR Code scanning performance - 2016&amp;lt;&#x2F;b&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * Efficient QR Code scanning became critical to our operations as our
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  systems moved into manufacturing process control and quality assurance. We
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  produced internal software systems for faster qr decoding, camera focus, and
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  zoom. We also customized our hardware: our camera lenses, added rangefinding and
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  programmable lighting.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;img src=&amp;quot;&#x2F;images&#x2F;QC-camera.png&amp;quot; width=&amp;quot;200px&amp;quot; &#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;&#x2F;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;b&amp;gt;Log ingestion and transport - 2016&amp;lt;&#x2F;b&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * This system ingested terabytes of data per day of temperature,
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  orientation, and behavior information from our consoles installed in the
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  field. Collecting and analyzing this data for online analysis and alerting
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  of process behavior and offline analysis of factory conditions.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;&#x2F;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;b&amp;gt;Event sourcing model with reactive queries - 2015&amp;lt;&#x2F;b&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * To improve developer productivity and better support collaboration between
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  international teams we moved our console management infrastructure to an
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  eventually consistent event sourcing model. On the client we allowed
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  queries to be defined in datascript and on the backend our configurations
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  were stored in Datomic.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * This allowed us to use not only a single
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  programming language (clojure&#x2F;clojurescript) but a single query language
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  (datalog). All events dispatched on the client were handled on the server
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  in the same format and propagated to clients subscribed to those queries,
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  code for this system was shared on the client and server. Both the client
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  and server were operating over a normalized representation of the data in
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  a datalog database, where the client represented that user&amp;#39;s accessible
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  subset of the data.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;&#x2F;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;b&amp;gt;Delay tolerant networking infrastructure - 2015&amp;lt;&#x2F;b&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  &amp;lt;br&#x2F;&amp;gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  * Our system was deployed into factories in rural locations, in locations
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  with constraints on access particular internet services. We provided a
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  service that managed multiple hops between different and particular
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  geographically located infrastructure providers and would queue all
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;  intermediate data for reliable delivery.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#c0c5ce;&quot;&gt;&amp;lt;&#x2F;p&amp;gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;pre&gt;&lt;&#x2F;div&gt;
+&lt;h3&gt; &lt;a href=&quot;http:&#x2F;&#x2F;getscale.com&quot;&gt; GetScale (YCS15)&lt;&#x2F;a&gt; - CTO: &lt;&#x2F;h3&gt;
+  &lt;p&gt;2014: High volume consumer electronics manfacturing, tooling and management&lt;&#x2F;p&gt;
+  &lt;div class=&quot;section&quot;&gt;
+    &lt;p&gt;
+      &lt;b&gt;Prototype Quality Control system - 2014&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * Our team designed and built semi-custom touchscreen terminals and
+      camera&#x2F;sensor packages that were deployed into factories in China and
+      the US. These systems were used to perform data collection during quality
+      control processes. We acquired an initial group of customers and built a
+      rudimentary system for managing the procedures displayed on the consoles
+      that could be managed from the US.
+      &lt;br&#x2F;&gt;
+      * We applied to and were accepted into Y Combinator for their Summer 2015
+      batch based on this system.
+      &lt;br&#x2F;&gt;
+      &lt;img src=&quot;&#x2F;images&#x2F;QC-system.png&quot; width=&quot;200px&quot; &#x2F;&gt;
+    &lt;&#x2F;p&gt;
+    &lt;p&gt;
+      &lt;b&gt;Bill of Materials Optimization - 2014&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * This allowed users to visualize the pricing of their bill of materials
+      at varying production quantities and then select appropriate quotations
+      from multiple vendors for pricing optimization at that target quantity.
+      We accounted for break bulk, minimum order quantities and unit
+      quotations and allowed users to interactively adjust part selections and
+      target quantities.
+      &lt;br&#x2F;&gt;
+      * The backend of this system was initially implemented in C and then later converted
+      to multithreaded Clojure as we extended support to a larger variety of suppliers.
+      &lt;br&#x2F;&gt;
+      * The frontend of this was implemented in ClojureScript and allowed
+      interactive zooming and exploration of the dataset across all parts in
+      the BoM.
+      &lt;br&#x2F;&gt;
+      &lt;img src=&quot;&#x2F;images&#x2F;getscale-bom-optimization-2.png&quot; width=&quot;200px&quot; &#x2F;&gt;
+    &lt;&#x2F;p&gt;
+    &lt;p&gt;
+      &lt;b&gt;Product Lifecycle Management system - 2014&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * The initial product we developed at GetScale was a PLM or Product Lifecycle Management system.
+      We provided a user interface for hierarchical bill of material management, version control, and
+      automated part quotation.
+      &lt;br&#x2F;&gt;
+      &lt;img src=&quot;&#x2F;images&#x2F;getscale-plm.png&quot; width=&quot;200px&quot; &#x2F;&gt;
+    &lt;&#x2F;p&gt;
+  &lt;&#x2F;div&gt;
+&lt;h3&gt; &lt;a href=&quot;http:&#x2F;&#x2F;circuithub.com&quot;&gt; CircuitHub&lt;&#x2F;a&gt; - Software Engineer: &lt;&#x2F;h3&gt;
+  &lt;p&gt;2013-2014: Small volume electronics manufacturing&lt;&#x2F;p&gt;
+  &lt;div class=&quot;section&quot;&gt;
+    &lt;p&gt;
+      &lt;b&gt;Library managemnt&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * Worked with CEO and designer to re-design and implement a new library management
+      interface. Libraries in this context are collections of footprints and
+      symbols used by electrical engineers in their designs.
+      &lt;br&#x2F;&gt;
+      &lt;img src=&quot;&#x2F;images&#x2F;circuithub-library.png&quot; width=&quot;200px&quot; &#x2F;&gt;
+    &lt;&#x2F;p&gt;
+    &lt;p&gt;
+      &lt;b&gt;Footprint&#x2F;symbol editor&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * This allowed users to use Javascript and a small DSL to define and modify
+      symbols and footprints for use in the design of printed circuit boards (PCBs).
+      We provided a browser based interface for visualizing and iterating on designs
+      and a version control system for collaboration.
+    &lt;&#x2F;p&gt;
+  &lt;&#x2F;div&gt;
+&lt;h3&gt; &lt;a href=&quot;http:&#x2F;&#x2F;blackjet.com&quot;&gt; BlackJet&lt;&#x2F;a&gt; - Software Engineer: &lt;&#x2F;h3&gt;
+  &lt;p&gt;2013: Uber for private jets&lt;&#x2F;p&gt;
+  &lt;div class=&quot;section&quot;&gt;
+    &lt;p&gt;
+      &lt;b&gt;Charter booking interface&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * Implemented charter booking, allowing users to select routes, aircraft
+      of choice, and manage the quote selection process
+    &lt;&#x2F;p&gt;
+    &lt;p&gt;
+      &lt;b&gt;Pricing Quote management&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * Built infrastructure for managing quotes for charter flight. Implemented
+      PDF generation.
+    &lt;&#x2F;p&gt;
+  &lt;&#x2F;div&gt;
+&lt;h3&gt; &lt;a href=&quot;http:&#x2F;&#x2F;mixrank.com&quot;&gt; MixRank&lt;&#x2F;a&gt; - Software Engineer: &lt;&#x2F;h3&gt;
+  &lt;p&gt;2012: Competitive advertising analytics&lt;&#x2F;p&gt;
+  &lt;div class=&quot;section&quot;&gt;
+    &lt;p&gt;
+      &lt;b&gt;Site Redesign&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * Worked on site redesign in Python&#x2F;Pyramids&#x2F;Javascript
+    &lt;&#x2F;p&gt;
+  &lt;&#x2F;div&gt;
+&lt;h3&gt; &lt;a href=&quot;https:&#x2F;&#x2F;www.flint.com&quot;&gt;Flint Mobile Payment&lt;&#x2F;a&gt; - Software Engineer: &lt;&#x2F;h3&gt;
+  &lt;p&gt;2012: Optical character recognition based mobile payments platform&lt;&#x2F;p&gt;
+  &lt;div class=&quot;section&quot;&gt;
+    &lt;p&gt;
+      &lt;b&gt;Banking transaction protocol implementation&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * Implemented bank transfer protocol in Nodejs
+    &lt;&#x2F;p&gt;
+    &lt;p&gt;
+      &lt;b&gt;REST API&lt;&#x2F;b&gt;
+      &lt;br&#x2F;&gt;
+      * Worked on the design and implementation of REST API
+    &lt;&#x2F;p&gt;
+  &lt;&#x2F;div&gt;
+&lt;&#x2F;div&gt;
+</description>
+            </item>
+        
+            <item>
+                <title>What is Gutenberg - Colton</title>
+                <pubDate>Sun, 24 Sep 2017 00:00:00 +0000</pubDate>
                 <link>http://127.0.0.1:1111/some-article/</link>
                 <guid>http://127.0.0.1:1111/some-article/</guid>
                 <description>&lt;p&gt;Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc eu feugiat sapien. Aenean ligula nunc, laoreet id sem in, interdum bibendum felis. Donec vel dui neque. Praesent ac sem ut justo volutpat rutrum a imperdiet tellus. Nam lobortis massa non hendrerit hendrerit. Vivamus porttitor dignissim turpis, eget aliquam urna tincidunt non. Aliquam et fringilla turpis. Nullam eros est, eleifend in ornare sed, hendrerit eget est. Aliquam tellus felis, suscipit vitae ex vel, fringilla tempus massa. Nulla facilisi. Pellentesque lobortis consequat lectus. Maecenas ac libero elit.&lt;&#x2F;p&gt;
