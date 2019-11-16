@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+    <channel>
+        <title></title>
+        <link>http://127.0.0.1:1111</link>
+        <description></description>
+        <generator>Zola</generator>
+        <language>en</language>
+        <atom:link href="http://127.0.0.1:1111/categories/colton/rss.xml" rel="self" type="application/rss+xml"/>
+        <lastBuildDate>Fri, 15 Nov 2019 00:00:00 +0000</lastBuildDate>
+        
+            <item>
+                <title>About</title>
+                <pubDate>Fri, 15 Nov 2019 00:00:00 +0000</pubDate>
+                <link>http://127.0.0.1:1111/about/</link>
+                <guid>http://127.0.0.1:1111/about/</guid>
+                <description>&lt;h2 id=&quot;work&quot;&gt;Work&lt;&#x2F;h2&gt;
+&lt;h3 id=&quot;assembly-ycs15-cto&quot;&gt;&lt;a href=&quot;http:&#x2F;&#x2F;assembly.com&quot;&gt;Assembly (YCS15)&lt;&#x2F;a&gt; - CTO:&lt;&#x2F;h3&gt;
+&lt;h4 id=&quot;2014-2018-getscale-became-assembly-fulfillment-sourcing-and-process-control&quot;&gt;2014-2018: GetScale became Assembly. Fulfillment, Sourcing, and Process Control&lt;&#x2F;h4&gt;
+&lt;p&gt;From 2014 to 2018 I led an international team of engineers in Redwood
+City, CA and Shanghai, China. I established practices around engineering,
+security and operations. I participated in hiring and firing, building company
+culture, and worked with sales and operations. Both participating in and
+eventually leaving Assembly were some of the hardest things I&#x27;ve ever
+done. I&#x27;m grateful for everyone I ever had the opprotunity to work with
+there and to my co-founder Jonathan for all of their hard work and support
+throughout the experience.
+&lt;br&#x2F;&gt;
+&lt;img src=&quot;&#x2F;images&#x2F;colton-jon.JPG&quot; width=&quot;200px&quot; &#x2F;&gt;
+&lt;br&#x2F;&gt;
+&lt;img src=&quot;&#x2F;images&#x2F;assembly.png&quot; width=&quot;200px&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;mdns-based-local-peer-discovery-and-console-network-2017&quot;&gt;mDNS based local peer discovery and Console Network - 2017&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;This enabled our consoles to communicate internally within a client facility.
+We needed to allow consoles further down an assembly line to be notified
+when they encountered units that had failed particular criteria. This needed to
+happen while it was possible that the consoles would not be able to
+communicate out of the facility.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;Consoles would broadcast over mDNS, perform leader election, and replicate
+their logs across one another. Locally clients would query their log for the
+state of units the network had encountered. Consoles would display
+notifications when they had lost connection to the network or were otherwise
+trailing behind the shared log of the network.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;img src=&quot;&#x2F;images&#x2F;console-network.JPG&quot; width=&quot;200px&quot; &#x2F;&gt;
+&lt;h5 id=&quot;source-controlled-devops-2017&quot;&gt;Source controlled Devops - 2017&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;We imposed a requirement that all of our developer operational tools
+exist and be documented in our source repository. This allowed any of our
+engineers to view our current configuration and allowed auditable
+management of changes to our infrastructure. Our infrastructure was
+managed as kubernetes clusters in China and the US on separate cloud
+providers, defined using initially CloudFormation in a clojure DSL and
+then Terraform.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;warehouse-service-sales-and-support-2017&quot;&gt;Warehouse Service Sales and Support - 2017&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;With the addition of warehousing services in the US in 2017 I managed the
+migration and handover of multiple warehousing clients to our service as we
+acquired the customer base of another organization.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;I particpated in sales and support calls both solo and with the support of
+our team with new and existing customers.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;img src=&quot;&#x2F;images&#x2F;assembly-warehouse.JPG&quot; width=&quot;200px&quot; &#x2F;&gt;
+&lt;h5 id=&quot;support-for-operating-in-bandwidth-limited-environments-2016&quot;&gt;Support for operating in bandwidth limited environments - 2016&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Our customers were located in rural locations with hard bandwidth
+limitations. For this reason our collection of video and image data
+required support of bandwidth utiliziation tracking, and compression on
+locally installed edge services. Our systems were collecting extremely
+similar imagery from unit to unit and we exploited this feature by
+pre-training our compression libraries against these baselines and by
+shipping differences rather than whole resources.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;Downloads of updates to the procedures and software included on our
+consoles similarly used binary differences in their payloads rather than
+re-downloading full copies of their resources.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;lcd-character-recognition-2016&quot;&gt;LCD Character Recognition - 2016&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;In order to better instrument less sophisticated final assembly and QA
+processes we built a system for running optical character recognititon on
+liquid crystal displays commonly used on scales, calipers, and other
+existing equipment. This was implemented using Tesseract and OpenCV.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;qr-code-scanning-performance-2016&quot;&gt;QR Code scanning performance - 2016&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;Efficient QR Code scanning became critical to our operations as our
+systems moved into manufacturing process control and quality assurance. We
+produced internal software systems for faster qr decoding, camera focus, and
+zoom. We also customized our hardware: our camera lenses, added rangefinding and
+programmable lighting.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;img src=&quot;&#x2F;images&#x2F;QC-camera.png&quot; width=&quot;200px&quot; &#x2F;&gt;
+&lt;h5 id=&quot;log-ingestion-and-transport-2016&quot;&gt;Log ingestion and transport - 2016&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;This system ingested terabytes of data per day of temperature,
+orientation, and behavior information from our consoles installed in the
+field. Collecting and analyzing this data for online analysis and alerting
+of process behavior and offline analysis of factory conditions.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;event-sourcing-model-with-reactive-queries-2015&quot;&gt;Event sourcing model with reactive queries - 2015&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;To improve developer productivity and better support collaboration between
+international teams we moved our console management infrastructure to an
+eventually consistent event sourcing model. On the client we allowed
+queries to be defined in datascript and on the backend our configurations
+were stored in Datomic.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;This allowed us to use not only a single
+programming language (clojure&#x2F;clojurescript) but a single query language
+(datalog). All events dispatched on the client were handled on the server
+in the same format and propagated to clients subscribed to those queries,
+code for this system was shared on the client and server. Both the client
+and server were operating over a normalized representation of the data in
+a datalog database, where the client represented that user&#x27;s accessible
+subset of the data.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;delay-tolerant-networking-infrastructure-2015&quot;&gt;Delay tolerant networking infrastructure - 2015&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;Our system was deployed into factories in rural locations, in locations
+with constraints on access particular internet services. We provided a
+service that managed multiple hops between different and particular
+geographically located infrastructure providers and would queue all
+intermediate data for reliable delivery.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h4 id=&quot;getscale-ycs15-cto&quot;&gt;&lt;a href=&quot;http:&#x2F;&#x2F;getscale.com&quot;&gt;GetScale (YCS15)&lt;&#x2F;a&gt; - CTO:&lt;&#x2F;h4&gt;
+&lt;p&gt;2014: High volume consumer electronics manfacturing, tooling and management&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;prototype-quality-control-system-2014&quot;&gt;Prototype Quality Control system - 2014&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Our team designed and built semi-custom touchscreen terminals and
+camera&#x2F;sensor packages that were deployed into factories in China and
+the US. These systems were used to perform data collection during quality
+control processes. We acquired an initial group of customers and built a
+rudimentary system for managing the procedures displayed on the consoles
+that could be managed from the US.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;We applied to and were accepted into Y Combinator for their Summer 2015
+batch based on this system.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;img src=&quot;&#x2F;images&#x2F;QC-system.png&quot; width=&quot;200px&quot; &#x2F;&gt;
+&lt;h5 id=&quot;bill-of-materials-optimization-2014&quot;&gt;Bill of Materials Optimization - 2014&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;This allowed users to visualize the pricing of their bill of materials
+at varying production quantities and then select appropriate quotations
+from multiple vendors for pricing optimization at that target quantity.
+We accounted for break bulk, minimum order quantities and unit
+quotations and allowed users to interactively adjust part selections and
+target quantities.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;The backend of this system was initially implemented in C and then later converted
+to multithreaded Clojure as we extended support to a larger variety of suppliers.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;The frontend of this was implemented in ClojureScript and allowed
+interactive zooming and exploration of the dataset across all parts in
+the BoM.
+&lt;img src=&quot;&#x2F;images&#x2F;getscale-bom-optimization-2.png&quot; width=&quot;200px&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;product-lifecycle-management-system-2014&quot;&gt;Product Lifecycle Management system - 2014&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;The initial product we developed at GetScale was a PLM or Product Lifecycle Management system.
+We provided a user interface for hierarchical bill of material management, version control, and
+automated part quotation.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;img src=&quot;&#x2F;images&#x2F;getscale-plm.png&quot; width=&quot;200px&quot; &#x2F;&gt;
+&lt;h4 id=&quot;circuithub-software-engineer&quot;&gt;&lt;a href=&quot;http:&#x2F;&#x2F;circuithub.com&quot;&gt;CircuitHub&lt;&#x2F;a&gt; - Software Engineer:&lt;&#x2F;h4&gt;
+&lt;p&gt;2013-2014: Small volume electronics manufacturing&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;library-managemnt&quot;&gt;Library managemnt&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;Worked with CEO and designer to re-design and implement a new library management
+interface. Libraries in this context are collections of footprints and
+symbols used by electrical engineers in their designs.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;img src=&quot;&#x2F;images&#x2F;circuithub-library.png&quot; width=&quot;200px&quot; &#x2F;&gt;
+&lt;h5 id=&quot;footprint-symbol-editor&quot;&gt;Footprint&#x2F;symbol editor&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;This allowed users to use Javascript and a small DSL to define and modify
+symbols and footprints for use in the design of printed circuit boards (PCBs).
+We provided a browser based interface for visualizing and iterating on designs
+and a version control system for collaboration.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h4 id=&quot;blackjet-software-engineer&quot;&gt;&lt;a href=&quot;http:&#x2F;&#x2F;blackjet.com&quot;&gt;BlackJet&lt;&#x2F;a&gt; - Software Engineer:&lt;&#x2F;h4&gt;
+&lt;p&gt;2013: Uber for private jets&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;charter-booking-interface&quot;&gt;Charter booking interface&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;Implemented charter booking, allowing users to select routes, aircraft
+of choice, and manage the quote selection process&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;pricing-quote-management&quot;&gt;Pricing Quote management&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;Built infrastructure for managing quotes for charter flight. Implemented PDF generation.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h4 id=&quot;mixrank-software-engineer&quot;&gt;&lt;a href=&quot;http:&#x2F;&#x2F;mixrank.com&quot;&gt;MixRank&lt;&#x2F;a&gt; - Software Engineer:&lt;&#x2F;h4&gt;
+&lt;p&gt;2012: Competitive advertising analytics&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;site-redesign&quot;&gt;Site Redesign&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;Worked on site redesign in Python&#x2F;Pyramids&#x2F;Javascript&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h4 id=&quot;flint-mobile-payment-software-engineer&quot;&gt;&lt;a href=&quot;https:&#x2F;&#x2F;www.flint.com&quot;&gt;Flint Mobile Payment&lt;&#x2F;a&gt; - Software Engineer:&lt;&#x2F;h4&gt;
+&lt;p&gt;2012: Optical character recognition based mobile payments platform&lt;&#x2F;p&gt;
+&lt;h5 id=&quot;banking-transaction-protocol-implementation&quot;&gt;Banking transaction protocol implementation&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;Implemented bank transfer protocol in Nodejs&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h5 id=&quot;rest-api&quot;&gt;REST API&lt;&#x2F;h5&gt;
+&lt;ul&gt;
+&lt;li&gt;Worked on the design and implementation of REST API&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+</description>
+            </item>
+        
+    </channel>
+</rss>

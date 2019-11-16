@@ -6,14 +6,14 @@
         <description></description>
         <generator>Zola</generator>
         <language>en</language>
-        <atom:link href="http://127.0.0.1:1111/categories/hello-world/rss.xml" rel="self" type="application/rss+xml"/>
-        <lastBuildDate>Sun, 24 Sep 2017 00:00:00 +0000</lastBuildDate>
+        <atom:link href="http://127.0.0.1:1111/tags/book/rss.xml" rel="self" type="application/rss+xml"/>
+        <lastBuildDate>Wed, 13 Nov 2019 00:00:00 +0000</lastBuildDate>
         
             <item>
-                <title>What is Gutenberg - Colton</title>
-                <pubDate>Sun, 24 Sep 2017 00:00:00 +0000</pubDate>
-                <link>http://127.0.0.1:1111/some-article/</link>
-                <guid>http://127.0.0.1:1111/some-article/</guid>
+                <title>Arithmetic - Paul Lockhart</title>
+                <pubDate>Wed, 13 Nov 2019 00:00:00 +0000</pubDate>
+                <link>http://127.0.0.1:1111/some-other-article/</link>
+                <guid>http://127.0.0.1:1111/some-other-article/</guid>
                 <description>&lt;p&gt;Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc eu feugiat sapien. Aenean ligula nunc, laoreet id sem in, interdum bibendum felis. Donec vel dui neque. Praesent ac sem ut justo volutpat rutrum a imperdiet tellus. Nam lobortis massa non hendrerit hendrerit. Vivamus porttitor dignissim turpis, eget aliquam urna tincidunt non. Aliquam et fringilla turpis. Nullam eros est, eleifend in ornare sed, hendrerit eget est. Aliquam tellus felis, suscipit vitae ex vel, fringilla tempus massa. Nulla facilisi. Pellentesque lobortis consequat lectus. Maecenas ac libero elit.&lt;&#x2F;p&gt;
 </description>
             </item>

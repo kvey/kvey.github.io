@@ -1,9 +1,9 @@
 +++
-title = "What is Gutenberg - Colton"
-date = 2017-09-24
+title = "About"
+date = 2019-11-15
 
 [taxonomies]
-categories = ["Hello world"]
+categories = []
 +++
 
 ## Work 
