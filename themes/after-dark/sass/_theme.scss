@@ -57,6 +57,9 @@ blockquote cite::before {
 .main {
   padding: 20px 10px;
 }
+nav a {
+  margin-right: 5px;
+}
 nav a.active {
   background-color: #ff2e88;
   color: #fff;
@@ -81,6 +84,12 @@ html {
 .hack pre {
   font-size: 17px;
 }
+
+article {
+  margin-bottom: 20px;
+  margin-top: 20px;
+}
+
 article [itemprop="description"], article [itemprop="summary"] {
   margin-bottom: 20px;
   margin-top: 20px;

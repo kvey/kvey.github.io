@@ -220,7 +220,7 @@ a:hover {
 
 .hack h2, .hack h3, .hack h4, .hack h5, .hack h6 {
   position: relative;
-  margin-bottom: 1.75rem
+  margin-bottom: 0;
 }
 
 .hack h2:before, .hack h3:before, .hack h4:before, .hack h5:before, .hack h6:before {
@@ -863,7 +863,7 @@ select.form-control {
 }
 
 .dark {
-  color: #325435
+  color: #222
 }
 
 .dark, .dark pre {
