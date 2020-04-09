@@ -12,7 +12,14 @@ var CombinedSetRepresentationDumb = function CombinedSetRepresentationDumb(_ref)
       updateProps = _ref.updateProps;
 
 
-  var allEvents = eventsA.concat(eventsB).sort(function (a, b) {
+  var eventsALimit = eventsA.filter(function (x) {
+    return x["t"] <= timeA;
+  });
+  var eventsBLimit = eventsB.filter(function (x) {
+    return x["t"] <= timeB;
+  });
+
+  var allEvents = eventsALimit.concat(eventsBLimit).sort(function (a, b) {
     return a["t"] - b["t"];
   });
 
