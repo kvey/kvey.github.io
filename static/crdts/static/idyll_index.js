@@ -544,7 +544,300 @@ var SetEventEditor = function SetEventEditor(_ref2) {
 
 module.exports = SetEventEditor;
 
-},{"../node_modules/d3-scale/build/d3-scale.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-scale/build/d3-scale.js","../node_modules/d3/dist/d3.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3/dist/d3.js","react":"react"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/acorn/dist/acorn.js":[function(require,module,exports){
+},{"../node_modules/d3-scale/build/d3-scale.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-scale/build/d3-scale.js","../node_modules/d3/dist/d3.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3/dist/d3.js","react":"react"}],"/Users/coltonpierson/work/interviews/openai/crdt/components/set-representation.js":[function(require,module,exports){
+"use strict";
+
+var React = require('react');
+var d3 = Object.assign({}, require("../node_modules/d3/dist/d3.js"), require("../node_modules/d3-scale/build/d3-scale.js"));
+
+var SetRepresentation = function SetRepresentation(_ref) {
+  var time = _ref.time,
+      events = _ref.events,
+      updateProps = _ref.updateProps;
+
+  var filteredEvents = [];
+  var _iteratorNormalCompletion = true;
+  var _didIteratorError = false;
+  var _iteratorError = undefined;
+
+  try {
+    for (var _iterator = events[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+      var e = _step.value;
+
+      if (time >= e["t"]) {
+        filteredEvents.push(e);
+      }
+    }
+  } catch (err) {
+    _didIteratorError = true;
+    _iteratorError = err;
+  } finally {
+    try {
+      if (!_iteratorNormalCompletion && _iterator.return) {
+        _iterator.return();
+      }
+    } finally {
+      if (_didIteratorError) {
+        throw _iteratorError;
+      }
+    }
+  }
+
+  var results = new Set();
+  var removeSet = new Set();
+
+  var _iteratorNormalCompletion2 = true;
+  var _didIteratorError2 = false;
+  var _iteratorError2 = undefined;
+
+  try {
+    for (var _iterator2 = filteredEvents[Symbol.iterator](), _step2; !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
+      var _e = _step2.value;
+
+      if (_e["o"] == "added") {
+        results.add(_e["id"]);
+      }
+      if (_e["o"] == "removed") {
+        removeSet.add(_e["id"]);
+      }
+    }
+  } catch (err) {
+    _didIteratorError2 = true;
+    _iteratorError2 = err;
+  } finally {
+    try {
+      if (!_iteratorNormalCompletion2 && _iterator2.return) {
+        _iterator2.return();
+      }
+    } finally {
+      if (_didIteratorError2) {
+        throw _iteratorError2;
+      }
+    }
+  }
+
+  var _iteratorNormalCompletion3 = true;
+  var _didIteratorError3 = false;
+  var _iteratorError3 = undefined;
+
+  try {
+    for (var _iterator3 = Array.from(removeSet)[Symbol.iterator](), _step3; !(_iteratorNormalCompletion3 = (_step3 = _iterator3.next()).done); _iteratorNormalCompletion3 = true) {
+      var r = _step3.value;
+
+      results.delete(r);
+    }
+  } catch (err) {
+    _didIteratorError3 = true;
+    _iteratorError3 = err;
+  } finally {
+    try {
+      if (!_iteratorNormalCompletion3 && _iterator3.return) {
+        _iterator3.return();
+      }
+    } finally {
+      if (_didIteratorError3) {
+        throw _iteratorError3;
+      }
+    }
+  }
+
+  return React.createElement(
+    "div",
+    { className: "w-64" },
+    React.createElement(
+      "div",
+      { className: "pl-2" },
+      "time@",
+      time
+    ),
+    React.createElement(
+      "div",
+      { className: "m-2 border border-gray-400 rounded p-2 h-16" },
+      Array.from(results).sort().map(function (x) {
+        return React.createElement(
+          "span",
+          { key: x,
+            className: "text-3xl",
+            onClick: function onClick() {
+              return remove(x);
+            }
+          },
+          x
+        );
+      })
+    )
+  );
+};
+
+module.exports = SetRepresentation;
+
+},{"../node_modules/d3-scale/build/d3-scale.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-scale/build/d3-scale.js","../node_modules/d3/dist/d3.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3/dist/d3.js","react":"react"}],"/Users/coltonpierson/work/interviews/openai/crdt/components/time-slider.js":[function(require,module,exports){
+'use strict';
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+var React = require('react');
+var D3Component = require('idyll-d3-component');
+var d3 = Object.assign({}, require("../node_modules/d3/dist/d3.js"), require("../node_modules/d3-selection/dist/d3-selection.js"), require("../node_modules/d3-simple-slider/dist/d3-simple-slider.js"));
+
+var TimeSlider = function (_D3Component) {
+  _inherits(TimeSlider, _D3Component);
+
+  function TimeSlider() {
+    _classCallCheck(this, TimeSlider);
+
+    return _possibleConstructorReturn(this, (TimeSlider.__proto__ || Object.getPrototypeOf(TimeSlider)).apply(this, arguments));
+  }
+
+  _createClass(TimeSlider, [{
+    key: 'initialize',
+    value: function initialize(node, _ref) {
+      var _this2 = this;
+
+      var size = _ref.size,
+          value = _ref.value,
+          events = _ref.events,
+          timestampedEvents = _ref.timestampedEvents,
+          updateProps = _ref.updateProps;
+
+
+      var data = [0, 1, 2, 3, 4, 5];
+      if (size) {
+        data = [];
+        for (var i = 1; i <= size; i++) {
+          data.push(i);
+        }
+      }
+      this.timestampedEvents = timestampedEvents;
+
+      var sliderStep = d3.sliderBottom().min(d3.min(data)).max(d3.max(data)).width(400).ticks(data.length).step(1).default(5).displayValue(true).on('onchange', function (val) {
+        _this2.value = val;
+        // Annotate events with a timestamp for execution order
+        var updatedEvents = [];
+        var _iteratorNormalCompletion = true;
+        var _didIteratorError = false;
+        var _iteratorError = undefined;
+
+        try {
+          for (var _iterator = events.entries()[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+            var _ref2 = _step.value;
+
+            var _ref3 = _slicedToArray(_ref2, 2);
+
+            var _i = _ref3[0];
+            var event = _ref3[1];
+
+            var updatedEvent = _extends({}, event);
+            if (_this2.timestampedEvents[_i] !== undefined) {
+              updatedEvent = _extends({}, _this2.timestampedEvents[_i]);
+            }
+            if (event["t"] == val) {
+              updatedEvent["timestamp"] = new Date();
+            } else if (event["t"] > val) {
+              updatedEvent["timestamp"] = undefined;
+            }
+            _this2.timestampedEvents[_i] = updatedEvent;
+            updatedEvents.push(updatedEvent);
+          }
+        } catch (err) {
+          _didIteratorError = true;
+          _iteratorError = err;
+        } finally {
+          try {
+            if (!_iteratorNormalCompletion && _iterator.return) {
+              _iterator.return();
+            }
+          } finally {
+            if (_didIteratorError) {
+              throw _iteratorError;
+            }
+          }
+        }
+
+        updateProps({ value: _this2.value, timestampedEvents: updatedEvents });
+      });
+
+      this.sliderStep = sliderStep;
+      this.value = value;
+
+      var setValue = function setValue(v) {
+        _this2.value = v;
+        sliderStep.value(_this2.value);
+        updateProps({ value: v });
+      };
+
+      var progress = function progress() {
+        setValue(_this2.value);
+        if (_this2.value < d3.max(data)) {
+          _this2.value++;
+        }
+      };
+
+      var interval = undefined;
+
+      var play = function play() {
+        if (_this2.value == d3.max(data)) {
+          reset();
+        }
+        clearInterval(interval);
+        interval = setInterval(progress, 1000);
+      };
+
+      var pause = function pause() {
+        clearInterval(interval);
+      };
+
+      var reset = function reset() {
+        setValue(0);
+      };
+
+      var playButton = d3.select(node).append('button').text("Play").attr('class', 'p-2 text-blue-500').on('click', function () {
+        if (playButton.text() == "Play") {
+          playButton.text("Pause");
+          progress();
+          play();
+        } else {
+          playButton.text("Play");
+          pause();
+        }
+      });
+
+      var resetButton = d3.select(node).append('button').text("Reset").attr('class', 'p-2 text-blue-500').on('click', function () {
+        playButton.text("Play");
+        pause();
+        reset();
+      });
+
+      d3.select(node).attr("class", "flex flex-row mt-2");
+
+      var svg = this.svg = d3.select(node).append('svg');
+      var gStep = svg.attr('width', 500).attr('height', 100).append('g').attr('transform', 'translate(30,30)');
+
+      gStep.call(sliderStep);
+    }
+  }, {
+    key: 'update',
+    value: function update(props, oldProps) {
+      this.sliderStep.value(props.value);
+    }
+  }]);
+
+  return TimeSlider;
+}(D3Component);
+
+module.exports = TimeSlider;
+
+},{"../node_modules/d3-selection/dist/d3-selection.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-selection/dist/d3-selection.js","../node_modules/d3-simple-slider/dist/d3-simple-slider.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-simple-slider/dist/d3-simple-slider.js","../node_modules/d3/dist/d3.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3/dist/d3.js","idyll-d3-component":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-d3-component/lib.js","react":"react"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/acorn/dist/acorn.js":[function(require,module,exports){
 (function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
   typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -15464,6 +15757,201 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 })));
 
+},{}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-axis/dist/d3-axis.js":[function(require,module,exports){
+// https://d3js.org/d3-axis/ v1.0.12 Copyright 2018 Mike Bostock
+(function (global, factory) {
+typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+typeof define === 'function' && define.amd ? define(['exports'], factory) :
+(factory((global.d3 = global.d3 || {})));
+}(this, (function (exports) { 'use strict';
+
+var slice = Array.prototype.slice;
+
+function identity(x) {
+  return x;
+}
+
+var top = 1,
+    right = 2,
+    bottom = 3,
+    left = 4,
+    epsilon = 1e-6;
+
+function translateX(x) {
+  return "translate(" + (x + 0.5) + ",0)";
+}
+
+function translateY(y) {
+  return "translate(0," + (y + 0.5) + ")";
+}
+
+function number(scale) {
+  return function(d) {
+    return +scale(d);
+  };
+}
+
+function center(scale) {
+  var offset = Math.max(0, scale.bandwidth() - 1) / 2; // Adjust for 0.5px offset.
+  if (scale.round()) offset = Math.round(offset);
+  return function(d) {
+    return +scale(d) + offset;
+  };
+}
+
+function entering() {
+  return !this.__axis;
+}
+
+function axis(orient, scale) {
+  var tickArguments = [],
+      tickValues = null,
+      tickFormat = null,
+      tickSizeInner = 6,
+      tickSizeOuter = 6,
+      tickPadding = 3,
+      k = orient === top || orient === left ? -1 : 1,
+      x = orient === left || orient === right ? "x" : "y",
+      transform = orient === top || orient === bottom ? translateX : translateY;
+
+  function axis(context) {
+    var values = tickValues == null ? (scale.ticks ? scale.ticks.apply(scale, tickArguments) : scale.domain()) : tickValues,
+        format = tickFormat == null ? (scale.tickFormat ? scale.tickFormat.apply(scale, tickArguments) : identity) : tickFormat,
+        spacing = Math.max(tickSizeInner, 0) + tickPadding,
+        range = scale.range(),
+        range0 = +range[0] + 0.5,
+        range1 = +range[range.length - 1] + 0.5,
+        position = (scale.bandwidth ? center : number)(scale.copy()),
+        selection = context.selection ? context.selection() : context,
+        path = selection.selectAll(".domain").data([null]),
+        tick = selection.selectAll(".tick").data(values, scale).order(),
+        tickExit = tick.exit(),
+        tickEnter = tick.enter().append("g").attr("class", "tick"),
+        line = tick.select("line"),
+        text = tick.select("text");
+
+    path = path.merge(path.enter().insert("path", ".tick")
+        .attr("class", "domain")
+        .attr("stroke", "currentColor"));
+
+    tick = tick.merge(tickEnter);
+
+    line = line.merge(tickEnter.append("line")
+        .attr("stroke", "currentColor")
+        .attr(x + "2", k * tickSizeInner));
+
+    text = text.merge(tickEnter.append("text")
+        .attr("fill", "currentColor")
+        .attr(x, k * spacing)
+        .attr("dy", orient === top ? "0em" : orient === bottom ? "0.71em" : "0.32em"));
+
+    if (context !== selection) {
+      path = path.transition(context);
+      tick = tick.transition(context);
+      line = line.transition(context);
+      text = text.transition(context);
+
+      tickExit = tickExit.transition(context)
+          .attr("opacity", epsilon)
+          .attr("transform", function(d) { return isFinite(d = position(d)) ? transform(d) : this.getAttribute("transform"); });
+
+      tickEnter
+          .attr("opacity", epsilon)
+          .attr("transform", function(d) { var p = this.parentNode.__axis; return transform(p && isFinite(p = p(d)) ? p : position(d)); });
+    }
+
+    tickExit.remove();
+
+    path
+        .attr("d", orient === left || orient == right
+            ? (tickSizeOuter ? "M" + k * tickSizeOuter + "," + range0 + "H0.5V" + range1 + "H" + k * tickSizeOuter : "M0.5," + range0 + "V" + range1)
+            : (tickSizeOuter ? "M" + range0 + "," + k * tickSizeOuter + "V0.5H" + range1 + "V" + k * tickSizeOuter : "M" + range0 + ",0.5H" + range1));
+
+    tick
+        .attr("opacity", 1)
+        .attr("transform", function(d) { return transform(position(d)); });
+
+    line
+        .attr(x + "2", k * tickSizeInner);
+
+    text
+        .attr(x, k * spacing)
+        .text(format);
+
+    selection.filter(entering)
+        .attr("fill", "none")
+        .attr("font-size", 10)
+        .attr("font-family", "sans-serif")
+        .attr("text-anchor", orient === right ? "start" : orient === left ? "end" : "middle");
+
+    selection
+        .each(function() { this.__axis = position; });
+  }
+
+  axis.scale = function(_) {
+    return arguments.length ? (scale = _, axis) : scale;
+  };
+
+  axis.ticks = function() {
+    return tickArguments = slice.call(arguments), axis;
+  };
+
+  axis.tickArguments = function(_) {
+    return arguments.length ? (tickArguments = _ == null ? [] : slice.call(_), axis) : tickArguments.slice();
+  };
+
+  axis.tickValues = function(_) {
+    return arguments.length ? (tickValues = _ == null ? null : slice.call(_), axis) : tickValues && tickValues.slice();
+  };
+
+  axis.tickFormat = function(_) {
+    return arguments.length ? (tickFormat = _, axis) : tickFormat;
+  };
+
+  axis.tickSize = function(_) {
+    return arguments.length ? (tickSizeInner = tickSizeOuter = +_, axis) : tickSizeInner;
+  };
+
+  axis.tickSizeInner = function(_) {
+    return arguments.length ? (tickSizeInner = +_, axis) : tickSizeInner;
+  };
+
+  axis.tickSizeOuter = function(_) {
+    return arguments.length ? (tickSizeOuter = +_, axis) : tickSizeOuter;
+  };
+
+  axis.tickPadding = function(_) {
+    return arguments.length ? (tickPadding = +_, axis) : tickPadding;
+  };
+
+  return axis;
+}
+
+function axisTop(scale) {
+  return axis(top, scale);
+}
+
+function axisRight(scale) {
+  return axis(right, scale);
+}
+
+function axisBottom(scale) {
+  return axis(bottom, scale);
+}
+
+function axisLeft(scale) {
+  return axis(left, scale);
+}
+
+exports.axisTop = axisTop;
+exports.axisRight = axisRight;
+exports.axisBottom = axisBottom;
+exports.axisLeft = axisLeft;
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+})));
+
 },{}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-collection/build/d3-collection.js":[function(require,module,exports){
 // https://d3js.org/d3-collection/ Version 1.0.4. Copyright 2017 Mike Bostock.
 (function (global, factory) {
@@ -16203,6 +16691,600 @@ exports.hsl = hsl;
 exports.lab = lab;
 exports.hcl = hcl;
 exports.cubehelix = cubehelix;
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+})));
+
+},{}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-dispatch/build/d3-dispatch.js":[function(require,module,exports){
+// https://d3js.org/d3-dispatch/ Version 1.0.3. Copyright 2017 Mike Bostock.
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+	typeof define === 'function' && define.amd ? define(['exports'], factory) :
+	(factory((global.d3 = global.d3 || {})));
+}(this, (function (exports) { 'use strict';
+
+var noop = {value: function() {}};
+
+function dispatch() {
+  for (var i = 0, n = arguments.length, _ = {}, t; i < n; ++i) {
+    if (!(t = arguments[i] + "") || (t in _)) throw new Error("illegal type: " + t);
+    _[t] = [];
+  }
+  return new Dispatch(_);
+}
+
+function Dispatch(_) {
+  this._ = _;
+}
+
+function parseTypenames(typenames, types) {
+  return typenames.trim().split(/^|\s+/).map(function(t) {
+    var name = "", i = t.indexOf(".");
+    if (i >= 0) name = t.slice(i + 1), t = t.slice(0, i);
+    if (t && !types.hasOwnProperty(t)) throw new Error("unknown type: " + t);
+    return {type: t, name: name};
+  });
+}
+
+Dispatch.prototype = dispatch.prototype = {
+  constructor: Dispatch,
+  on: function(typename, callback) {
+    var _ = this._,
+        T = parseTypenames(typename + "", _),
+        t,
+        i = -1,
+        n = T.length;
+
+    // If no callback was specified, return the callback of the given type and name.
+    if (arguments.length < 2) {
+      while (++i < n) if ((t = (typename = T[i]).type) && (t = get(_[t], typename.name))) return t;
+      return;
+    }
+
+    // If a type was specified, set the callback for the given type and name.
+    // Otherwise, if a null callback was specified, remove callbacks of the given name.
+    if (callback != null && typeof callback !== "function") throw new Error("invalid callback: " + callback);
+    while (++i < n) {
+      if (t = (typename = T[i]).type) _[t] = set(_[t], typename.name, callback);
+      else if (callback == null) for (t in _) _[t] = set(_[t], typename.name, null);
+    }
+
+    return this;
+  },
+  copy: function() {
+    var copy = {}, _ = this._;
+    for (var t in _) copy[t] = _[t].slice();
+    return new Dispatch(copy);
+  },
+  call: function(type, that) {
+    if ((n = arguments.length - 2) > 0) for (var args = new Array(n), i = 0, n, t; i < n; ++i) args[i] = arguments[i + 2];
+    if (!this._.hasOwnProperty(type)) throw new Error("unknown type: " + type);
+    for (t = this._[type], i = 0, n = t.length; i < n; ++i) t[i].value.apply(that, args);
+  },
+  apply: function(type, that, args) {
+    if (!this._.hasOwnProperty(type)) throw new Error("unknown type: " + type);
+    for (var t = this._[type], i = 0, n = t.length; i < n; ++i) t[i].value.apply(that, args);
+  }
+};
+
+function get(type, name) {
+  for (var i = 0, n = type.length, c; i < n; ++i) {
+    if ((c = type[i]).name === name) {
+      return c.value;
+    }
+  }
+}
+
+function set(type, name, callback) {
+  for (var i = 0, n = type.length; i < n; ++i) {
+    if (type[i].name === name) {
+      type[i] = noop, type = type.slice(0, i).concat(type.slice(i + 1));
+      break;
+    }
+  }
+  if (callback != null) type.push({name: name, value: callback});
+  return type;
+}
+
+exports.dispatch = dispatch;
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+})));
+
+},{}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-drag/build/d3-drag.js":[function(require,module,exports){
+// https://d3js.org/d3-drag/ Version 1.2.1. Copyright 2017 Mike Bostock.
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('d3-dispatch'), require('d3-selection')) :
+	typeof define === 'function' && define.amd ? define(['exports', 'd3-dispatch', 'd3-selection'], factory) :
+	(factory((global.d3 = global.d3 || {}),global.d3,global.d3));
+}(this, (function (exports,d3Dispatch,d3Selection) { 'use strict';
+
+function nopropagation() {
+  d3Selection.event.stopImmediatePropagation();
+}
+
+var noevent = function() {
+  d3Selection.event.preventDefault();
+  d3Selection.event.stopImmediatePropagation();
+};
+
+var nodrag = function(view) {
+  var root = view.document.documentElement,
+      selection = d3Selection.select(view).on("dragstart.drag", noevent, true);
+  if ("onselectstart" in root) {
+    selection.on("selectstart.drag", noevent, true);
+  } else {
+    root.__noselect = root.style.MozUserSelect;
+    root.style.MozUserSelect = "none";
+  }
+};
+
+function yesdrag(view, noclick) {
+  var root = view.document.documentElement,
+      selection = d3Selection.select(view).on("dragstart.drag", null);
+  if (noclick) {
+    selection.on("click.drag", noevent, true);
+    setTimeout(function() { selection.on("click.drag", null); }, 0);
+  }
+  if ("onselectstart" in root) {
+    selection.on("selectstart.drag", null);
+  } else {
+    root.style.MozUserSelect = root.__noselect;
+    delete root.__noselect;
+  }
+}
+
+var constant = function(x) {
+  return function() {
+    return x;
+  };
+};
+
+function DragEvent(target, type, subject, id, active, x, y, dx, dy, dispatch$$1) {
+  this.target = target;
+  this.type = type;
+  this.subject = subject;
+  this.identifier = id;
+  this.active = active;
+  this.x = x;
+  this.y = y;
+  this.dx = dx;
+  this.dy = dy;
+  this._ = dispatch$$1;
+}
+
+DragEvent.prototype.on = function() {
+  var value = this._.on.apply(this._, arguments);
+  return value === this._ ? this : value;
+};
+
+// Ignore right-click, since that should open the context menu.
+function defaultFilter() {
+  return !d3Selection.event.button;
+}
+
+function defaultContainer() {
+  return this.parentNode;
+}
+
+function defaultSubject(d) {
+  return d == null ? {x: d3Selection.event.x, y: d3Selection.event.y} : d;
+}
+
+function defaultTouchable() {
+  return "ontouchstart" in this;
+}
+
+var drag = function() {
+  var filter = defaultFilter,
+      container = defaultContainer,
+      subject = defaultSubject,
+      touchable = defaultTouchable,
+      gestures = {},
+      listeners = d3Dispatch.dispatch("start", "drag", "end"),
+      active = 0,
+      mousedownx,
+      mousedowny,
+      mousemoving,
+      touchending,
+      clickDistance2 = 0;
+
+  function drag(selection) {
+    selection
+        .on("mousedown.drag", mousedowned)
+      .filter(touchable)
+        .on("touchstart.drag", touchstarted)
+        .on("touchmove.drag", touchmoved)
+        .on("touchend.drag touchcancel.drag", touchended)
+        .style("touch-action", "none")
+        .style("-webkit-tap-highlight-color", "rgba(0,0,0,0)");
+  }
+
+  function mousedowned() {
+    if (touchending || !filter.apply(this, arguments)) return;
+    var gesture = beforestart("mouse", container.apply(this, arguments), d3Selection.mouse, this, arguments);
+    if (!gesture) return;
+    d3Selection.select(d3Selection.event.view).on("mousemove.drag", mousemoved, true).on("mouseup.drag", mouseupped, true);
+    nodrag(d3Selection.event.view);
+    nopropagation();
+    mousemoving = false;
+    mousedownx = d3Selection.event.clientX;
+    mousedowny = d3Selection.event.clientY;
+    gesture("start");
+  }
+
+  function mousemoved() {
+    noevent();
+    if (!mousemoving) {
+      var dx = d3Selection.event.clientX - mousedownx, dy = d3Selection.event.clientY - mousedowny;
+      mousemoving = dx * dx + dy * dy > clickDistance2;
+    }
+    gestures.mouse("drag");
+  }
+
+  function mouseupped() {
+    d3Selection.select(d3Selection.event.view).on("mousemove.drag mouseup.drag", null);
+    yesdrag(d3Selection.event.view, mousemoving);
+    noevent();
+    gestures.mouse("end");
+  }
+
+  function touchstarted() {
+    if (!filter.apply(this, arguments)) return;
+    var touches = d3Selection.event.changedTouches,
+        c = container.apply(this, arguments),
+        n = touches.length, i, gesture;
+
+    for (i = 0; i < n; ++i) {
+      if (gesture = beforestart(touches[i].identifier, c, d3Selection.touch, this, arguments)) {
+        nopropagation();
+        gesture("start");
+      }
+    }
+  }
+
+  function touchmoved() {
+    var touches = d3Selection.event.changedTouches,
+        n = touches.length, i, gesture;
+
+    for (i = 0; i < n; ++i) {
+      if (gesture = gestures[touches[i].identifier]) {
+        noevent();
+        gesture("drag");
+      }
+    }
+  }
+
+  function touchended() {
+    var touches = d3Selection.event.changedTouches,
+        n = touches.length, i, gesture;
+
+    if (touchending) clearTimeout(touchending);
+    touchending = setTimeout(function() { touchending = null; }, 500); // Ghost clicks are delayed!
+    for (i = 0; i < n; ++i) {
+      if (gesture = gestures[touches[i].identifier]) {
+        nopropagation();
+        gesture("end");
+      }
+    }
+  }
+
+  function beforestart(id, container, point, that, args) {
+    var p = point(container, id), s, dx, dy,
+        sublisteners = listeners.copy();
+
+    if (!d3Selection.customEvent(new DragEvent(drag, "beforestart", s, id, active, p[0], p[1], 0, 0, sublisteners), function() {
+      if ((d3Selection.event.subject = s = subject.apply(that, args)) == null) return false;
+      dx = s.x - p[0] || 0;
+      dy = s.y - p[1] || 0;
+      return true;
+    })) return;
+
+    return function gesture(type) {
+      var p0 = p, n;
+      switch (type) {
+        case "start": gestures[id] = gesture, n = active++; break;
+        case "end": delete gestures[id], --active; // nobreak
+        case "drag": p = point(container, id), n = active; break;
+      }
+      d3Selection.customEvent(new DragEvent(drag, type, s, id, n, p[0] + dx, p[1] + dy, p[0] - p0[0], p[1] - p0[1], sublisteners), sublisteners.apply, sublisteners, [type, that, args]);
+    };
+  }
+
+  drag.filter = function(_) {
+    return arguments.length ? (filter = typeof _ === "function" ? _ : constant(!!_), drag) : filter;
+  };
+
+  drag.container = function(_) {
+    return arguments.length ? (container = typeof _ === "function" ? _ : constant(_), drag) : container;
+  };
+
+  drag.subject = function(_) {
+    return arguments.length ? (subject = typeof _ === "function" ? _ : constant(_), drag) : subject;
+  };
+
+  drag.touchable = function(_) {
+    return arguments.length ? (touchable = typeof _ === "function" ? _ : constant(!!_), drag) : touchable;
+  };
+
+  drag.on = function() {
+    var value = listeners.on.apply(listeners, arguments);
+    return value === listeners ? drag : value;
+  };
+
+  drag.clickDistance = function(_) {
+    return arguments.length ? (clickDistance2 = (_ = +_) * _, drag) : Math.sqrt(clickDistance2);
+  };
+
+  return drag;
+};
+
+exports.drag = drag;
+exports.dragDisable = nodrag;
+exports.dragEnable = yesdrag;
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+})));
+
+},{"d3-dispatch":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-dispatch/build/d3-dispatch.js","d3-selection":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-selection/dist/d3-selection.js"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-ease/build/d3-ease.js":[function(require,module,exports){
+// https://d3js.org/d3-ease/ Version 1.0.3. Copyright 2017 Mike Bostock.
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+	typeof define === 'function' && define.amd ? define(['exports'], factory) :
+	(factory((global.d3 = global.d3 || {})));
+}(this, (function (exports) { 'use strict';
+
+function linear(t) {
+  return +t;
+}
+
+function quadIn(t) {
+  return t * t;
+}
+
+function quadOut(t) {
+  return t * (2 - t);
+}
+
+function quadInOut(t) {
+  return ((t *= 2) <= 1 ? t * t : --t * (2 - t) + 1) / 2;
+}
+
+function cubicIn(t) {
+  return t * t * t;
+}
+
+function cubicOut(t) {
+  return --t * t * t + 1;
+}
+
+function cubicInOut(t) {
+  return ((t *= 2) <= 1 ? t * t * t : (t -= 2) * t * t + 2) / 2;
+}
+
+var exponent = 3;
+
+var polyIn = (function custom(e) {
+  e = +e;
+
+  function polyIn(t) {
+    return Math.pow(t, e);
+  }
+
+  polyIn.exponent = custom;
+
+  return polyIn;
+})(exponent);
+
+var polyOut = (function custom(e) {
+  e = +e;
+
+  function polyOut(t) {
+    return 1 - Math.pow(1 - t, e);
+  }
+
+  polyOut.exponent = custom;
+
+  return polyOut;
+})(exponent);
+
+var polyInOut = (function custom(e) {
+  e = +e;
+
+  function polyInOut(t) {
+    return ((t *= 2) <= 1 ? Math.pow(t, e) : 2 - Math.pow(2 - t, e)) / 2;
+  }
+
+  polyInOut.exponent = custom;
+
+  return polyInOut;
+})(exponent);
+
+var pi = Math.PI;
+var halfPi = pi / 2;
+
+function sinIn(t) {
+  return 1 - Math.cos(t * halfPi);
+}
+
+function sinOut(t) {
+  return Math.sin(t * halfPi);
+}
+
+function sinInOut(t) {
+  return (1 - Math.cos(pi * t)) / 2;
+}
+
+function expIn(t) {
+  return Math.pow(2, 10 * t - 10);
+}
+
+function expOut(t) {
+  return 1 - Math.pow(2, -10 * t);
+}
+
+function expInOut(t) {
+  return ((t *= 2) <= 1 ? Math.pow(2, 10 * t - 10) : 2 - Math.pow(2, 10 - 10 * t)) / 2;
+}
+
+function circleIn(t) {
+  return 1 - Math.sqrt(1 - t * t);
+}
+
+function circleOut(t) {
+  return Math.sqrt(1 - --t * t);
+}
+
+function circleInOut(t) {
+  return ((t *= 2) <= 1 ? 1 - Math.sqrt(1 - t * t) : Math.sqrt(1 - (t -= 2) * t) + 1) / 2;
+}
+
+var b1 = 4 / 11;
+var b2 = 6 / 11;
+var b3 = 8 / 11;
+var b4 = 3 / 4;
+var b5 = 9 / 11;
+var b6 = 10 / 11;
+var b7 = 15 / 16;
+var b8 = 21 / 22;
+var b9 = 63 / 64;
+var b0 = 1 / b1 / b1;
+
+function bounceIn(t) {
+  return 1 - bounceOut(1 - t);
+}
+
+function bounceOut(t) {
+  return (t = +t) < b1 ? b0 * t * t : t < b3 ? b0 * (t -= b2) * t + b4 : t < b6 ? b0 * (t -= b5) * t + b7 : b0 * (t -= b8) * t + b9;
+}
+
+function bounceInOut(t) {
+  return ((t *= 2) <= 1 ? 1 - bounceOut(1 - t) : bounceOut(t - 1) + 1) / 2;
+}
+
+var overshoot = 1.70158;
+
+var backIn = (function custom(s) {
+  s = +s;
+
+  function backIn(t) {
+    return t * t * ((s + 1) * t - s);
+  }
+
+  backIn.overshoot = custom;
+
+  return backIn;
+})(overshoot);
+
+var backOut = (function custom(s) {
+  s = +s;
+
+  function backOut(t) {
+    return --t * t * ((s + 1) * t + s) + 1;
+  }
+
+  backOut.overshoot = custom;
+
+  return backOut;
+})(overshoot);
+
+var backInOut = (function custom(s) {
+  s = +s;
+
+  function backInOut(t) {
+    return ((t *= 2) < 1 ? t * t * ((s + 1) * t - s) : (t -= 2) * t * ((s + 1) * t + s) + 2) / 2;
+  }
+
+  backInOut.overshoot = custom;
+
+  return backInOut;
+})(overshoot);
+
+var tau = 2 * Math.PI;
+var amplitude = 1;
+var period = 0.3;
+
+var elasticIn = (function custom(a, p) {
+  var s = Math.asin(1 / (a = Math.max(1, a))) * (p /= tau);
+
+  function elasticIn(t) {
+    return a * Math.pow(2, 10 * --t) * Math.sin((s - t) / p);
+  }
+
+  elasticIn.amplitude = function(a) { return custom(a, p * tau); };
+  elasticIn.period = function(p) { return custom(a, p); };
+
+  return elasticIn;
+})(amplitude, period);
+
+var elasticOut = (function custom(a, p) {
+  var s = Math.asin(1 / (a = Math.max(1, a))) * (p /= tau);
+
+  function elasticOut(t) {
+    return 1 - a * Math.pow(2, -10 * (t = +t)) * Math.sin((t + s) / p);
+  }
+
+  elasticOut.amplitude = function(a) { return custom(a, p * tau); };
+  elasticOut.period = function(p) { return custom(a, p); };
+
+  return elasticOut;
+})(amplitude, period);
+
+var elasticInOut = (function custom(a, p) {
+  var s = Math.asin(1 / (a = Math.max(1, a))) * (p /= tau);
+
+  function elasticInOut(t) {
+    return ((t = t * 2 - 1) < 0
+        ? a * Math.pow(2, 10 * t) * Math.sin((s - t) / p)
+        : 2 - a * Math.pow(2, -10 * t) * Math.sin((s + t) / p)) / 2;
+  }
+
+  elasticInOut.amplitude = function(a) { return custom(a, p * tau); };
+  elasticInOut.period = function(p) { return custom(a, p); };
+
+  return elasticInOut;
+})(amplitude, period);
+
+exports.easeLinear = linear;
+exports.easeQuad = quadInOut;
+exports.easeQuadIn = quadIn;
+exports.easeQuadOut = quadOut;
+exports.easeQuadInOut = quadInOut;
+exports.easeCubic = cubicInOut;
+exports.easeCubicIn = cubicIn;
+exports.easeCubicOut = cubicOut;
+exports.easeCubicInOut = cubicInOut;
+exports.easePoly = polyInOut;
+exports.easePolyIn = polyIn;
+exports.easePolyOut = polyOut;
+exports.easePolyInOut = polyInOut;
+exports.easeSin = sinInOut;
+exports.easeSinIn = sinIn;
+exports.easeSinOut = sinOut;
+exports.easeSinInOut = sinInOut;
+exports.easeExp = expInOut;
+exports.easeExpIn = expIn;
+exports.easeExpOut = expOut;
+exports.easeExpInOut = expInOut;
+exports.easeCircle = circleInOut;
+exports.easeCircleIn = circleIn;
+exports.easeCircleOut = circleOut;
+exports.easeCircleInOut = circleInOut;
+exports.easeBounce = bounceOut;
+exports.easeBounceIn = bounceIn;
+exports.easeBounceOut = bounceOut;
+exports.easeBounceInOut = bounceInOut;
+exports.easeBack = backInOut;
+exports.easeBackIn = backIn;
+exports.easeBackOut = backOut;
+exports.easeBackInOut = backInOut;
+exports.easeElastic = elasticOut;
+exports.easeElasticIn = elasticIn;
+exports.easeElasticOut = elasticOut;
+exports.easeElasticInOut = elasticInOut;
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
@@ -18015,7 +19097,2937 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 })));
 
-},{"d3-array":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-array/build/d3-array.js","d3-collection":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-collection/build/d3-collection.js","d3-color":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-color/build/d3-color.js","d3-format":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-format/build/d3-format.js","d3-interpolate":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-interpolate/build/d3-interpolate.js","d3-time":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-time/build/d3-time.js","d3-time-format":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-time-format/build/d3-time-format.js"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-time-format/build/d3-time-format.js":[function(require,module,exports){
+},{"d3-array":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-array/build/d3-array.js","d3-collection":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-collection/build/d3-collection.js","d3-color":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-color/build/d3-color.js","d3-format":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-format/build/d3-format.js","d3-interpolate":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-interpolate/build/d3-interpolate.js","d3-time":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-time/build/d3-time.js","d3-time-format":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-time-format/build/d3-time-format.js"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-selection/dist/d3-selection.js":[function(require,module,exports){
+// https://d3js.org/d3-selection/ Version 1.3.0. Copyright 2018 Mike Bostock.
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+	typeof define === 'function' && define.amd ? define(['exports'], factory) :
+	(factory((global.d3 = global.d3 || {})));
+}(this, (function (exports) { 'use strict';
+
+var xhtml = "http://www.w3.org/1999/xhtml";
+
+var namespaces = {
+  svg: "http://www.w3.org/2000/svg",
+  xhtml: xhtml,
+  xlink: "http://www.w3.org/1999/xlink",
+  xml: "http://www.w3.org/XML/1998/namespace",
+  xmlns: "http://www.w3.org/2000/xmlns/"
+};
+
+function namespace(name) {
+  var prefix = name += "", i = prefix.indexOf(":");
+  if (i >= 0 && (prefix = name.slice(0, i)) !== "xmlns") name = name.slice(i + 1);
+  return namespaces.hasOwnProperty(prefix) ? {space: namespaces[prefix], local: name} : name;
+}
+
+function creatorInherit(name) {
+  return function() {
+    var document = this.ownerDocument,
+        uri = this.namespaceURI;
+    return uri === xhtml && document.documentElement.namespaceURI === xhtml
+        ? document.createElement(name)
+        : document.createElementNS(uri, name);
+  };
+}
+
+function creatorFixed(fullname) {
+  return function() {
+    return this.ownerDocument.createElementNS(fullname.space, fullname.local);
+  };
+}
+
+function creator(name) {
+  var fullname = namespace(name);
+  return (fullname.local
+      ? creatorFixed
+      : creatorInherit)(fullname);
+}
+
+function none() {}
+
+function selector(selector) {
+  return selector == null ? none : function() {
+    return this.querySelector(selector);
+  };
+}
+
+function selection_select(select) {
+  if (typeof select !== "function") select = selector(select);
+
+  for (var groups = this._groups, m = groups.length, subgroups = new Array(m), j = 0; j < m; ++j) {
+    for (var group = groups[j], n = group.length, subgroup = subgroups[j] = new Array(n), node, subnode, i = 0; i < n; ++i) {
+      if ((node = group[i]) && (subnode = select.call(node, node.__data__, i, group))) {
+        if ("__data__" in node) subnode.__data__ = node.__data__;
+        subgroup[i] = subnode;
+      }
+    }
+  }
+
+  return new Selection(subgroups, this._parents);
+}
+
+function empty() {
+  return [];
+}
+
+function selectorAll(selector) {
+  return selector == null ? empty : function() {
+    return this.querySelectorAll(selector);
+  };
+}
+
+function selection_selectAll(select) {
+  if (typeof select !== "function") select = selectorAll(select);
+
+  for (var groups = this._groups, m = groups.length, subgroups = [], parents = [], j = 0; j < m; ++j) {
+    for (var group = groups[j], n = group.length, node, i = 0; i < n; ++i) {
+      if (node = group[i]) {
+        subgroups.push(select.call(node, node.__data__, i, group));
+        parents.push(node);
+      }
+    }
+  }
+
+  return new Selection(subgroups, parents);
+}
+
+var matcher = function(selector) {
+  return function() {
+    return this.matches(selector);
+  };
+};
+
+if (typeof document !== "undefined") {
+  var element = document.documentElement;
+  if (!element.matches) {
+    var vendorMatches = element.webkitMatchesSelector
+        || element.msMatchesSelector
+        || element.mozMatchesSelector
+        || element.oMatchesSelector;
+    matcher = function(selector) {
+      return function() {
+        return vendorMatches.call(this, selector);
+      };
+    };
+  }
+}
+
+var matcher$1 = matcher;
+
+function selection_filter(match) {
+  if (typeof match !== "function") match = matcher$1(match);
+
+  for (var groups = this._groups, m = groups.length, subgroups = new Array(m), j = 0; j < m; ++j) {
+    for (var group = groups[j], n = group.length, subgroup = subgroups[j] = [], node, i = 0; i < n; ++i) {
+      if ((node = group[i]) && match.call(node, node.__data__, i, group)) {
+        subgroup.push(node);
+      }
+    }
+  }
+
+  return new Selection(subgroups, this._parents);
+}
+
+function sparse(update) {
+  return new Array(update.length);
+}
+
+function selection_enter() {
+  return new Selection(this._enter || this._groups.map(sparse), this._parents);
+}
+
+function EnterNode(parent, datum) {
+  this.ownerDocument = parent.ownerDocument;
+  this.namespaceURI = parent.namespaceURI;
+  this._next = null;
+  this._parent = parent;
+  this.__data__ = datum;
+}
+
+EnterNode.prototype = {
+  constructor: EnterNode,
+  appendChild: function(child) { return this._parent.insertBefore(child, this._next); },
+  insertBefore: function(child, next) { return this._parent.insertBefore(child, next); },
+  querySelector: function(selector) { return this._parent.querySelector(selector); },
+  querySelectorAll: function(selector) { return this._parent.querySelectorAll(selector); }
+};
+
+function constant(x) {
+  return function() {
+    return x;
+  };
+}
+
+var keyPrefix = "$"; // Protect against keys like “__proto__”.
+
+function bindIndex(parent, group, enter, update, exit, data) {
+  var i = 0,
+      node,
+      groupLength = group.length,
+      dataLength = data.length;
+
+  // Put any non-null nodes that fit into update.
+  // Put any null nodes into enter.
+  // Put any remaining data into enter.
+  for (; i < dataLength; ++i) {
+    if (node = group[i]) {
+      node.__data__ = data[i];
+      update[i] = node;
+    } else {
+      enter[i] = new EnterNode(parent, data[i]);
+    }
+  }
+
+  // Put any non-null nodes that don’t fit into exit.
+  for (; i < groupLength; ++i) {
+    if (node = group[i]) {
+      exit[i] = node;
+    }
+  }
+}
+
+function bindKey(parent, group, enter, update, exit, data, key) {
+  var i,
+      node,
+      nodeByKeyValue = {},
+      groupLength = group.length,
+      dataLength = data.length,
+      keyValues = new Array(groupLength),
+      keyValue;
+
+  // Compute the key for each node.
+  // If multiple nodes have the same key, the duplicates are added to exit.
+  for (i = 0; i < groupLength; ++i) {
+    if (node = group[i]) {
+      keyValues[i] = keyValue = keyPrefix + key.call(node, node.__data__, i, group);
+      if (keyValue in nodeByKeyValue) {
+        exit[i] = node;
+      } else {
+        nodeByKeyValue[keyValue] = node;
+      }
+    }
+  }
+
+  // Compute the key for each datum.
+  // If there a node associated with this key, join and add it to update.
+  // If there is not (or the key is a duplicate), add it to enter.
+  for (i = 0; i < dataLength; ++i) {
+    keyValue = keyPrefix + key.call(parent, data[i], i, data);
+    if (node = nodeByKeyValue[keyValue]) {
+      update[i] = node;
+      node.__data__ = data[i];
+      nodeByKeyValue[keyValue] = null;
+    } else {
+      enter[i] = new EnterNode(parent, data[i]);
+    }
+  }
+
+  // Add any remaining nodes that were not bound to data to exit.
+  for (i = 0; i < groupLength; ++i) {
+    if ((node = group[i]) && (nodeByKeyValue[keyValues[i]] === node)) {
+      exit[i] = node;
+    }
+  }
+}
+
+function selection_data(value, key) {
+  if (!value) {
+    data = new Array(this.size()), j = -1;
+    this.each(function(d) { data[++j] = d; });
+    return data;
+  }
+
+  var bind = key ? bindKey : bindIndex,
+      parents = this._parents,
+      groups = this._groups;
+
+  if (typeof value !== "function") value = constant(value);
+
+  for (var m = groups.length, update = new Array(m), enter = new Array(m), exit = new Array(m), j = 0; j < m; ++j) {
+    var parent = parents[j],
+        group = groups[j],
+        groupLength = group.length,
+        data = value.call(parent, parent && parent.__data__, j, parents),
+        dataLength = data.length,
+        enterGroup = enter[j] = new Array(dataLength),
+        updateGroup = update[j] = new Array(dataLength),
+        exitGroup = exit[j] = new Array(groupLength);
+
+    bind(parent, group, enterGroup, updateGroup, exitGroup, data, key);
+
+    // Now connect the enter nodes to their following update node, such that
+    // appendChild can insert the materialized enter node before this node,
+    // rather than at the end of the parent node.
+    for (var i0 = 0, i1 = 0, previous, next; i0 < dataLength; ++i0) {
+      if (previous = enterGroup[i0]) {
+        if (i0 >= i1) i1 = i0 + 1;
+        while (!(next = updateGroup[i1]) && ++i1 < dataLength);
+        previous._next = next || null;
+      }
+    }
+  }
+
+  update = new Selection(update, parents);
+  update._enter = enter;
+  update._exit = exit;
+  return update;
+}
+
+function selection_exit() {
+  return new Selection(this._exit || this._groups.map(sparse), this._parents);
+}
+
+function selection_merge(selection$$1) {
+
+  for (var groups0 = this._groups, groups1 = selection$$1._groups, m0 = groups0.length, m1 = groups1.length, m = Math.min(m0, m1), merges = new Array(m0), j = 0; j < m; ++j) {
+    for (var group0 = groups0[j], group1 = groups1[j], n = group0.length, merge = merges[j] = new Array(n), node, i = 0; i < n; ++i) {
+      if (node = group0[i] || group1[i]) {
+        merge[i] = node;
+      }
+    }
+  }
+
+  for (; j < m0; ++j) {
+    merges[j] = groups0[j];
+  }
+
+  return new Selection(merges, this._parents);
+}
+
+function selection_order() {
+
+  for (var groups = this._groups, j = -1, m = groups.length; ++j < m;) {
+    for (var group = groups[j], i = group.length - 1, next = group[i], node; --i >= 0;) {
+      if (node = group[i]) {
+        if (next && next !== node.nextSibling) next.parentNode.insertBefore(node, next);
+        next = node;
+      }
+    }
+  }
+
+  return this;
+}
+
+function selection_sort(compare) {
+  if (!compare) compare = ascending;
+
+  function compareNode(a, b) {
+    return a && b ? compare(a.__data__, b.__data__) : !a - !b;
+  }
+
+  for (var groups = this._groups, m = groups.length, sortgroups = new Array(m), j = 0; j < m; ++j) {
+    for (var group = groups[j], n = group.length, sortgroup = sortgroups[j] = new Array(n), node, i = 0; i < n; ++i) {
+      if (node = group[i]) {
+        sortgroup[i] = node;
+      }
+    }
+    sortgroup.sort(compareNode);
+  }
+
+  return new Selection(sortgroups, this._parents).order();
+}
+
+function ascending(a, b) {
+  return a < b ? -1 : a > b ? 1 : a >= b ? 0 : NaN;
+}
+
+function selection_call() {
+  var callback = arguments[0];
+  arguments[0] = this;
+  callback.apply(null, arguments);
+  return this;
+}
+
+function selection_nodes() {
+  var nodes = new Array(this.size()), i = -1;
+  this.each(function() { nodes[++i] = this; });
+  return nodes;
+}
+
+function selection_node() {
+
+  for (var groups = this._groups, j = 0, m = groups.length; j < m; ++j) {
+    for (var group = groups[j], i = 0, n = group.length; i < n; ++i) {
+      var node = group[i];
+      if (node) return node;
+    }
+  }
+
+  return null;
+}
+
+function selection_size() {
+  var size = 0;
+  this.each(function() { ++size; });
+  return size;
+}
+
+function selection_empty() {
+  return !this.node();
+}
+
+function selection_each(callback) {
+
+  for (var groups = this._groups, j = 0, m = groups.length; j < m; ++j) {
+    for (var group = groups[j], i = 0, n = group.length, node; i < n; ++i) {
+      if (node = group[i]) callback.call(node, node.__data__, i, group);
+    }
+  }
+
+  return this;
+}
+
+function attrRemove(name) {
+  return function() {
+    this.removeAttribute(name);
+  };
+}
+
+function attrRemoveNS(fullname) {
+  return function() {
+    this.removeAttributeNS(fullname.space, fullname.local);
+  };
+}
+
+function attrConstant(name, value) {
+  return function() {
+    this.setAttribute(name, value);
+  };
+}
+
+function attrConstantNS(fullname, value) {
+  return function() {
+    this.setAttributeNS(fullname.space, fullname.local, value);
+  };
+}
+
+function attrFunction(name, value) {
+  return function() {
+    var v = value.apply(this, arguments);
+    if (v == null) this.removeAttribute(name);
+    else this.setAttribute(name, v);
+  };
+}
+
+function attrFunctionNS(fullname, value) {
+  return function() {
+    var v = value.apply(this, arguments);
+    if (v == null) this.removeAttributeNS(fullname.space, fullname.local);
+    else this.setAttributeNS(fullname.space, fullname.local, v);
+  };
+}
+
+function selection_attr(name, value) {
+  var fullname = namespace(name);
+
+  if (arguments.length < 2) {
+    var node = this.node();
+    return fullname.local
+        ? node.getAttributeNS(fullname.space, fullname.local)
+        : node.getAttribute(fullname);
+  }
+
+  return this.each((value == null
+      ? (fullname.local ? attrRemoveNS : attrRemove) : (typeof value === "function"
+      ? (fullname.local ? attrFunctionNS : attrFunction)
+      : (fullname.local ? attrConstantNS : attrConstant)))(fullname, value));
+}
+
+function defaultView(node) {
+  return (node.ownerDocument && node.ownerDocument.defaultView) // node is a Node
+      || (node.document && node) // node is a Window
+      || node.defaultView; // node is a Document
+}
+
+function styleRemove(name) {
+  return function() {
+    this.style.removeProperty(name);
+  };
+}
+
+function styleConstant(name, value, priority) {
+  return function() {
+    this.style.setProperty(name, value, priority);
+  };
+}
+
+function styleFunction(name, value, priority) {
+  return function() {
+    var v = value.apply(this, arguments);
+    if (v == null) this.style.removeProperty(name);
+    else this.style.setProperty(name, v, priority);
+  };
+}
+
+function selection_style(name, value, priority) {
+  return arguments.length > 1
+      ? this.each((value == null
+            ? styleRemove : typeof value === "function"
+            ? styleFunction
+            : styleConstant)(name, value, priority == null ? "" : priority))
+      : styleValue(this.node(), name);
+}
+
+function styleValue(node, name) {
+  return node.style.getPropertyValue(name)
+      || defaultView(node).getComputedStyle(node, null).getPropertyValue(name);
+}
+
+function propertyRemove(name) {
+  return function() {
+    delete this[name];
+  };
+}
+
+function propertyConstant(name, value) {
+  return function() {
+    this[name] = value;
+  };
+}
+
+function propertyFunction(name, value) {
+  return function() {
+    var v = value.apply(this, arguments);
+    if (v == null) delete this[name];
+    else this[name] = v;
+  };
+}
+
+function selection_property(name, value) {
+  return arguments.length > 1
+      ? this.each((value == null
+          ? propertyRemove : typeof value === "function"
+          ? propertyFunction
+          : propertyConstant)(name, value))
+      : this.node()[name];
+}
+
+function classArray(string) {
+  return string.trim().split(/^|\s+/);
+}
+
+function classList(node) {
+  return node.classList || new ClassList(node);
+}
+
+function ClassList(node) {
+  this._node = node;
+  this._names = classArray(node.getAttribute("class") || "");
+}
+
+ClassList.prototype = {
+  add: function(name) {
+    var i = this._names.indexOf(name);
+    if (i < 0) {
+      this._names.push(name);
+      this._node.setAttribute("class", this._names.join(" "));
+    }
+  },
+  remove: function(name) {
+    var i = this._names.indexOf(name);
+    if (i >= 0) {
+      this._names.splice(i, 1);
+      this._node.setAttribute("class", this._names.join(" "));
+    }
+  },
+  contains: function(name) {
+    return this._names.indexOf(name) >= 0;
+  }
+};
+
+function classedAdd(node, names) {
+  var list = classList(node), i = -1, n = names.length;
+  while (++i < n) list.add(names[i]);
+}
+
+function classedRemove(node, names) {
+  var list = classList(node), i = -1, n = names.length;
+  while (++i < n) list.remove(names[i]);
+}
+
+function classedTrue(names) {
+  return function() {
+    classedAdd(this, names);
+  };
+}
+
+function classedFalse(names) {
+  return function() {
+    classedRemove(this, names);
+  };
+}
+
+function classedFunction(names, value) {
+  return function() {
+    (value.apply(this, arguments) ? classedAdd : classedRemove)(this, names);
+  };
+}
+
+function selection_classed(name, value) {
+  var names = classArray(name + "");
+
+  if (arguments.length < 2) {
+    var list = classList(this.node()), i = -1, n = names.length;
+    while (++i < n) if (!list.contains(names[i])) return false;
+    return true;
+  }
+
+  return this.each((typeof value === "function"
+      ? classedFunction : value
+      ? classedTrue
+      : classedFalse)(names, value));
+}
+
+function textRemove() {
+  this.textContent = "";
+}
+
+function textConstant(value) {
+  return function() {
+    this.textContent = value;
+  };
+}
+
+function textFunction(value) {
+  return function() {
+    var v = value.apply(this, arguments);
+    this.textContent = v == null ? "" : v;
+  };
+}
+
+function selection_text(value) {
+  return arguments.length
+      ? this.each(value == null
+          ? textRemove : (typeof value === "function"
+          ? textFunction
+          : textConstant)(value))
+      : this.node().textContent;
+}
+
+function htmlRemove() {
+  this.innerHTML = "";
+}
+
+function htmlConstant(value) {
+  return function() {
+    this.innerHTML = value;
+  };
+}
+
+function htmlFunction(value) {
+  return function() {
+    var v = value.apply(this, arguments);
+    this.innerHTML = v == null ? "" : v;
+  };
+}
+
+function selection_html(value) {
+  return arguments.length
+      ? this.each(value == null
+          ? htmlRemove : (typeof value === "function"
+          ? htmlFunction
+          : htmlConstant)(value))
+      : this.node().innerHTML;
+}
+
+function raise() {
+  if (this.nextSibling) this.parentNode.appendChild(this);
+}
+
+function selection_raise() {
+  return this.each(raise);
+}
+
+function lower() {
+  if (this.previousSibling) this.parentNode.insertBefore(this, this.parentNode.firstChild);
+}
+
+function selection_lower() {
+  return this.each(lower);
+}
+
+function selection_append(name) {
+  var create = typeof name === "function" ? name : creator(name);
+  return this.select(function() {
+    return this.appendChild(create.apply(this, arguments));
+  });
+}
+
+function constantNull() {
+  return null;
+}
+
+function selection_insert(name, before) {
+  var create = typeof name === "function" ? name : creator(name),
+      select = before == null ? constantNull : typeof before === "function" ? before : selector(before);
+  return this.select(function() {
+    return this.insertBefore(create.apply(this, arguments), select.apply(this, arguments) || null);
+  });
+}
+
+function remove() {
+  var parent = this.parentNode;
+  if (parent) parent.removeChild(this);
+}
+
+function selection_remove() {
+  return this.each(remove);
+}
+
+function selection_cloneShallow() {
+  return this.parentNode.insertBefore(this.cloneNode(false), this.nextSibling);
+}
+
+function selection_cloneDeep() {
+  return this.parentNode.insertBefore(this.cloneNode(true), this.nextSibling);
+}
+
+function selection_clone(deep) {
+  return this.select(deep ? selection_cloneDeep : selection_cloneShallow);
+}
+
+function selection_datum(value) {
+  return arguments.length
+      ? this.property("__data__", value)
+      : this.node().__data__;
+}
+
+var filterEvents = {};
+
+exports.event = null;
+
+if (typeof document !== "undefined") {
+  var element$1 = document.documentElement;
+  if (!("onmouseenter" in element$1)) {
+    filterEvents = {mouseenter: "mouseover", mouseleave: "mouseout"};
+  }
+}
+
+function filterContextListener(listener, index, group) {
+  listener = contextListener(listener, index, group);
+  return function(event) {
+    var related = event.relatedTarget;
+    if (!related || (related !== this && !(related.compareDocumentPosition(this) & 8))) {
+      listener.call(this, event);
+    }
+  };
+}
+
+function contextListener(listener, index, group) {
+  return function(event1) {
+    var event0 = exports.event; // Events can be reentrant (e.g., focus).
+    exports.event = event1;
+    try {
+      listener.call(this, this.__data__, index, group);
+    } finally {
+      exports.event = event0;
+    }
+  };
+}
+
+function parseTypenames(typenames) {
+  return typenames.trim().split(/^|\s+/).map(function(t) {
+    var name = "", i = t.indexOf(".");
+    if (i >= 0) name = t.slice(i + 1), t = t.slice(0, i);
+    return {type: t, name: name};
+  });
+}
+
+function onRemove(typename) {
+  return function() {
+    var on = this.__on;
+    if (!on) return;
+    for (var j = 0, i = -1, m = on.length, o; j < m; ++j) {
+      if (o = on[j], (!typename.type || o.type === typename.type) && o.name === typename.name) {
+        this.removeEventListener(o.type, o.listener, o.capture);
+      } else {
+        on[++i] = o;
+      }
+    }
+    if (++i) on.length = i;
+    else delete this.__on;
+  };
+}
+
+function onAdd(typename, value, capture) {
+  var wrap = filterEvents.hasOwnProperty(typename.type) ? filterContextListener : contextListener;
+  return function(d, i, group) {
+    var on = this.__on, o, listener = wrap(value, i, group);
+    if (on) for (var j = 0, m = on.length; j < m; ++j) {
+      if ((o = on[j]).type === typename.type && o.name === typename.name) {
+        this.removeEventListener(o.type, o.listener, o.capture);
+        this.addEventListener(o.type, o.listener = listener, o.capture = capture);
+        o.value = value;
+        return;
+      }
+    }
+    this.addEventListener(typename.type, listener, capture);
+    o = {type: typename.type, name: typename.name, value: value, listener: listener, capture: capture};
+    if (!on) this.__on = [o];
+    else on.push(o);
+  };
+}
+
+function selection_on(typename, value, capture) {
+  var typenames = parseTypenames(typename + ""), i, n = typenames.length, t;
+
+  if (arguments.length < 2) {
+    var on = this.node().__on;
+    if (on) for (var j = 0, m = on.length, o; j < m; ++j) {
+      for (i = 0, o = on[j]; i < n; ++i) {
+        if ((t = typenames[i]).type === o.type && t.name === o.name) {
+          return o.value;
+        }
+      }
+    }
+    return;
+  }
+
+  on = value ? onAdd : onRemove;
+  if (capture == null) capture = false;
+  for (i = 0; i < n; ++i) this.each(on(typenames[i], value, capture));
+  return this;
+}
+
+function customEvent(event1, listener, that, args) {
+  var event0 = exports.event;
+  event1.sourceEvent = exports.event;
+  exports.event = event1;
+  try {
+    return listener.apply(that, args);
+  } finally {
+    exports.event = event0;
+  }
+}
+
+function dispatchEvent(node, type, params) {
+  var window = defaultView(node),
+      event = window.CustomEvent;
+
+  if (typeof event === "function") {
+    event = new event(type, params);
+  } else {
+    event = window.document.createEvent("Event");
+    if (params) event.initEvent(type, params.bubbles, params.cancelable), event.detail = params.detail;
+    else event.initEvent(type, false, false);
+  }
+
+  node.dispatchEvent(event);
+}
+
+function dispatchConstant(type, params) {
+  return function() {
+    return dispatchEvent(this, type, params);
+  };
+}
+
+function dispatchFunction(type, params) {
+  return function() {
+    return dispatchEvent(this, type, params.apply(this, arguments));
+  };
+}
+
+function selection_dispatch(type, params) {
+  return this.each((typeof params === "function"
+      ? dispatchFunction
+      : dispatchConstant)(type, params));
+}
+
+var root = [null];
+
+function Selection(groups, parents) {
+  this._groups = groups;
+  this._parents = parents;
+}
+
+function selection() {
+  return new Selection([[document.documentElement]], root);
+}
+
+Selection.prototype = selection.prototype = {
+  constructor: Selection,
+  select: selection_select,
+  selectAll: selection_selectAll,
+  filter: selection_filter,
+  data: selection_data,
+  enter: selection_enter,
+  exit: selection_exit,
+  merge: selection_merge,
+  order: selection_order,
+  sort: selection_sort,
+  call: selection_call,
+  nodes: selection_nodes,
+  node: selection_node,
+  size: selection_size,
+  empty: selection_empty,
+  each: selection_each,
+  attr: selection_attr,
+  style: selection_style,
+  property: selection_property,
+  classed: selection_classed,
+  text: selection_text,
+  html: selection_html,
+  raise: selection_raise,
+  lower: selection_lower,
+  append: selection_append,
+  insert: selection_insert,
+  remove: selection_remove,
+  clone: selection_clone,
+  datum: selection_datum,
+  on: selection_on,
+  dispatch: selection_dispatch
+};
+
+function select(selector) {
+  return typeof selector === "string"
+      ? new Selection([[document.querySelector(selector)]], [document.documentElement])
+      : new Selection([[selector]], root);
+}
+
+function create(name) {
+  return select(creator(name).call(document.documentElement));
+}
+
+var nextId = 0;
+
+function local() {
+  return new Local;
+}
+
+function Local() {
+  this._ = "@" + (++nextId).toString(36);
+}
+
+Local.prototype = local.prototype = {
+  constructor: Local,
+  get: function(node) {
+    var id = this._;
+    while (!(id in node)) if (!(node = node.parentNode)) return;
+    return node[id];
+  },
+  set: function(node, value) {
+    return node[this._] = value;
+  },
+  remove: function(node) {
+    return this._ in node && delete node[this._];
+  },
+  toString: function() {
+    return this._;
+  }
+};
+
+function sourceEvent() {
+  var current = exports.event, source;
+  while (source = current.sourceEvent) current = source;
+  return current;
+}
+
+function point(node, event) {
+  var svg = node.ownerSVGElement || node;
+
+  if (svg.createSVGPoint) {
+    var point = svg.createSVGPoint();
+    point.x = event.clientX, point.y = event.clientY;
+    point = point.matrixTransform(node.getScreenCTM().inverse());
+    return [point.x, point.y];
+  }
+
+  var rect = node.getBoundingClientRect();
+  return [event.clientX - rect.left - node.clientLeft, event.clientY - rect.top - node.clientTop];
+}
+
+function mouse(node) {
+  var event = sourceEvent();
+  if (event.changedTouches) event = event.changedTouches[0];
+  return point(node, event);
+}
+
+function selectAll(selector) {
+  return typeof selector === "string"
+      ? new Selection([document.querySelectorAll(selector)], [document.documentElement])
+      : new Selection([selector == null ? [] : selector], root);
+}
+
+function touch(node, touches, identifier) {
+  if (arguments.length < 3) identifier = touches, touches = sourceEvent().changedTouches;
+
+  for (var i = 0, n = touches ? touches.length : 0, touch; i < n; ++i) {
+    if ((touch = touches[i]).identifier === identifier) {
+      return point(node, touch);
+    }
+  }
+
+  return null;
+}
+
+function touches(node, touches) {
+  if (touches == null) touches = sourceEvent().touches;
+
+  for (var i = 0, n = touches ? touches.length : 0, points = new Array(n); i < n; ++i) {
+    points[i] = point(node, touches[i]);
+  }
+
+  return points;
+}
+
+exports.create = create;
+exports.creator = creator;
+exports.local = local;
+exports.matcher = matcher$1;
+exports.mouse = mouse;
+exports.namespace = namespace;
+exports.namespaces = namespaces;
+exports.clientPoint = point;
+exports.select = select;
+exports.selectAll = selectAll;
+exports.selection = selection;
+exports.selector = selector;
+exports.selectorAll = selectorAll;
+exports.style = styleValue;
+exports.touch = touch;
+exports.touches = touches;
+exports.window = defaultView;
+exports.customEvent = customEvent;
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+})));
+
+},{}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-simple-slider/dist/d3-simple-slider.js":[function(require,module,exports){
+// https://github.com/johnwalley/d3-simple-slider v1.5.5 Copyright 2020 John Walley
+(function (global, factory) {
+typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('d3-array'), require('d3-axis'), require('d3-dispatch'), require('d3-drag'), require('d3-ease'), require('d3-scale'), require('d3-selection'), require('d3-transition')) :
+typeof define === 'function' && define.amd ? define(['exports', 'd3-array', 'd3-axis', 'd3-dispatch', 'd3-drag', 'd3-ease', 'd3-scale', 'd3-selection', 'd3-transition'], factory) :
+(global = global || self, factory(global.d3 = global.d3 || {}, global.d3, global.d3, global.d3, global.d3, global.d3, global.d3, global.d3));
+}(this, (function (exports, d3Array, d3Axis, d3Dispatch, d3Drag, d3Ease, d3Scale, d3Selection) { 'use strict';
+
+var UPDATE_DURATION = 200;
+var SLIDER_END_PADDING = 8;
+var KEYBOARD_NUMBER_STEPS = 100;
+
+var top = 1;
+var right = 2;
+var bottom = 3;
+var left = 4;
+
+function translateX(x) {
+  return 'translate(' + x + ',0)';
+}
+
+function translateY(y) {
+  return 'translate(0,' + y + ')';
+}
+
+function slider(orientation, scale) {
+  scale = typeof scale !== 'undefined' ? scale : null;
+
+  var value = [0];
+  var defaultValue = [0];
+  var domain = [0, 10];
+  var width = 100;
+  var height = 100;
+  var displayValue = true;
+  var handle = 'M-5.5,-5.5v10l6,5.5l6,-5.5v-10z';
+  var step = null;
+  var tickValues = null;
+  var marks = null;
+  var tickFormat = null;
+  var ticks = null;
+  var displayFormat = null;
+  var fill = null;
+
+  var listeners = d3Dispatch.dispatch('onchange', 'start', 'end', 'drag');
+
+  var selection = null;
+  var identityClamped = null;
+  var handleIndex = null;
+
+  var k = orientation === top || orientation === left ? -1 : 1;
+  var j = orientation === left || orientation === right ? -1 : 1;
+  var x = orientation === left || orientation === right ? 'y' : 'x';
+  var y = orientation === left || orientation === right ? 'x' : 'y';
+
+  var transformAlong =
+    orientation === top || orientation === bottom ? translateX : translateY;
+
+  var transformAcross =
+    orientation === top || orientation === bottom ? translateY : translateX;
+
+  var axisFunction = null;
+
+  switch (orientation) {
+    case top:
+      axisFunction = d3Axis.axisTop;
+      break;
+    case right:
+      axisFunction = d3Axis.axisRight;
+      break;
+    case bottom:
+      axisFunction = d3Axis.axisBottom;
+      break;
+    case left:
+      axisFunction = d3Axis.axisLeft;
+      break;
+  }
+
+  var handleSelection = null;
+  var fillSelection = null;
+  var textSelection = null;
+
+  if (scale) {
+    domain = [d3Array.min(scale.domain()), d3Array.max(scale.domain())];
+
+    if (orientation === top || orientation === bottom) {
+      width = d3Array.max(scale.range()) - d3Array.min(scale.range());
+    } else {
+      height = d3Array.max(scale.range()) - d3Array.min(scale.range());
+    }
+
+    scale = scale.clamp(true);
+  }
+
+  function slider(context) {
+    selection = context.selection ? context.selection() : context;
+
+    if (scale) {
+      scale = scale.range([
+        d3Array.min(scale.range()),
+        d3Array.min(scale.range()) +
+          (orientation === top || orientation === bottom ? width : height),
+      ]);
+    } else {
+      scale = domain[0] instanceof Date ? d3Scale.scaleTime() : d3Scale.scaleLinear();
+
+      scale = scale
+        .domain(domain)
+        .range(
+          orientation === top || orientation === bottom
+            ? [0, width]
+            : [height, 0]
+        )
+        .clamp(true);
+    }
+
+    identityClamped = d3Scale.scaleLinear()
+      .range(scale.range())
+      .domain(scale.range())
+      .clamp(true);
+
+    // Ensure value is valid
+    value = value.map(function(d) {
+      return d3Scale.scaleLinear()
+        .range(domain)
+        .domain(domain)
+        .clamp(true)(d);
+    });
+
+    tickFormat = tickFormat || scale.tickFormat();
+    displayFormat = displayFormat || tickFormat || scale.tickFormat();
+
+    var axis = selection.selectAll('.axis').data([null]);
+
+    axis
+      .enter()
+      .append('g')
+      .attr('transform', transformAcross(k * 7))
+      .attr('class', 'axis');
+
+    var sliderSelection = selection.selectAll('.slider').data([null]);
+
+    var sliderEnter = sliderSelection
+      .enter()
+      .append('g')
+      .attr('class', 'slider')
+      .attr(
+        'cursor',
+        orientation === top || orientation === bottom
+          ? 'ew-resize'
+          : 'ns-resize'
+      )
+      .call(
+        d3Drag.drag()
+          .on('start', dragstarted)
+          .on('drag', dragged)
+          .on('end', dragended)
+      );
+
+    sliderEnter
+      .append('line')
+      .attr('class', 'track')
+      .attr(x + '1', scale.range()[0] - j * SLIDER_END_PADDING)
+      .attr('stroke', '#bbb')
+      .attr('stroke-width', 6)
+      .attr('stroke-linecap', 'round');
+
+    sliderEnter
+      .append('line')
+      .attr('class', 'track-inset')
+      .attr(x + '1', scale.range()[0] - j * SLIDER_END_PADDING)
+      .attr('stroke', '#eee')
+      .attr('stroke-width', 4)
+      .attr('stroke-linecap', 'round');
+
+    if (fill) {
+      sliderEnter
+        .append('line')
+        .attr('class', 'track-fill')
+        .attr(
+          x + '1',
+          value.length === 1
+            ? scale.range()[0] - j * SLIDER_END_PADDING
+            : scale(value[0])
+        )
+        .attr('stroke', fill)
+        .attr('stroke-width', 4)
+        .attr('stroke-linecap', 'round');
+    }
+
+    sliderEnter
+      .append('line')
+      .attr('class', 'track-overlay')
+      .attr(x + '1', scale.range()[0] - j * SLIDER_END_PADDING)
+      .attr('stroke', 'transparent')
+      .attr('stroke-width', 40)
+      .attr('stroke-linecap', 'round')
+      .merge(sliderSelection.select('.track-overlay'));
+
+    handleSelection = sliderEnter.selectAll('.parameter-value').data(value);
+
+    var handleEnter = handleSelection
+      .enter()
+      .append('g')
+      .attr('class', 'parameter-value')
+      .attr('transform', function(d) {
+        return transformAlong(scale(d));
+      })
+      .attr('font-family', 'sans-serif')
+      .attr(
+        'text-anchor',
+        orientation === right
+          ? 'start'
+          : orientation === left
+          ? 'end'
+          : 'middle'
+      );
+
+    handleEnter
+      .append('path')
+      .attr('transform', 'rotate(' + (orientation + 1) * 90 + ')')
+      .attr('d', handle)
+      .attr('class', 'handle')
+      .attr('aria-label', 'handle')
+      .attr('aria-valuemax', domain[1])
+      .attr('aria-valuemin', domain[0])
+      .attr('aria-valuenow', value)
+      .attr(
+        'aria-orientation',
+        orientation === left || orientation === right
+          ? 'vertical'
+          : 'horizontal'
+      )
+      .attr('focusable', 'true')
+      .attr('tabindex', 0)
+      .attr('fill', 'white')
+      .attr('stroke', '#777')
+      .on('keydown', function(d, i) {
+        var change = step || (domain[1] - domain[0]) / KEYBOARD_NUMBER_STEPS;
+
+        // TODO: Don't need to loop over value because we know which element needs to change
+        function newValue(adjustedValue) {
+          return value.map(function(d, j) {
+            if (value.length === 2) {
+              return j === i
+                ? i === 0
+                  ? Math.min(adjustedValue, alignedValue(value[1]))
+                  : Math.max(adjustedValue, alignedValue(value[0]))
+                : d;
+            } else {
+              return j === i ? adjustedValue : d;
+            }
+          });
+        }
+
+        switch (d3Selection.event.key) {
+          case 'ArrowLeft':
+          case 'ArrowDown':
+            slider.value(newValue(+value[i] - change));
+            d3Selection.event.preventDefault();
+            break;
+          case 'PageDown':
+            slider.value(newValue(+value[i] - 2 * change));
+            d3Selection.event.preventDefault();
+            break;
+          case 'ArrowRight':
+          case 'ArrowUp':
+            slider.value(newValue(+value[i] + change));
+            d3Selection.event.preventDefault();
+            break;
+          case 'PageUp':
+            slider.value(newValue(+value[i] + 2 * change));
+            d3Selection.event.preventDefault();
+            break;
+          case 'Home':
+            slider.value(newValue(domain[0]));
+            d3Selection.event.preventDefault();
+            break;
+          case 'End':
+            slider.value(newValue(domain[1]));
+            d3Selection.event.preventDefault();
+            break;
+        }
+      });
+
+    if (displayValue && value.length === 1) {
+      handleEnter
+        .append('text')
+        .attr('font-size', 10) // TODO: Remove coupling to font-size in d3-axis
+        .attr(y, k * 27)
+        .attr(
+          'dy',
+          orientation === top
+            ? '0em'
+            : orientation === bottom
+            ? '.71em'
+            : '.32em'
+        )
+        .text(tickFormat(value[0]));
+    }
+
+    context
+      .select('.track')
+      .attr(x + '2', scale.range()[1] + j * SLIDER_END_PADDING);
+
+    context
+      .select('.track-inset')
+      .attr(x + '2', scale.range()[1] + j * SLIDER_END_PADDING);
+
+    if (fill) {
+      context
+        .select('.track-fill')
+        .attr(x + '2', value.length === 1 ? scale(value[0]) : scale(value[1]));
+    }
+
+    context
+      .select('.track-overlay')
+      .attr(x + '2', scale.range()[1] + j * SLIDER_END_PADDING);
+
+    context.select('.axis').call(
+      axisFunction(scale)
+        .tickFormat(tickFormat)
+        .ticks(ticks)
+        .tickValues(tickValues)
+    );
+
+    // https://bl.ocks.org/mbostock/4323929
+    selection
+      .select('.axis')
+      .select('.domain')
+      .remove();
+
+    context.select('.axis').attr('transform', transformAcross(k * 7));
+
+    context
+      .selectAll('.axis text')
+      .attr('fill', '#aaa')
+      .attr(y, k * 20)
+      .attr(
+        'dy',
+        orientation === top ? '0em' : orientation === bottom ? '.71em' : '.32em'
+      )
+      .attr(
+        'text-anchor',
+        orientation === right
+          ? 'start'
+          : orientation === left
+          ? 'end'
+          : 'middle'
+      );
+
+    context.selectAll('.axis line').attr('stroke', '#aaa');
+
+    context.selectAll('.parameter-value').attr('transform', function(d) {
+      return transformAlong(scale(d));
+    });
+
+    fadeTickText();
+
+    function computeDragNewValue(pos) {
+      var adjustedValue = alignedValue(scale.invert(pos));
+      return value.map(function(d, i) {
+        if (value.length === 2) {
+          return i === handleIndex
+            ? handleIndex === 0
+              ? Math.min(adjustedValue, alignedValue(value[1]))
+              : Math.max(adjustedValue, alignedValue(value[0]))
+            : d;
+        } else {
+          return i === handleIndex ? adjustedValue : d;
+        }
+      });
+    }
+
+    function dragstarted() {
+      d3Selection.select(this).classed('active', true);
+
+      var pos = identityClamped(
+        orientation === bottom || orientation === top ? d3Selection.event.x : d3Selection.event.y
+      );
+
+      // Handle cases where both handles are at the same end of the slider
+      if (value[0] === domain[0] && value[1] === domain[0]) {
+        handleIndex = 1;
+      } else if (value[0] === domain[1] && value[1] === domain[1]) {
+        handleIndex = 0;
+      } else {
+        handleIndex = d3Array.scan(
+          value.map(function(d) {
+            return Math.abs(d - alignedValue(scale.invert(pos)));
+          })
+        );
+      }
+
+      var newValue = value.map(function(d, i) {
+        return i === handleIndex ? alignedValue(scale.invert(pos)) : d;
+      });
+
+      updateHandle(newValue);
+      listeners.call(
+        'start',
+        sliderSelection,
+        newValue.length === 1 ? newValue[0] : newValue
+      );
+      updateValue(newValue, true);
+    }
+
+    function dragged() {
+      var pos = identityClamped(
+        orientation === bottom || orientation === top ? d3Selection.event.x : d3Selection.event.y
+      );
+      var newValue = computeDragNewValue(pos);
+
+      updateHandle(newValue);
+      listeners.call(
+        'drag',
+        sliderSelection,
+        newValue.length === 1 ? newValue[0] : newValue
+      );
+      updateValue(newValue, true);
+    }
+
+    function dragended() {
+      d3Selection.select(this).classed('active', false);
+
+      var pos = identityClamped(
+        orientation === bottom || orientation === top ? d3Selection.event.x : d3Selection.event.y
+      );
+      var newValue = computeDragNewValue(pos);
+
+      updateHandle(newValue);
+      listeners.call(
+        'end',
+        sliderSelection,
+        newValue.length === 1 ? newValue[0] : newValue
+      );
+      updateValue(newValue, true);
+
+      handleIndex = null;
+    }
+
+    textSelection = selection.select('.parameter-value text');
+    fillSelection = selection.select('.track-fill');
+  }
+
+  function fadeTickText() {
+    if (selection) {
+      if (displayValue && value.length === 1) {
+        var distances = [];
+
+        selection.selectAll('.axis .tick').each(function(d) {
+          distances.push(Math.abs(d - value[0]));
+        });
+
+        var index = d3Array.scan(distances);
+
+        selection.selectAll('.axis .tick text').attr('opacity', function(d, i) {
+          return i === index ? 0 : 1;
+        });
+      }
+    }
+  }
+
+  function alignedValue(newValue) {
+    if (step) {
+      var valueModStep = (newValue - domain[0]) % step;
+      var alignValue = newValue - valueModStep;
+
+      if (valueModStep * 2 > step) {
+        alignValue += step;
+      }
+
+      return newValue instanceof Date ? new Date(alignValue) : alignValue;
+    }
+
+    if (marks) {
+      var index = d3Array.scan(
+        marks.map(function(d) {
+          return Math.abs(newValue - d);
+        })
+      );
+
+      return marks[index];
+    }
+
+    return newValue;
+  }
+
+  function updateValue(newValue, notifyListener) {
+    if (
+      value[0] !== newValue[0] ||
+      (value.length > 1 && value[1] !== newValue[1])
+    ) {
+      value = newValue;
+
+      if (notifyListener) {
+        listeners.call(
+          'onchange',
+          slider,
+          newValue.length === 1 ? newValue[0] : newValue
+        );
+      }
+
+      fadeTickText();
+    }
+  }
+
+  function updateHandle(newValue, animate) {
+    if (selection) {
+      animate = typeof animate !== 'undefined' ? animate : false;
+
+      if (animate) {
+        selection
+          .selectAll('.parameter-value')
+          .data(newValue)
+          .transition()
+          .ease(d3Ease.easeQuadOut)
+          .duration(UPDATE_DURATION)
+          .attr('transform', function(d) {
+            return transformAlong(scale(d));
+          })
+          .select('.handle')
+          .attr('aria-valuenow', function(d) {
+            return d;
+          });
+
+        if (fill) {
+          fillSelection
+            .transition()
+            .ease(d3Ease.easeQuadOut)
+            .duration(UPDATE_DURATION)
+            .attr(
+              x + '1',
+              value.length === 1
+                ? scale.range()[0] - k * SLIDER_END_PADDING
+                : scale(newValue[0])
+            )
+            .attr(
+              x + '2',
+              value.length === 1 ? scale(newValue[0]) : scale(newValue[1])
+            );
+        }
+      } else {
+        selection
+          .selectAll('.parameter-value')
+          .data(newValue)
+          .attr('transform', function(d) {
+            return transformAlong(scale(d));
+          })
+          .select('.handle')
+          .attr('aria-valuenow', function(d) {
+            return d;
+          });
+
+        if (fill) {
+          fillSelection
+            .attr(
+              x + '1',
+              value.length === 1
+                ? scale.range()[0] - k * SLIDER_END_PADDING
+                : scale(newValue[0])
+            )
+            .attr(
+              x + '2',
+              value.length === 1 ? scale(newValue[0]) : scale(newValue[1])
+            );
+        }
+      }
+
+      if (displayValue) {
+        textSelection.text(displayFormat(newValue[0]));
+      }
+    }
+  }
+
+  slider.min = function(_) {
+    if (!arguments.length) return domain[0];
+    domain[0] = _;
+    return slider;
+  };
+
+  slider.max = function(_) {
+    if (!arguments.length) return domain[1];
+    domain[1] = _;
+    return slider;
+  };
+
+  slider.domain = function(_) {
+    if (!arguments.length) return domain;
+    domain = _;
+    return slider;
+  };
+
+  slider.width = function(_) {
+    if (!arguments.length) return width;
+    width = _;
+    return slider;
+  };
+
+  slider.height = function(_) {
+    if (!arguments.length) return height;
+    height = _;
+    return slider;
+  };
+
+  slider.tickFormat = function(_) {
+    if (!arguments.length) return tickFormat;
+    tickFormat = _;
+    return slider;
+  };
+
+  slider.displayFormat = function(_) {
+    if (!arguments.length) return displayFormat;
+    displayFormat = _;
+    return slider;
+  };
+
+  slider.ticks = function(_) {
+    if (!arguments.length) return ticks;
+
+    ticks = _;
+    return slider;
+  };
+
+  slider.value = function(_) {
+    if (!arguments.length) {
+      if (value.length === 1) {
+        return value[0];
+      }
+
+      return value;
+    }
+
+    var toArray = Array.isArray(_) ? _ : [_];
+    toArray.sort(function(a, b) {
+      return a - b;
+    });
+    var pos = toArray.map(scale).map(identityClamped);
+    var newValue = pos.map(scale.invert).map(alignedValue);
+
+    updateHandle(newValue, true);
+    updateValue(newValue, true);
+
+    return slider;
+  };
+
+  slider.silentValue = function(_) {
+    if (!arguments.length) {
+      if (value.length === 1) {
+        return value[0];
+      }
+
+      return value;
+    }
+
+    var toArray = Array.isArray(_) ? _ : [_];
+    toArray.sort(function(a, b) {
+      return a - b;
+    });
+    var pos = toArray.map(scale).map(identityClamped);
+    var newValue = pos.map(scale.invert).map(alignedValue);
+
+    updateHandle(newValue, false);
+    updateValue(newValue, false);
+
+    return slider;
+  };
+
+  slider.default = function(_) {
+    if (!arguments.length) {
+      if (defaultValue.length === 1) {
+        return defaultValue[0];
+      }
+
+      return defaultValue;
+    }
+
+    var toArray = Array.isArray(_) ? _ : [_];
+
+    toArray.sort(function(a, b) {
+      return a - b;
+    });
+
+    defaultValue = toArray;
+    value = toArray;
+    return slider;
+  };
+
+  slider.step = function(_) {
+    if (!arguments.length) return step;
+    step = _;
+    return slider;
+  };
+
+  slider.tickValues = function(_) {
+    if (!arguments.length) return tickValues;
+    tickValues = _;
+    return slider;
+  };
+
+  slider.marks = function(_) {
+    if (!arguments.length) return marks;
+    marks = _;
+    return slider;
+  };
+
+  slider.handle = function(_) {
+    if (!arguments.length) return handle;
+    handle = _;
+    return slider;
+  };
+
+  slider.displayValue = function(_) {
+    if (!arguments.length) return displayValue;
+    displayValue = _;
+    return slider;
+  };
+
+  slider.fill = function(_) {
+    if (!arguments.length) return fill;
+    fill = _;
+    return slider;
+  };
+
+  slider.on = function() {
+    var value = listeners.on.apply(listeners, arguments);
+    return value === listeners ? slider : value;
+  };
+
+  return slider;
+}
+
+function sliderHorizontal(scale) {
+  return slider(bottom, scale);
+}
+
+function sliderVertical(scale) {
+  return slider(left, scale);
+}
+
+function sliderTop(scale) {
+  return slider(top, scale);
+}
+
+function sliderRight(scale) {
+  return slider(right, scale);
+}
+
+function sliderBottom(scale) {
+  return slider(bottom, scale);
+}
+
+function sliderLeft(scale) {
+  return slider(left, scale);
+}
+
+exports.sliderBottom = sliderBottom;
+exports.sliderHorizontal = sliderHorizontal;
+exports.sliderLeft = sliderLeft;
+exports.sliderRight = sliderRight;
+exports.sliderTop = sliderTop;
+exports.sliderVertical = sliderVertical;
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+})));
+
+},{"d3-array":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-array/build/d3-array.js","d3-axis":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-axis/dist/d3-axis.js","d3-dispatch":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-dispatch/build/d3-dispatch.js","d3-drag":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-drag/build/d3-drag.js","d3-ease":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-ease/build/d3-ease.js","d3-scale":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-simple-slider/node_modules/d3-scale/dist/d3-scale.js","d3-selection":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-selection/dist/d3-selection.js","d3-transition":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-transition/dist/d3-transition.js"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-simple-slider/node_modules/d3-scale/dist/d3-scale.js":[function(require,module,exports){
+// https://d3js.org/d3-scale/ v2.2.2 Copyright 2019 Mike Bostock
+(function (global, factory) {
+typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('d3-collection'), require('d3-array'), require('d3-interpolate'), require('d3-format'), require('d3-time'), require('d3-time-format')) :
+typeof define === 'function' && define.amd ? define(['exports', 'd3-collection', 'd3-array', 'd3-interpolate', 'd3-format', 'd3-time', 'd3-time-format'], factory) :
+(factory((global.d3 = global.d3 || {}),global.d3,global.d3,global.d3,global.d3,global.d3,global.d3));
+}(this, (function (exports,d3Collection,d3Array,d3Interpolate,d3Format,d3Time,d3TimeFormat) { 'use strict';
+
+function initRange(domain, range) {
+  switch (arguments.length) {
+    case 0: break;
+    case 1: this.range(domain); break;
+    default: this.range(range).domain(domain); break;
+  }
+  return this;
+}
+
+function initInterpolator(domain, interpolator) {
+  switch (arguments.length) {
+    case 0: break;
+    case 1: this.interpolator(domain); break;
+    default: this.interpolator(interpolator).domain(domain); break;
+  }
+  return this;
+}
+
+var array = Array.prototype;
+
+var map = array.map;
+var slice = array.slice;
+
+var implicit = {name: "implicit"};
+
+function ordinal() {
+  var index = d3Collection.map(),
+      domain = [],
+      range = [],
+      unknown = implicit;
+
+  function scale(d) {
+    var key = d + "", i = index.get(key);
+    if (!i) {
+      if (unknown !== implicit) return unknown;
+      index.set(key, i = domain.push(d));
+    }
+    return range[(i - 1) % range.length];
+  }
+
+  scale.domain = function(_) {
+    if (!arguments.length) return domain.slice();
+    domain = [], index = d3Collection.map();
+    var i = -1, n = _.length, d, key;
+    while (++i < n) if (!index.has(key = (d = _[i]) + "")) index.set(key, domain.push(d));
+    return scale;
+  };
+
+  scale.range = function(_) {
+    return arguments.length ? (range = slice.call(_), scale) : range.slice();
+  };
+
+  scale.unknown = function(_) {
+    return arguments.length ? (unknown = _, scale) : unknown;
+  };
+
+  scale.copy = function() {
+    return ordinal(domain, range).unknown(unknown);
+  };
+
+  initRange.apply(scale, arguments);
+
+  return scale;
+}
+
+function band() {
+  var scale = ordinal().unknown(undefined),
+      domain = scale.domain,
+      ordinalRange = scale.range,
+      range = [0, 1],
+      step,
+      bandwidth,
+      round = false,
+      paddingInner = 0,
+      paddingOuter = 0,
+      align = 0.5;
+
+  delete scale.unknown;
+
+  function rescale() {
+    var n = domain().length,
+        reverse = range[1] < range[0],
+        start = range[reverse - 0],
+        stop = range[1 - reverse];
+    step = (stop - start) / Math.max(1, n - paddingInner + paddingOuter * 2);
+    if (round) step = Math.floor(step);
+    start += (stop - start - step * (n - paddingInner)) * align;
+    bandwidth = step * (1 - paddingInner);
+    if (round) start = Math.round(start), bandwidth = Math.round(bandwidth);
+    var values = d3Array.range(n).map(function(i) { return start + step * i; });
+    return ordinalRange(reverse ? values.reverse() : values);
+  }
+
+  scale.domain = function(_) {
+    return arguments.length ? (domain(_), rescale()) : domain();
+  };
+
+  scale.range = function(_) {
+    return arguments.length ? (range = [+_[0], +_[1]], rescale()) : range.slice();
+  };
+
+  scale.rangeRound = function(_) {
+    return range = [+_[0], +_[1]], round = true, rescale();
+  };
+
+  scale.bandwidth = function() {
+    return bandwidth;
+  };
+
+  scale.step = function() {
+    return step;
+  };
+
+  scale.round = function(_) {
+    return arguments.length ? (round = !!_, rescale()) : round;
+  };
+
+  scale.padding = function(_) {
+    return arguments.length ? (paddingInner = Math.min(1, paddingOuter = +_), rescale()) : paddingInner;
+  };
+
+  scale.paddingInner = function(_) {
+    return arguments.length ? (paddingInner = Math.min(1, _), rescale()) : paddingInner;
+  };
+
+  scale.paddingOuter = function(_) {
+    return arguments.length ? (paddingOuter = +_, rescale()) : paddingOuter;
+  };
+
+  scale.align = function(_) {
+    return arguments.length ? (align = Math.max(0, Math.min(1, _)), rescale()) : align;
+  };
+
+  scale.copy = function() {
+    return band(domain(), range)
+        .round(round)
+        .paddingInner(paddingInner)
+        .paddingOuter(paddingOuter)
+        .align(align);
+  };
+
+  return initRange.apply(rescale(), arguments);
+}
+
+function pointish(scale) {
+  var copy = scale.copy;
+
+  scale.padding = scale.paddingOuter;
+  delete scale.paddingInner;
+  delete scale.paddingOuter;
+
+  scale.copy = function() {
+    return pointish(copy());
+  };
+
+  return scale;
+}
+
+function point() {
+  return pointish(band.apply(null, arguments).paddingInner(1));
+}
+
+function constant(x) {
+  return function() {
+    return x;
+  };
+}
+
+function number(x) {
+  return +x;
+}
+
+var unit = [0, 1];
+
+function identity(x) {
+  return x;
+}
+
+function normalize(a, b) {
+  return (b -= (a = +a))
+      ? function(x) { return (x - a) / b; }
+      : constant(isNaN(b) ? NaN : 0.5);
+}
+
+function clamper(domain) {
+  var a = domain[0], b = domain[domain.length - 1], t;
+  if (a > b) t = a, a = b, b = t;
+  return function(x) { return Math.max(a, Math.min(b, x)); };
+}
+
+// normalize(a, b)(x) takes a domain value x in [a,b] and returns the corresponding parameter t in [0,1].
+// interpolate(a, b)(t) takes a parameter t in [0,1] and returns the corresponding range value x in [a,b].
+function bimap(domain, range, interpolate) {
+  var d0 = domain[0], d1 = domain[1], r0 = range[0], r1 = range[1];
+  if (d1 < d0) d0 = normalize(d1, d0), r0 = interpolate(r1, r0);
+  else d0 = normalize(d0, d1), r0 = interpolate(r0, r1);
+  return function(x) { return r0(d0(x)); };
+}
+
+function polymap(domain, range, interpolate) {
+  var j = Math.min(domain.length, range.length) - 1,
+      d = new Array(j),
+      r = new Array(j),
+      i = -1;
+
+  // Reverse descending domains.
+  if (domain[j] < domain[0]) {
+    domain = domain.slice().reverse();
+    range = range.slice().reverse();
+  }
+
+  while (++i < j) {
+    d[i] = normalize(domain[i], domain[i + 1]);
+    r[i] = interpolate(range[i], range[i + 1]);
+  }
+
+  return function(x) {
+    var i = d3Array.bisect(domain, x, 1, j) - 1;
+    return r[i](d[i](x));
+  };
+}
+
+function copy(source, target) {
+  return target
+      .domain(source.domain())
+      .range(source.range())
+      .interpolate(source.interpolate())
+      .clamp(source.clamp())
+      .unknown(source.unknown());
+}
+
+function transformer() {
+  var domain = unit,
+      range = unit,
+      interpolate = d3Interpolate.interpolate,
+      transform,
+      untransform,
+      unknown,
+      clamp = identity,
+      piecewise,
+      output,
+      input;
+
+  function rescale() {
+    piecewise = Math.min(domain.length, range.length) > 2 ? polymap : bimap;
+    output = input = null;
+    return scale;
+  }
+
+  function scale(x) {
+    return isNaN(x = +x) ? unknown : (output || (output = piecewise(domain.map(transform), range, interpolate)))(transform(clamp(x)));
+  }
+
+  scale.invert = function(y) {
+    return clamp(untransform((input || (input = piecewise(range, domain.map(transform), d3Interpolate.interpolateNumber)))(y)));
+  };
+
+  scale.domain = function(_) {
+    return arguments.length ? (domain = map.call(_, number), clamp === identity || (clamp = clamper(domain)), rescale()) : domain.slice();
+  };
+
+  scale.range = function(_) {
+    return arguments.length ? (range = slice.call(_), rescale()) : range.slice();
+  };
+
+  scale.rangeRound = function(_) {
+    return range = slice.call(_), interpolate = d3Interpolate.interpolateRound, rescale();
+  };
+
+  scale.clamp = function(_) {
+    return arguments.length ? (clamp = _ ? clamper(domain) : identity, scale) : clamp !== identity;
+  };
+
+  scale.interpolate = function(_) {
+    return arguments.length ? (interpolate = _, rescale()) : interpolate;
+  };
+
+  scale.unknown = function(_) {
+    return arguments.length ? (unknown = _, scale) : unknown;
+  };
+
+  return function(t, u) {
+    transform = t, untransform = u;
+    return rescale();
+  };
+}
+
+function continuous(transform, untransform) {
+  return transformer()(transform, untransform);
+}
+
+function tickFormat(start, stop, count, specifier) {
+  var step = d3Array.tickStep(start, stop, count),
+      precision;
+  specifier = d3Format.formatSpecifier(specifier == null ? ",f" : specifier);
+  switch (specifier.type) {
+    case "s": {
+      var value = Math.max(Math.abs(start), Math.abs(stop));
+      if (specifier.precision == null && !isNaN(precision = d3Format.precisionPrefix(step, value))) specifier.precision = precision;
+      return d3Format.formatPrefix(specifier, value);
+    }
+    case "":
+    case "e":
+    case "g":
+    case "p":
+    case "r": {
+      if (specifier.precision == null && !isNaN(precision = d3Format.precisionRound(step, Math.max(Math.abs(start), Math.abs(stop))))) specifier.precision = precision - (specifier.type === "e");
+      break;
+    }
+    case "f":
+    case "%": {
+      if (specifier.precision == null && !isNaN(precision = d3Format.precisionFixed(step))) specifier.precision = precision - (specifier.type === "%") * 2;
+      break;
+    }
+  }
+  return d3Format.format(specifier);
+}
+
+function linearish(scale) {
+  var domain = scale.domain;
+
+  scale.ticks = function(count) {
+    var d = domain();
+    return d3Array.ticks(d[0], d[d.length - 1], count == null ? 10 : count);
+  };
+
+  scale.tickFormat = function(count, specifier) {
+    var d = domain();
+    return tickFormat(d[0], d[d.length - 1], count == null ? 10 : count, specifier);
+  };
+
+  scale.nice = function(count) {
+    if (count == null) count = 10;
+
+    var d = domain(),
+        i0 = 0,
+        i1 = d.length - 1,
+        start = d[i0],
+        stop = d[i1],
+        step;
+
+    if (stop < start) {
+      step = start, start = stop, stop = step;
+      step = i0, i0 = i1, i1 = step;
+    }
+
+    step = d3Array.tickIncrement(start, stop, count);
+
+    if (step > 0) {
+      start = Math.floor(start / step) * step;
+      stop = Math.ceil(stop / step) * step;
+      step = d3Array.tickIncrement(start, stop, count);
+    } else if (step < 0) {
+      start = Math.ceil(start * step) / step;
+      stop = Math.floor(stop * step) / step;
+      step = d3Array.tickIncrement(start, stop, count);
+    }
+
+    if (step > 0) {
+      d[i0] = Math.floor(start / step) * step;
+      d[i1] = Math.ceil(stop / step) * step;
+      domain(d);
+    } else if (step < 0) {
+      d[i0] = Math.ceil(start * step) / step;
+      d[i1] = Math.floor(stop * step) / step;
+      domain(d);
+    }
+
+    return scale;
+  };
+
+  return scale;
+}
+
+function linear() {
+  var scale = continuous(identity, identity);
+
+  scale.copy = function() {
+    return copy(scale, linear());
+  };
+
+  initRange.apply(scale, arguments);
+
+  return linearish(scale);
+}
+
+function identity$1(domain) {
+  var unknown;
+
+  function scale(x) {
+    return isNaN(x = +x) ? unknown : x;
+  }
+
+  scale.invert = scale;
+
+  scale.domain = scale.range = function(_) {
+    return arguments.length ? (domain = map.call(_, number), scale) : domain.slice();
+  };
+
+  scale.unknown = function(_) {
+    return arguments.length ? (unknown = _, scale) : unknown;
+  };
+
+  scale.copy = function() {
+    return identity$1(domain).unknown(unknown);
+  };
+
+  domain = arguments.length ? map.call(domain, number) : [0, 1];
+
+  return linearish(scale);
+}
+
+function nice(domain, interval) {
+  domain = domain.slice();
+
+  var i0 = 0,
+      i1 = domain.length - 1,
+      x0 = domain[i0],
+      x1 = domain[i1],
+      t;
+
+  if (x1 < x0) {
+    t = i0, i0 = i1, i1 = t;
+    t = x0, x0 = x1, x1 = t;
+  }
+
+  domain[i0] = interval.floor(x0);
+  domain[i1] = interval.ceil(x1);
+  return domain;
+}
+
+function transformLog(x) {
+  return Math.log(x);
+}
+
+function transformExp(x) {
+  return Math.exp(x);
+}
+
+function transformLogn(x) {
+  return -Math.log(-x);
+}
+
+function transformExpn(x) {
+  return -Math.exp(-x);
+}
+
+function pow10(x) {
+  return isFinite(x) ? +("1e" + x) : x < 0 ? 0 : x;
+}
+
+function powp(base) {
+  return base === 10 ? pow10
+      : base === Math.E ? Math.exp
+      : function(x) { return Math.pow(base, x); };
+}
+
+function logp(base) {
+  return base === Math.E ? Math.log
+      : base === 10 && Math.log10
+      || base === 2 && Math.log2
+      || (base = Math.log(base), function(x) { return Math.log(x) / base; });
+}
+
+function reflect(f) {
+  return function(x) {
+    return -f(-x);
+  };
+}
+
+function loggish(transform) {
+  var scale = transform(transformLog, transformExp),
+      domain = scale.domain,
+      base = 10,
+      logs,
+      pows;
+
+  function rescale() {
+    logs = logp(base), pows = powp(base);
+    if (domain()[0] < 0) {
+      logs = reflect(logs), pows = reflect(pows);
+      transform(transformLogn, transformExpn);
+    } else {
+      transform(transformLog, transformExp);
+    }
+    return scale;
+  }
+
+  scale.base = function(_) {
+    return arguments.length ? (base = +_, rescale()) : base;
+  };
+
+  scale.domain = function(_) {
+    return arguments.length ? (domain(_), rescale()) : domain();
+  };
+
+  scale.ticks = function(count) {
+    var d = domain(),
+        u = d[0],
+        v = d[d.length - 1],
+        r;
+
+    if (r = v < u) i = u, u = v, v = i;
+
+    var i = logs(u),
+        j = logs(v),
+        p,
+        k,
+        t,
+        n = count == null ? 10 : +count,
+        z = [];
+
+    if (!(base % 1) && j - i < n) {
+      i = Math.round(i) - 1, j = Math.round(j) + 1;
+      if (u > 0) for (; i < j; ++i) {
+        for (k = 1, p = pows(i); k < base; ++k) {
+          t = p * k;
+          if (t < u) continue;
+          if (t > v) break;
+          z.push(t);
+        }
+      } else for (; i < j; ++i) {
+        for (k = base - 1, p = pows(i); k >= 1; --k) {
+          t = p * k;
+          if (t < u) continue;
+          if (t > v) break;
+          z.push(t);
+        }
+      }
+    } else {
+      z = d3Array.ticks(i, j, Math.min(j - i, n)).map(pows);
+    }
+
+    return r ? z.reverse() : z;
+  };
+
+  scale.tickFormat = function(count, specifier) {
+    if (specifier == null) specifier = base === 10 ? ".0e" : ",";
+    if (typeof specifier !== "function") specifier = d3Format.format(specifier);
+    if (count === Infinity) return specifier;
+    if (count == null) count = 10;
+    var k = Math.max(1, base * count / scale.ticks().length); // TODO fast estimate?
+    return function(d) {
+      var i = d / pows(Math.round(logs(d)));
+      if (i * base < base - 0.5) i *= base;
+      return i <= k ? specifier(d) : "";
+    };
+  };
+
+  scale.nice = function() {
+    return domain(nice(domain(), {
+      floor: function(x) { return pows(Math.floor(logs(x))); },
+      ceil: function(x) { return pows(Math.ceil(logs(x))); }
+    }));
+  };
+
+  return scale;
+}
+
+function log() {
+  var scale = loggish(transformer()).domain([1, 10]);
+
+  scale.copy = function() {
+    return copy(scale, log()).base(scale.base());
+  };
+
+  initRange.apply(scale, arguments);
+
+  return scale;
+}
+
+function transformSymlog(c) {
+  return function(x) {
+    return Math.sign(x) * Math.log1p(Math.abs(x / c));
+  };
+}
+
+function transformSymexp(c) {
+  return function(x) {
+    return Math.sign(x) * Math.expm1(Math.abs(x)) * c;
+  };
+}
+
+function symlogish(transform) {
+  var c = 1, scale = transform(transformSymlog(c), transformSymexp(c));
+
+  scale.constant = function(_) {
+    return arguments.length ? transform(transformSymlog(c = +_), transformSymexp(c)) : c;
+  };
+
+  return linearish(scale);
+}
+
+function symlog() {
+  var scale = symlogish(transformer());
+
+  scale.copy = function() {
+    return copy(scale, symlog()).constant(scale.constant());
+  };
+
+  return initRange.apply(scale, arguments);
+}
+
+function transformPow(exponent) {
+  return function(x) {
+    return x < 0 ? -Math.pow(-x, exponent) : Math.pow(x, exponent);
+  };
+}
+
+function transformSqrt(x) {
+  return x < 0 ? -Math.sqrt(-x) : Math.sqrt(x);
+}
+
+function transformSquare(x) {
+  return x < 0 ? -x * x : x * x;
+}
+
+function powish(transform) {
+  var scale = transform(identity, identity),
+      exponent = 1;
+
+  function rescale() {
+    return exponent === 1 ? transform(identity, identity)
+        : exponent === 0.5 ? transform(transformSqrt, transformSquare)
+        : transform(transformPow(exponent), transformPow(1 / exponent));
+  }
+
+  scale.exponent = function(_) {
+    return arguments.length ? (exponent = +_, rescale()) : exponent;
+  };
+
+  return linearish(scale);
+}
+
+function pow() {
+  var scale = powish(transformer());
+
+  scale.copy = function() {
+    return copy(scale, pow()).exponent(scale.exponent());
+  };
+
+  initRange.apply(scale, arguments);
+
+  return scale;
+}
+
+function sqrt() {
+  return pow.apply(null, arguments).exponent(0.5);
+}
+
+function quantile() {
+  var domain = [],
+      range = [],
+      thresholds = [],
+      unknown;
+
+  function rescale() {
+    var i = 0, n = Math.max(1, range.length);
+    thresholds = new Array(n - 1);
+    while (++i < n) thresholds[i - 1] = d3Array.quantile(domain, i / n);
+    return scale;
+  }
+
+  function scale(x) {
+    return isNaN(x = +x) ? unknown : range[d3Array.bisect(thresholds, x)];
+  }
+
+  scale.invertExtent = function(y) {
+    var i = range.indexOf(y);
+    return i < 0 ? [NaN, NaN] : [
+      i > 0 ? thresholds[i - 1] : domain[0],
+      i < thresholds.length ? thresholds[i] : domain[domain.length - 1]
+    ];
+  };
+
+  scale.domain = function(_) {
+    if (!arguments.length) return domain.slice();
+    domain = [];
+    for (var i = 0, n = _.length, d; i < n; ++i) if (d = _[i], d != null && !isNaN(d = +d)) domain.push(d);
+    domain.sort(d3Array.ascending);
+    return rescale();
+  };
+
+  scale.range = function(_) {
+    return arguments.length ? (range = slice.call(_), rescale()) : range.slice();
+  };
+
+  scale.unknown = function(_) {
+    return arguments.length ? (unknown = _, scale) : unknown;
+  };
+
+  scale.quantiles = function() {
+    return thresholds.slice();
+  };
+
+  scale.copy = function() {
+    return quantile()
+        .domain(domain)
+        .range(range)
+        .unknown(unknown);
+  };
+
+  return initRange.apply(scale, arguments);
+}
+
+function quantize() {
+  var x0 = 0,
+      x1 = 1,
+      n = 1,
+      domain = [0.5],
+      range = [0, 1],
+      unknown;
+
+  function scale(x) {
+    return x <= x ? range[d3Array.bisect(domain, x, 0, n)] : unknown;
+  }
+
+  function rescale() {
+    var i = -1;
+    domain = new Array(n);
+    while (++i < n) domain[i] = ((i + 1) * x1 - (i - n) * x0) / (n + 1);
+    return scale;
+  }
+
+  scale.domain = function(_) {
+    return arguments.length ? (x0 = +_[0], x1 = +_[1], rescale()) : [x0, x1];
+  };
+
+  scale.range = function(_) {
+    return arguments.length ? (n = (range = slice.call(_)).length - 1, rescale()) : range.slice();
+  };
+
+  scale.invertExtent = function(y) {
+    var i = range.indexOf(y);
+    return i < 0 ? [NaN, NaN]
+        : i < 1 ? [x0, domain[0]]
+        : i >= n ? [domain[n - 1], x1]
+        : [domain[i - 1], domain[i]];
+  };
+
+  scale.unknown = function(_) {
+    return arguments.length ? (unknown = _, scale) : scale;
+  };
+
+  scale.thresholds = function() {
+    return domain.slice();
+  };
+
+  scale.copy = function() {
+    return quantize()
+        .domain([x0, x1])
+        .range(range)
+        .unknown(unknown);
+  };
+
+  return initRange.apply(linearish(scale), arguments);
+}
+
+function threshold() {
+  var domain = [0.5],
+      range = [0, 1],
+      unknown,
+      n = 1;
+
+  function scale(x) {
+    return x <= x ? range[d3Array.bisect(domain, x, 0, n)] : unknown;
+  }
+
+  scale.domain = function(_) {
+    return arguments.length ? (domain = slice.call(_), n = Math.min(domain.length, range.length - 1), scale) : domain.slice();
+  };
+
+  scale.range = function(_) {
+    return arguments.length ? (range = slice.call(_), n = Math.min(domain.length, range.length - 1), scale) : range.slice();
+  };
+
+  scale.invertExtent = function(y) {
+    var i = range.indexOf(y);
+    return [domain[i - 1], domain[i]];
+  };
+
+  scale.unknown = function(_) {
+    return arguments.length ? (unknown = _, scale) : unknown;
+  };
+
+  scale.copy = function() {
+    return threshold()
+        .domain(domain)
+        .range(range)
+        .unknown(unknown);
+  };
+
+  return initRange.apply(scale, arguments);
+}
+
+var durationSecond = 1000,
+    durationMinute = durationSecond * 60,
+    durationHour = durationMinute * 60,
+    durationDay = durationHour * 24,
+    durationWeek = durationDay * 7,
+    durationMonth = durationDay * 30,
+    durationYear = durationDay * 365;
+
+function date(t) {
+  return new Date(t);
+}
+
+function number$1(t) {
+  return t instanceof Date ? +t : +new Date(+t);
+}
+
+function calendar(year, month, week, day, hour, minute, second, millisecond, format) {
+  var scale = continuous(identity, identity),
+      invert = scale.invert,
+      domain = scale.domain;
+
+  var formatMillisecond = format(".%L"),
+      formatSecond = format(":%S"),
+      formatMinute = format("%I:%M"),
+      formatHour = format("%I %p"),
+      formatDay = format("%a %d"),
+      formatWeek = format("%b %d"),
+      formatMonth = format("%B"),
+      formatYear = format("%Y");
+
+  var tickIntervals = [
+    [second,  1,      durationSecond],
+    [second,  5,  5 * durationSecond],
+    [second, 15, 15 * durationSecond],
+    [second, 30, 30 * durationSecond],
+    [minute,  1,      durationMinute],
+    [minute,  5,  5 * durationMinute],
+    [minute, 15, 15 * durationMinute],
+    [minute, 30, 30 * durationMinute],
+    [  hour,  1,      durationHour  ],
+    [  hour,  3,  3 * durationHour  ],
+    [  hour,  6,  6 * durationHour  ],
+    [  hour, 12, 12 * durationHour  ],
+    [   day,  1,      durationDay   ],
+    [   day,  2,  2 * durationDay   ],
+    [  week,  1,      durationWeek  ],
+    [ month,  1,      durationMonth ],
+    [ month,  3,  3 * durationMonth ],
+    [  year,  1,      durationYear  ]
+  ];
+
+  function tickFormat(date) {
+    return (second(date) < date ? formatMillisecond
+        : minute(date) < date ? formatSecond
+        : hour(date) < date ? formatMinute
+        : day(date) < date ? formatHour
+        : month(date) < date ? (week(date) < date ? formatDay : formatWeek)
+        : year(date) < date ? formatMonth
+        : formatYear)(date);
+  }
+
+  function tickInterval(interval, start, stop, step) {
+    if (interval == null) interval = 10;
+
+    // If a desired tick count is specified, pick a reasonable tick interval
+    // based on the extent of the domain and a rough estimate of tick size.
+    // Otherwise, assume interval is already a time interval and use it.
+    if (typeof interval === "number") {
+      var target = Math.abs(stop - start) / interval,
+          i = d3Array.bisector(function(i) { return i[2]; }).right(tickIntervals, target);
+      if (i === tickIntervals.length) {
+        step = d3Array.tickStep(start / durationYear, stop / durationYear, interval);
+        interval = year;
+      } else if (i) {
+        i = tickIntervals[target / tickIntervals[i - 1][2] < tickIntervals[i][2] / target ? i - 1 : i];
+        step = i[1];
+        interval = i[0];
+      } else {
+        step = Math.max(d3Array.tickStep(start, stop, interval), 1);
+        interval = millisecond;
+      }
+    }
+
+    return step == null ? interval : interval.every(step);
+  }
+
+  scale.invert = function(y) {
+    return new Date(invert(y));
+  };
+
+  scale.domain = function(_) {
+    return arguments.length ? domain(map.call(_, number$1)) : domain().map(date);
+  };
+
+  scale.ticks = function(interval, step) {
+    var d = domain(),
+        t0 = d[0],
+        t1 = d[d.length - 1],
+        r = t1 < t0,
+        t;
+    if (r) t = t0, t0 = t1, t1 = t;
+    t = tickInterval(interval, t0, t1, step);
+    t = t ? t.range(t0, t1 + 1) : []; // inclusive stop
+    return r ? t.reverse() : t;
+  };
+
+  scale.tickFormat = function(count, specifier) {
+    return specifier == null ? tickFormat : format(specifier);
+  };
+
+  scale.nice = function(interval, step) {
+    var d = domain();
+    return (interval = tickInterval(interval, d[0], d[d.length - 1], step))
+        ? domain(nice(d, interval))
+        : scale;
+  };
+
+  scale.copy = function() {
+    return copy(scale, calendar(year, month, week, day, hour, minute, second, millisecond, format));
+  };
+
+  return scale;
+}
+
+function time() {
+  return initRange.apply(calendar(d3Time.timeYear, d3Time.timeMonth, d3Time.timeWeek, d3Time.timeDay, d3Time.timeHour, d3Time.timeMinute, d3Time.timeSecond, d3Time.timeMillisecond, d3TimeFormat.timeFormat).domain([new Date(2000, 0, 1), new Date(2000, 0, 2)]), arguments);
+}
+
+function utcTime() {
+  return initRange.apply(calendar(d3Time.utcYear, d3Time.utcMonth, d3Time.utcWeek, d3Time.utcDay, d3Time.utcHour, d3Time.utcMinute, d3Time.utcSecond, d3Time.utcMillisecond, d3TimeFormat.utcFormat).domain([Date.UTC(2000, 0, 1), Date.UTC(2000, 0, 2)]), arguments);
+}
+
+function transformer$1() {
+  var x0 = 0,
+      x1 = 1,
+      t0,
+      t1,
+      k10,
+      transform,
+      interpolator = identity,
+      clamp = false,
+      unknown;
+
+  function scale(x) {
+    return isNaN(x = +x) ? unknown : interpolator(k10 === 0 ? 0.5 : (x = (transform(x) - t0) * k10, clamp ? Math.max(0, Math.min(1, x)) : x));
+  }
+
+  scale.domain = function(_) {
+    return arguments.length ? (t0 = transform(x0 = +_[0]), t1 = transform(x1 = +_[1]), k10 = t0 === t1 ? 0 : 1 / (t1 - t0), scale) : [x0, x1];
+  };
+
+  scale.clamp = function(_) {
+    return arguments.length ? (clamp = !!_, scale) : clamp;
+  };
+
+  scale.interpolator = function(_) {
+    return arguments.length ? (interpolator = _, scale) : interpolator;
+  };
+
+  scale.unknown = function(_) {
+    return arguments.length ? (unknown = _, scale) : unknown;
+  };
+
+  return function(t) {
+    transform = t, t0 = t(x0), t1 = t(x1), k10 = t0 === t1 ? 0 : 1 / (t1 - t0);
+    return scale;
+  };
+}
+
+function copy$1(source, target) {
+  return target
+      .domain(source.domain())
+      .interpolator(source.interpolator())
+      .clamp(source.clamp())
+      .unknown(source.unknown());
+}
+
+function sequential() {
+  var scale = linearish(transformer$1()(identity));
+
+  scale.copy = function() {
+    return copy$1(scale, sequential());
+  };
+
+  return initInterpolator.apply(scale, arguments);
+}
+
+function sequentialLog() {
+  var scale = loggish(transformer$1()).domain([1, 10]);
+
+  scale.copy = function() {
+    return copy$1(scale, sequentialLog()).base(scale.base());
+  };
+
+  return initInterpolator.apply(scale, arguments);
+}
+
+function sequentialSymlog() {
+  var scale = symlogish(transformer$1());
+
+  scale.copy = function() {
+    return copy$1(scale, sequentialSymlog()).constant(scale.constant());
+  };
+
+  return initInterpolator.apply(scale, arguments);
+}
+
+function sequentialPow() {
+  var scale = powish(transformer$1());
+
+  scale.copy = function() {
+    return copy$1(scale, sequentialPow()).exponent(scale.exponent());
+  };
+
+  return initInterpolator.apply(scale, arguments);
+}
+
+function sequentialSqrt() {
+  return sequentialPow.apply(null, arguments).exponent(0.5);
+}
+
+function sequentialQuantile() {
+  var domain = [],
+      interpolator = identity;
+
+  function scale(x) {
+    if (!isNaN(x = +x)) return interpolator((d3Array.bisect(domain, x) - 1) / (domain.length - 1));
+  }
+
+  scale.domain = function(_) {
+    if (!arguments.length) return domain.slice();
+    domain = [];
+    for (var i = 0, n = _.length, d; i < n; ++i) if (d = _[i], d != null && !isNaN(d = +d)) domain.push(d);
+    domain.sort(d3Array.ascending);
+    return scale;
+  };
+
+  scale.interpolator = function(_) {
+    return arguments.length ? (interpolator = _, scale) : interpolator;
+  };
+
+  scale.copy = function() {
+    return sequentialQuantile(interpolator).domain(domain);
+  };
+
+  return initInterpolator.apply(scale, arguments);
+}
+
+function transformer$2() {
+  var x0 = 0,
+      x1 = 0.5,
+      x2 = 1,
+      t0,
+      t1,
+      t2,
+      k10,
+      k21,
+      interpolator = identity,
+      transform,
+      clamp = false,
+      unknown;
+
+  function scale(x) {
+    return isNaN(x = +x) ? unknown : (x = 0.5 + ((x = +transform(x)) - t1) * (x < t1 ? k10 : k21), interpolator(clamp ? Math.max(0, Math.min(1, x)) : x));
+  }
+
+  scale.domain = function(_) {
+    return arguments.length ? (t0 = transform(x0 = +_[0]), t1 = transform(x1 = +_[1]), t2 = transform(x2 = +_[2]), k10 = t0 === t1 ? 0 : 0.5 / (t1 - t0), k21 = t1 === t2 ? 0 : 0.5 / (t2 - t1), scale) : [x0, x1, x2];
+  };
+
+  scale.clamp = function(_) {
+    return arguments.length ? (clamp = !!_, scale) : clamp;
+  };
+
+  scale.interpolator = function(_) {
+    return arguments.length ? (interpolator = _, scale) : interpolator;
+  };
+
+  scale.unknown = function(_) {
+    return arguments.length ? (unknown = _, scale) : unknown;
+  };
+
+  return function(t) {
+    transform = t, t0 = t(x0), t1 = t(x1), t2 = t(x2), k10 = t0 === t1 ? 0 : 0.5 / (t1 - t0), k21 = t1 === t2 ? 0 : 0.5 / (t2 - t1);
+    return scale;
+  };
+}
+
+function diverging() {
+  var scale = linearish(transformer$2()(identity));
+
+  scale.copy = function() {
+    return copy$1(scale, diverging());
+  };
+
+  return initInterpolator.apply(scale, arguments);
+}
+
+function divergingLog() {
+  var scale = loggish(transformer$2()).domain([0.1, 1, 10]);
+
+  scale.copy = function() {
+    return copy$1(scale, divergingLog()).base(scale.base());
+  };
+
+  return initInterpolator.apply(scale, arguments);
+}
+
+function divergingSymlog() {
+  var scale = symlogish(transformer$2());
+
+  scale.copy = function() {
+    return copy$1(scale, divergingSymlog()).constant(scale.constant());
+  };
+
+  return initInterpolator.apply(scale, arguments);
+}
+
+function divergingPow() {
+  var scale = powish(transformer$2());
+
+  scale.copy = function() {
+    return copy$1(scale, divergingPow()).exponent(scale.exponent());
+  };
+
+  return initInterpolator.apply(scale, arguments);
+}
+
+function divergingSqrt() {
+  return divergingPow.apply(null, arguments).exponent(0.5);
+}
+
+exports.scaleBand = band;
+exports.scalePoint = point;
+exports.scaleIdentity = identity$1;
+exports.scaleLinear = linear;
+exports.scaleLog = log;
+exports.scaleSymlog = symlog;
+exports.scaleOrdinal = ordinal;
+exports.scaleImplicit = implicit;
+exports.scalePow = pow;
+exports.scaleSqrt = sqrt;
+exports.scaleQuantile = quantile;
+exports.scaleQuantize = quantize;
+exports.scaleThreshold = threshold;
+exports.scaleTime = time;
+exports.scaleUtc = utcTime;
+exports.scaleSequential = sequential;
+exports.scaleSequentialLog = sequentialLog;
+exports.scaleSequentialPow = sequentialPow;
+exports.scaleSequentialSqrt = sequentialSqrt;
+exports.scaleSequentialSymlog = sequentialSymlog;
+exports.scaleSequentialQuantile = sequentialQuantile;
+exports.scaleDiverging = diverging;
+exports.scaleDivergingLog = divergingLog;
+exports.scaleDivergingPow = divergingPow;
+exports.scaleDivergingSqrt = divergingSqrt;
+exports.scaleDivergingSymlog = divergingSymlog;
+exports.tickFormat = tickFormat;
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+})));
+
+},{"d3-array":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-array/build/d3-array.js","d3-collection":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-collection/build/d3-collection.js","d3-format":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-format/build/d3-format.js","d3-interpolate":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-interpolate/build/d3-interpolate.js","d3-time":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-time/build/d3-time.js","d3-time-format":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-time-format/build/d3-time-format.js"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-time-format/build/d3-time-format.js":[function(require,module,exports){
 // https://d3js.org/d3-time-format/ Version 2.1.1. Copyright 2017 Mike Bostock.
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('d3-time')) :
@@ -19092,7 +23104,1040 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 })));
 
-},{}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3/dist/d3.js":[function(require,module,exports){
+},{}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-timer/build/d3-timer.js":[function(require,module,exports){
+// https://d3js.org/d3-timer/ Version 1.0.7. Copyright 2017 Mike Bostock.
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+	typeof define === 'function' && define.amd ? define(['exports'], factory) :
+	(factory((global.d3 = global.d3 || {})));
+}(this, (function (exports) { 'use strict';
+
+var frame = 0;
+var timeout = 0;
+var interval = 0;
+var pokeDelay = 1000;
+var taskHead;
+var taskTail;
+var clockLast = 0;
+var clockNow = 0;
+var clockSkew = 0;
+var clock = typeof performance === "object" && performance.now ? performance : Date;
+var setFrame = typeof window === "object" && window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : function(f) { setTimeout(f, 17); };
+
+function now() {
+  return clockNow || (setFrame(clearNow), clockNow = clock.now() + clockSkew);
+}
+
+function clearNow() {
+  clockNow = 0;
+}
+
+function Timer() {
+  this._call =
+  this._time =
+  this._next = null;
+}
+
+Timer.prototype = timer.prototype = {
+  constructor: Timer,
+  restart: function(callback, delay, time) {
+    if (typeof callback !== "function") throw new TypeError("callback is not a function");
+    time = (time == null ? now() : +time) + (delay == null ? 0 : +delay);
+    if (!this._next && taskTail !== this) {
+      if (taskTail) taskTail._next = this;
+      else taskHead = this;
+      taskTail = this;
+    }
+    this._call = callback;
+    this._time = time;
+    sleep();
+  },
+  stop: function() {
+    if (this._call) {
+      this._call = null;
+      this._time = Infinity;
+      sleep();
+    }
+  }
+};
+
+function timer(callback, delay, time) {
+  var t = new Timer;
+  t.restart(callback, delay, time);
+  return t;
+}
+
+function timerFlush() {
+  now(); // Get the current time, if not already set.
+  ++frame; // Pretend we’ve set an alarm, if we haven’t already.
+  var t = taskHead, e;
+  while (t) {
+    if ((e = clockNow - t._time) >= 0) t._call.call(null, e);
+    t = t._next;
+  }
+  --frame;
+}
+
+function wake() {
+  clockNow = (clockLast = clock.now()) + clockSkew;
+  frame = timeout = 0;
+  try {
+    timerFlush();
+  } finally {
+    frame = 0;
+    nap();
+    clockNow = 0;
+  }
+}
+
+function poke() {
+  var now = clock.now(), delay = now - clockLast;
+  if (delay > pokeDelay) clockSkew -= delay, clockLast = now;
+}
+
+function nap() {
+  var t0, t1 = taskHead, t2, time = Infinity;
+  while (t1) {
+    if (t1._call) {
+      if (time > t1._time) time = t1._time;
+      t0 = t1, t1 = t1._next;
+    } else {
+      t2 = t1._next, t1._next = null;
+      t1 = t0 ? t0._next = t2 : taskHead = t2;
+    }
+  }
+  taskTail = t0;
+  sleep(time);
+}
+
+function sleep(time) {
+  if (frame) return; // Soonest alarm already set, or will be.
+  if (timeout) timeout = clearTimeout(timeout);
+  var delay = time - clockNow; // Strictly less than if we recomputed clockNow.
+  if (delay > 24) {
+    if (time < Infinity) timeout = setTimeout(wake, time - clock.now() - clockSkew);
+    if (interval) interval = clearInterval(interval);
+  } else {
+    if (!interval) clockLast = clock.now(), interval = setInterval(poke, pokeDelay);
+    frame = 1, setFrame(wake);
+  }
+}
+
+var timeout$1 = function(callback, delay, time) {
+  var t = new Timer;
+  delay = delay == null ? 0 : +delay;
+  t.restart(function(elapsed) {
+    t.stop();
+    callback(elapsed + delay);
+  }, delay, time);
+  return t;
+};
+
+var interval$1 = function(callback, delay, time) {
+  var t = new Timer, total = delay;
+  if (delay == null) return t.restart(callback, delay, time), t;
+  delay = +delay, time = time == null ? now() : +time;
+  t.restart(function tick(elapsed) {
+    elapsed += total;
+    t.restart(tick, total += delay, time);
+    callback(elapsed);
+  }, delay, time);
+  return t;
+};
+
+exports.now = now;
+exports.timer = timer;
+exports.timerFlush = timerFlush;
+exports.timeout = timeout$1;
+exports.interval = interval$1;
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+})));
+
+},{}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-transition/dist/d3-transition.js":[function(require,module,exports){
+// https://d3js.org/d3-transition/ v1.3.2 Copyright 2019 Mike Bostock
+(function (global, factory) {
+typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('d3-selection'), require('d3-dispatch'), require('d3-timer'), require('d3-interpolate'), require('d3-color'), require('d3-ease')) :
+typeof define === 'function' && define.amd ? define(['exports', 'd3-selection', 'd3-dispatch', 'd3-timer', 'd3-interpolate', 'd3-color', 'd3-ease'], factory) :
+(global = global || self, factory(global.d3 = global.d3 || {}, global.d3, global.d3, global.d3, global.d3, global.d3, global.d3));
+}(this, function (exports, d3Selection, d3Dispatch, d3Timer, d3Interpolate, d3Color, d3Ease) { 'use strict';
+
+var emptyOn = d3Dispatch.dispatch("start", "end", "cancel", "interrupt");
+var emptyTween = [];
+
+var CREATED = 0;
+var SCHEDULED = 1;
+var STARTING = 2;
+var STARTED = 3;
+var RUNNING = 4;
+var ENDING = 5;
+var ENDED = 6;
+
+function schedule(node, name, id, index, group, timing) {
+  var schedules = node.__transition;
+  if (!schedules) node.__transition = {};
+  else if (id in schedules) return;
+  create(node, id, {
+    name: name,
+    index: index, // For context during callback.
+    group: group, // For context during callback.
+    on: emptyOn,
+    tween: emptyTween,
+    time: timing.time,
+    delay: timing.delay,
+    duration: timing.duration,
+    ease: timing.ease,
+    timer: null,
+    state: CREATED
+  });
+}
+
+function init(node, id) {
+  var schedule = get(node, id);
+  if (schedule.state > CREATED) throw new Error("too late; already scheduled");
+  return schedule;
+}
+
+function set(node, id) {
+  var schedule = get(node, id);
+  if (schedule.state > STARTED) throw new Error("too late; already running");
+  return schedule;
+}
+
+function get(node, id) {
+  var schedule = node.__transition;
+  if (!schedule || !(schedule = schedule[id])) throw new Error("transition not found");
+  return schedule;
+}
+
+function create(node, id, self) {
+  var schedules = node.__transition,
+      tween;
+
+  // Initialize the self timer when the transition is created.
+  // Note the actual delay is not known until the first callback!
+  schedules[id] = self;
+  self.timer = d3Timer.timer(schedule, 0, self.time);
+
+  function schedule(elapsed) {
+    self.state = SCHEDULED;
+    self.timer.restart(start, self.delay, self.time);
+
+    // If the elapsed delay is less than our first sleep, start immediately.
+    if (self.delay <= elapsed) start(elapsed - self.delay);
+  }
+
+  function start(elapsed) {
+    var i, j, n, o;
+
+    // If the state is not SCHEDULED, then we previously errored on start.
+    if (self.state !== SCHEDULED) return stop();
+
+    for (i in schedules) {
+      o = schedules[i];
+      if (o.name !== self.name) continue;
+
+      // While this element already has a starting transition during this frame,
+      // defer starting an interrupting transition until that transition has a
+      // chance to tick (and possibly end); see d3/d3-transition#54!
+      if (o.state === STARTED) return d3Timer.timeout(start);
+
+      // Interrupt the active transition, if any.
+      if (o.state === RUNNING) {
+        o.state = ENDED;
+        o.timer.stop();
+        o.on.call("interrupt", node, node.__data__, o.index, o.group);
+        delete schedules[i];
+      }
+
+      // Cancel any pre-empted transitions.
+      else if (+i < id) {
+        o.state = ENDED;
+        o.timer.stop();
+        o.on.call("cancel", node, node.__data__, o.index, o.group);
+        delete schedules[i];
+      }
+    }
+
+    // Defer the first tick to end of the current frame; see d3/d3#1576.
+    // Note the transition may be canceled after start and before the first tick!
+    // Note this must be scheduled before the start event; see d3/d3-transition#16!
+    // Assuming this is successful, subsequent callbacks go straight to tick.
+    d3Timer.timeout(function() {
+      if (self.state === STARTED) {
+        self.state = RUNNING;
+        self.timer.restart(tick, self.delay, self.time);
+        tick(elapsed);
+      }
+    });
+
+    // Dispatch the start event.
+    // Note this must be done before the tween are initialized.
+    self.state = STARTING;
+    self.on.call("start", node, node.__data__, self.index, self.group);
+    if (self.state !== STARTING) return; // interrupted
+    self.state = STARTED;
+
+    // Initialize the tween, deleting null tween.
+    tween = new Array(n = self.tween.length);
+    for (i = 0, j = -1; i < n; ++i) {
+      if (o = self.tween[i].value.call(node, node.__data__, self.index, self.group)) {
+        tween[++j] = o;
+      }
+    }
+    tween.length = j + 1;
+  }
+
+  function tick(elapsed) {
+    var t = elapsed < self.duration ? self.ease.call(null, elapsed / self.duration) : (self.timer.restart(stop), self.state = ENDING, 1),
+        i = -1,
+        n = tween.length;
+
+    while (++i < n) {
+      tween[i].call(node, t);
+    }
+
+    // Dispatch the end event.
+    if (self.state === ENDING) {
+      self.on.call("end", node, node.__data__, self.index, self.group);
+      stop();
+    }
+  }
+
+  function stop() {
+    self.state = ENDED;
+    self.timer.stop();
+    delete schedules[id];
+    for (var i in schedules) return; // eslint-disable-line no-unused-vars
+    delete node.__transition;
+  }
+}
+
+function interrupt(node, name) {
+  var schedules = node.__transition,
+      schedule,
+      active,
+      empty = true,
+      i;
+
+  if (!schedules) return;
+
+  name = name == null ? null : name + "";
+
+  for (i in schedules) {
+    if ((schedule = schedules[i]).name !== name) { empty = false; continue; }
+    active = schedule.state > STARTING && schedule.state < ENDING;
+    schedule.state = ENDED;
+    schedule.timer.stop();
+    schedule.on.call(active ? "interrupt" : "cancel", node, node.__data__, schedule.index, schedule.group);
+    delete schedules[i];
+  }
+
+  if (empty) delete node.__transition;
+}
+
+function selection_interrupt(name) {
+  return this.each(function() {
+    interrupt(this, name);
+  });
+}
+
+function tweenRemove(id, name) {
+  var tween0, tween1;
+  return function() {
+    var schedule = set(this, id),
+        tween = schedule.tween;
+
+    // If this node shared tween with the previous node,
+    // just assign the updated shared tween and we’re done!
+    // Otherwise, copy-on-write.
+    if (tween !== tween0) {
+      tween1 = tween0 = tween;
+      for (var i = 0, n = tween1.length; i < n; ++i) {
+        if (tween1[i].name === name) {
+          tween1 = tween1.slice();
+          tween1.splice(i, 1);
+          break;
+        }
+      }
+    }
+
+    schedule.tween = tween1;
+  };
+}
+
+function tweenFunction(id, name, value) {
+  var tween0, tween1;
+  if (typeof value !== "function") throw new Error;
+  return function() {
+    var schedule = set(this, id),
+        tween = schedule.tween;
+
+    // If this node shared tween with the previous node,
+    // just assign the updated shared tween and we’re done!
+    // Otherwise, copy-on-write.
+    if (tween !== tween0) {
+      tween1 = (tween0 = tween).slice();
+      for (var t = {name: name, value: value}, i = 0, n = tween1.length; i < n; ++i) {
+        if (tween1[i].name === name) {
+          tween1[i] = t;
+          break;
+        }
+      }
+      if (i === n) tween1.push(t);
+    }
+
+    schedule.tween = tween1;
+  };
+}
+
+function transition_tween(name, value) {
+  var id = this._id;
+
+  name += "";
+
+  if (arguments.length < 2) {
+    var tween = get(this.node(), id).tween;
+    for (var i = 0, n = tween.length, t; i < n; ++i) {
+      if ((t = tween[i]).name === name) {
+        return t.value;
+      }
+    }
+    return null;
+  }
+
+  return this.each((value == null ? tweenRemove : tweenFunction)(id, name, value));
+}
+
+function tweenValue(transition, name, value) {
+  var id = transition._id;
+
+  transition.each(function() {
+    var schedule = set(this, id);
+    (schedule.value || (schedule.value = {}))[name] = value.apply(this, arguments);
+  });
+
+  return function(node) {
+    return get(node, id).value[name];
+  };
+}
+
+function interpolate(a, b) {
+  var c;
+  return (typeof b === "number" ? d3Interpolate.interpolateNumber
+      : b instanceof d3Color.color ? d3Interpolate.interpolateRgb
+      : (c = d3Color.color(b)) ? (b = c, d3Interpolate.interpolateRgb)
+      : d3Interpolate.interpolateString)(a, b);
+}
+
+function attrRemove(name) {
+  return function() {
+    this.removeAttribute(name);
+  };
+}
+
+function attrRemoveNS(fullname) {
+  return function() {
+    this.removeAttributeNS(fullname.space, fullname.local);
+  };
+}
+
+function attrConstant(name, interpolate, value1) {
+  var string00,
+      string1 = value1 + "",
+      interpolate0;
+  return function() {
+    var string0 = this.getAttribute(name);
+    return string0 === string1 ? null
+        : string0 === string00 ? interpolate0
+        : interpolate0 = interpolate(string00 = string0, value1);
+  };
+}
+
+function attrConstantNS(fullname, interpolate, value1) {
+  var string00,
+      string1 = value1 + "",
+      interpolate0;
+  return function() {
+    var string0 = this.getAttributeNS(fullname.space, fullname.local);
+    return string0 === string1 ? null
+        : string0 === string00 ? interpolate0
+        : interpolate0 = interpolate(string00 = string0, value1);
+  };
+}
+
+function attrFunction(name, interpolate, value) {
+  var string00,
+      string10,
+      interpolate0;
+  return function() {
+    var string0, value1 = value(this), string1;
+    if (value1 == null) return void this.removeAttribute(name);
+    string0 = this.getAttribute(name);
+    string1 = value1 + "";
+    return string0 === string1 ? null
+        : string0 === string00 && string1 === string10 ? interpolate0
+        : (string10 = string1, interpolate0 = interpolate(string00 = string0, value1));
+  };
+}
+
+function attrFunctionNS(fullname, interpolate, value) {
+  var string00,
+      string10,
+      interpolate0;
+  return function() {
+    var string0, value1 = value(this), string1;
+    if (value1 == null) return void this.removeAttributeNS(fullname.space, fullname.local);
+    string0 = this.getAttributeNS(fullname.space, fullname.local);
+    string1 = value1 + "";
+    return string0 === string1 ? null
+        : string0 === string00 && string1 === string10 ? interpolate0
+        : (string10 = string1, interpolate0 = interpolate(string00 = string0, value1));
+  };
+}
+
+function transition_attr(name, value) {
+  var fullname = d3Selection.namespace(name), i = fullname === "transform" ? d3Interpolate.interpolateTransformSvg : interpolate;
+  return this.attrTween(name, typeof value === "function"
+      ? (fullname.local ? attrFunctionNS : attrFunction)(fullname, i, tweenValue(this, "attr." + name, value))
+      : value == null ? (fullname.local ? attrRemoveNS : attrRemove)(fullname)
+      : (fullname.local ? attrConstantNS : attrConstant)(fullname, i, value));
+}
+
+function attrInterpolate(name, i) {
+  return function(t) {
+    this.setAttribute(name, i.call(this, t));
+  };
+}
+
+function attrInterpolateNS(fullname, i) {
+  return function(t) {
+    this.setAttributeNS(fullname.space, fullname.local, i.call(this, t));
+  };
+}
+
+function attrTweenNS(fullname, value) {
+  var t0, i0;
+  function tween() {
+    var i = value.apply(this, arguments);
+    if (i !== i0) t0 = (i0 = i) && attrInterpolateNS(fullname, i);
+    return t0;
+  }
+  tween._value = value;
+  return tween;
+}
+
+function attrTween(name, value) {
+  var t0, i0;
+  function tween() {
+    var i = value.apply(this, arguments);
+    if (i !== i0) t0 = (i0 = i) && attrInterpolate(name, i);
+    return t0;
+  }
+  tween._value = value;
+  return tween;
+}
+
+function transition_attrTween(name, value) {
+  var key = "attr." + name;
+  if (arguments.length < 2) return (key = this.tween(key)) && key._value;
+  if (value == null) return this.tween(key, null);
+  if (typeof value !== "function") throw new Error;
+  var fullname = d3Selection.namespace(name);
+  return this.tween(key, (fullname.local ? attrTweenNS : attrTween)(fullname, value));
+}
+
+function delayFunction(id, value) {
+  return function() {
+    init(this, id).delay = +value.apply(this, arguments);
+  };
+}
+
+function delayConstant(id, value) {
+  return value = +value, function() {
+    init(this, id).delay = value;
+  };
+}
+
+function transition_delay(value) {
+  var id = this._id;
+
+  return arguments.length
+      ? this.each((typeof value === "function"
+          ? delayFunction
+          : delayConstant)(id, value))
+      : get(this.node(), id).delay;
+}
+
+function durationFunction(id, value) {
+  return function() {
+    set(this, id).duration = +value.apply(this, arguments);
+  };
+}
+
+function durationConstant(id, value) {
+  return value = +value, function() {
+    set(this, id).duration = value;
+  };
+}
+
+function transition_duration(value) {
+  var id = this._id;
+
+  return arguments.length
+      ? this.each((typeof value === "function"
+          ? durationFunction
+          : durationConstant)(id, value))
+      : get(this.node(), id).duration;
+}
+
+function easeConstant(id, value) {
+  if (typeof value !== "function") throw new Error;
+  return function() {
+    set(this, id).ease = value;
+  };
+}
+
+function transition_ease(value) {
+  var id = this._id;
+
+  return arguments.length
+      ? this.each(easeConstant(id, value))
+      : get(this.node(), id).ease;
+}
+
+function transition_filter(match) {
+  if (typeof match !== "function") match = d3Selection.matcher(match);
+
+  for (var groups = this._groups, m = groups.length, subgroups = new Array(m), j = 0; j < m; ++j) {
+    for (var group = groups[j], n = group.length, subgroup = subgroups[j] = [], node, i = 0; i < n; ++i) {
+      if ((node = group[i]) && match.call(node, node.__data__, i, group)) {
+        subgroup.push(node);
+      }
+    }
+  }
+
+  return new Transition(subgroups, this._parents, this._name, this._id);
+}
+
+function transition_merge(transition) {
+  if (transition._id !== this._id) throw new Error;
+
+  for (var groups0 = this._groups, groups1 = transition._groups, m0 = groups0.length, m1 = groups1.length, m = Math.min(m0, m1), merges = new Array(m0), j = 0; j < m; ++j) {
+    for (var group0 = groups0[j], group1 = groups1[j], n = group0.length, merge = merges[j] = new Array(n), node, i = 0; i < n; ++i) {
+      if (node = group0[i] || group1[i]) {
+        merge[i] = node;
+      }
+    }
+  }
+
+  for (; j < m0; ++j) {
+    merges[j] = groups0[j];
+  }
+
+  return new Transition(merges, this._parents, this._name, this._id);
+}
+
+function start(name) {
+  return (name + "").trim().split(/^|\s+/).every(function(t) {
+    var i = t.indexOf(".");
+    if (i >= 0) t = t.slice(0, i);
+    return !t || t === "start";
+  });
+}
+
+function onFunction(id, name, listener) {
+  var on0, on1, sit = start(name) ? init : set;
+  return function() {
+    var schedule = sit(this, id),
+        on = schedule.on;
+
+    // If this node shared a dispatch with the previous node,
+    // just assign the updated shared dispatch and we’re done!
+    // Otherwise, copy-on-write.
+    if (on !== on0) (on1 = (on0 = on).copy()).on(name, listener);
+
+    schedule.on = on1;
+  };
+}
+
+function transition_on(name, listener) {
+  var id = this._id;
+
+  return arguments.length < 2
+      ? get(this.node(), id).on.on(name)
+      : this.each(onFunction(id, name, listener));
+}
+
+function removeFunction(id) {
+  return function() {
+    var parent = this.parentNode;
+    for (var i in this.__transition) if (+i !== id) return;
+    if (parent) parent.removeChild(this);
+  };
+}
+
+function transition_remove() {
+  return this.on("end.remove", removeFunction(this._id));
+}
+
+function transition_select(select) {
+  var name = this._name,
+      id = this._id;
+
+  if (typeof select !== "function") select = d3Selection.selector(select);
+
+  for (var groups = this._groups, m = groups.length, subgroups = new Array(m), j = 0; j < m; ++j) {
+    for (var group = groups[j], n = group.length, subgroup = subgroups[j] = new Array(n), node, subnode, i = 0; i < n; ++i) {
+      if ((node = group[i]) && (subnode = select.call(node, node.__data__, i, group))) {
+        if ("__data__" in node) subnode.__data__ = node.__data__;
+        subgroup[i] = subnode;
+        schedule(subgroup[i], name, id, i, subgroup, get(node, id));
+      }
+    }
+  }
+
+  return new Transition(subgroups, this._parents, name, id);
+}
+
+function transition_selectAll(select) {
+  var name = this._name,
+      id = this._id;
+
+  if (typeof select !== "function") select = d3Selection.selectorAll(select);
+
+  for (var groups = this._groups, m = groups.length, subgroups = [], parents = [], j = 0; j < m; ++j) {
+    for (var group = groups[j], n = group.length, node, i = 0; i < n; ++i) {
+      if (node = group[i]) {
+        for (var children = select.call(node, node.__data__, i, group), child, inherit = get(node, id), k = 0, l = children.length; k < l; ++k) {
+          if (child = children[k]) {
+            schedule(child, name, id, k, children, inherit);
+          }
+        }
+        subgroups.push(children);
+        parents.push(node);
+      }
+    }
+  }
+
+  return new Transition(subgroups, parents, name, id);
+}
+
+var Selection = d3Selection.selection.prototype.constructor;
+
+function transition_selection() {
+  return new Selection(this._groups, this._parents);
+}
+
+function styleNull(name, interpolate) {
+  var string00,
+      string10,
+      interpolate0;
+  return function() {
+    var string0 = d3Selection.style(this, name),
+        string1 = (this.style.removeProperty(name), d3Selection.style(this, name));
+    return string0 === string1 ? null
+        : string0 === string00 && string1 === string10 ? interpolate0
+        : interpolate0 = interpolate(string00 = string0, string10 = string1);
+  };
+}
+
+function styleRemove(name) {
+  return function() {
+    this.style.removeProperty(name);
+  };
+}
+
+function styleConstant(name, interpolate, value1) {
+  var string00,
+      string1 = value1 + "",
+      interpolate0;
+  return function() {
+    var string0 = d3Selection.style(this, name);
+    return string0 === string1 ? null
+        : string0 === string00 ? interpolate0
+        : interpolate0 = interpolate(string00 = string0, value1);
+  };
+}
+
+function styleFunction(name, interpolate, value) {
+  var string00,
+      string10,
+      interpolate0;
+  return function() {
+    var string0 = d3Selection.style(this, name),
+        value1 = value(this),
+        string1 = value1 + "";
+    if (value1 == null) string1 = value1 = (this.style.removeProperty(name), d3Selection.style(this, name));
+    return string0 === string1 ? null
+        : string0 === string00 && string1 === string10 ? interpolate0
+        : (string10 = string1, interpolate0 = interpolate(string00 = string0, value1));
+  };
+}
+
+function styleMaybeRemove(id, name) {
+  var on0, on1, listener0, key = "style." + name, event = "end." + key, remove;
+  return function() {
+    var schedule = set(this, id),
+        on = schedule.on,
+        listener = schedule.value[key] == null ? remove || (remove = styleRemove(name)) : undefined;
+
+    // If this node shared a dispatch with the previous node,
+    // just assign the updated shared dispatch and we’re done!
+    // Otherwise, copy-on-write.
+    if (on !== on0 || listener0 !== listener) (on1 = (on0 = on).copy()).on(event, listener0 = listener);
+
+    schedule.on = on1;
+  };
+}
+
+function transition_style(name, value, priority) {
+  var i = (name += "") === "transform" ? d3Interpolate.interpolateTransformCss : interpolate;
+  return value == null ? this
+      .styleTween(name, styleNull(name, i))
+      .on("end.style." + name, styleRemove(name))
+    : typeof value === "function" ? this
+      .styleTween(name, styleFunction(name, i, tweenValue(this, "style." + name, value)))
+      .each(styleMaybeRemove(this._id, name))
+    : this
+      .styleTween(name, styleConstant(name, i, value), priority)
+      .on("end.style." + name, null);
+}
+
+function styleInterpolate(name, i, priority) {
+  return function(t) {
+    this.style.setProperty(name, i.call(this, t), priority);
+  };
+}
+
+function styleTween(name, value, priority) {
+  var t, i0;
+  function tween() {
+    var i = value.apply(this, arguments);
+    if (i !== i0) t = (i0 = i) && styleInterpolate(name, i, priority);
+    return t;
+  }
+  tween._value = value;
+  return tween;
+}
+
+function transition_styleTween(name, value, priority) {
+  var key = "style." + (name += "");
+  if (arguments.length < 2) return (key = this.tween(key)) && key._value;
+  if (value == null) return this.tween(key, null);
+  if (typeof value !== "function") throw new Error;
+  return this.tween(key, styleTween(name, value, priority == null ? "" : priority));
+}
+
+function textConstant(value) {
+  return function() {
+    this.textContent = value;
+  };
+}
+
+function textFunction(value) {
+  return function() {
+    var value1 = value(this);
+    this.textContent = value1 == null ? "" : value1;
+  };
+}
+
+function transition_text(value) {
+  return this.tween("text", typeof value === "function"
+      ? textFunction(tweenValue(this, "text", value))
+      : textConstant(value == null ? "" : value + ""));
+}
+
+function textInterpolate(i) {
+  return function(t) {
+    this.textContent = i.call(this, t);
+  };
+}
+
+function textTween(value) {
+  var t0, i0;
+  function tween() {
+    var i = value.apply(this, arguments);
+    if (i !== i0) t0 = (i0 = i) && textInterpolate(i);
+    return t0;
+  }
+  tween._value = value;
+  return tween;
+}
+
+function transition_textTween(value) {
+  var key = "text";
+  if (arguments.length < 1) return (key = this.tween(key)) && key._value;
+  if (value == null) return this.tween(key, null);
+  if (typeof value !== "function") throw new Error;
+  return this.tween(key, textTween(value));
+}
+
+function transition_transition() {
+  var name = this._name,
+      id0 = this._id,
+      id1 = newId();
+
+  for (var groups = this._groups, m = groups.length, j = 0; j < m; ++j) {
+    for (var group = groups[j], n = group.length, node, i = 0; i < n; ++i) {
+      if (node = group[i]) {
+        var inherit = get(node, id0);
+        schedule(node, name, id1, i, group, {
+          time: inherit.time + inherit.delay + inherit.duration,
+          delay: 0,
+          duration: inherit.duration,
+          ease: inherit.ease
+        });
+      }
+    }
+  }
+
+  return new Transition(groups, this._parents, name, id1);
+}
+
+function transition_end() {
+  var on0, on1, that = this, id = that._id, size = that.size();
+  return new Promise(function(resolve, reject) {
+    var cancel = {value: reject},
+        end = {value: function() { if (--size === 0) resolve(); }};
+
+    that.each(function() {
+      var schedule = set(this, id),
+          on = schedule.on;
+
+      // If this node shared a dispatch with the previous node,
+      // just assign the updated shared dispatch and we’re done!
+      // Otherwise, copy-on-write.
+      if (on !== on0) {
+        on1 = (on0 = on).copy();
+        on1._.cancel.push(cancel);
+        on1._.interrupt.push(cancel);
+        on1._.end.push(end);
+      }
+
+      schedule.on = on1;
+    });
+  });
+}
+
+var id = 0;
+
+function Transition(groups, parents, name, id) {
+  this._groups = groups;
+  this._parents = parents;
+  this._name = name;
+  this._id = id;
+}
+
+function transition(name) {
+  return d3Selection.selection().transition(name);
+}
+
+function newId() {
+  return ++id;
+}
+
+var selection_prototype = d3Selection.selection.prototype;
+
+Transition.prototype = transition.prototype = {
+  constructor: Transition,
+  select: transition_select,
+  selectAll: transition_selectAll,
+  filter: transition_filter,
+  merge: transition_merge,
+  selection: transition_selection,
+  transition: transition_transition,
+  call: selection_prototype.call,
+  nodes: selection_prototype.nodes,
+  node: selection_prototype.node,
+  size: selection_prototype.size,
+  empty: selection_prototype.empty,
+  each: selection_prototype.each,
+  on: transition_on,
+  attr: transition_attr,
+  attrTween: transition_attrTween,
+  style: transition_style,
+  styleTween: transition_styleTween,
+  text: transition_text,
+  textTween: transition_textTween,
+  remove: transition_remove,
+  tween: transition_tween,
+  delay: transition_delay,
+  duration: transition_duration,
+  ease: transition_ease,
+  end: transition_end
+};
+
+var defaultTiming = {
+  time: null, // Set on use.
+  delay: 0,
+  duration: 250,
+  ease: d3Ease.easeCubicInOut
+};
+
+function inherit(node, id) {
+  var timing;
+  while (!(timing = node.__transition) || !(timing = timing[id])) {
+    if (!(node = node.parentNode)) {
+      return defaultTiming.time = d3Timer.now(), defaultTiming;
+    }
+  }
+  return timing;
+}
+
+function selection_transition(name) {
+  var id,
+      timing;
+
+  if (name instanceof Transition) {
+    id = name._id, name = name._name;
+  } else {
+    id = newId(), (timing = defaultTiming).time = d3Timer.now(), name = name == null ? null : name + "";
+  }
+
+  for (var groups = this._groups, m = groups.length, j = 0; j < m; ++j) {
+    for (var group = groups[j], n = group.length, node, i = 0; i < n; ++i) {
+      if (node = group[i]) {
+        schedule(node, name, id, i, group, timing || inherit(node, id));
+      }
+    }
+  }
+
+  return new Transition(groups, this._parents, name, id);
+}
+
+d3Selection.selection.prototype.interrupt = selection_interrupt;
+d3Selection.selection.prototype.transition = selection_transition;
+
+var root = [null];
+
+function active(node, name) {
+  var schedules = node.__transition,
+      schedule,
+      i;
+
+  if (schedules) {
+    name = name == null ? null : name + "";
+    for (i in schedules) {
+      if ((schedule = schedules[i]).state > SCHEDULED && schedule.name === name) {
+        return new Transition([[node]], root, name, +i);
+      }
+    }
+  }
+
+  return null;
+}
+
+exports.active = active;
+exports.interrupt = interrupt;
+exports.transition = transition;
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+}));
+
+},{"d3-color":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-color/build/d3-color.js","d3-dispatch":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-dispatch/build/d3-dispatch.js","d3-ease":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-ease/build/d3-ease.js","d3-interpolate":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-interpolate/build/d3-interpolate.js","d3-selection":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-selection/dist/d3-selection.js","d3-timer":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3-timer/build/d3-timer.js"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/d3/dist/d3.js":[function(require,module,exports){
 // https://d3js.org v5.15.1 Copyright 2020 Mike Bostock
 (function (global, factory) {
 typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
@@ -42768,7 +47813,60 @@ TextContainer._idyll = {
   tagType: "open"
 };
 exports.default = TextContainer;
-},{"react":"react"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-document/dist/cjs/components/author-tool.js":[function(require,module,exports){
+},{"react":"react"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-d3-component/lib.js":[function(require,module,exports){
+'use strict';
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+var React = require('react');
+var ReactDOM = require('react-dom');
+
+var D3Component = function (_React$Component) {
+  _inherits(D3Component, _React$Component);
+
+  function D3Component() {
+    _classCallCheck(this, D3Component);
+
+    return _possibleConstructorReturn(this, (D3Component.__proto__ || Object.getPrototypeOf(D3Component)).apply(this, arguments));
+  }
+
+  _createClass(D3Component, [{
+    key: 'componentWillReceiveProps',
+    value: function componentWillReceiveProps(nextProps) {
+      this.update(nextProps, this.props);
+    }
+  }, {
+    key: 'shouldComponentUpdate',
+    value: function shouldComponentUpdate() {
+      return false;
+    }
+  }, {
+    key: 'render',
+    value: function render() {
+      var _this2 = this;
+
+      var _props = this.props,
+          className = _props.className,
+          style = _props.style;
+
+      return React.createElement('div', { ref: function ref(node) {
+          _this2.initialize(node, _this2.props);
+        }, className: className, style: Object.assign({ width: '100%' }, style) });
+    }
+  }]);
+
+  return D3Component;
+}(React.Component);
+
+module.exports = D3Component;
+
+},{"react":"react","react-dom":"react-dom"}],"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-document/dist/cjs/components/author-tool.js":[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -86935,7 +92033,7 @@ function hasOwnProperty(obj, prop) {
 },{"./support/isBuffer":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/util/support/isBufferBrowser.js","_process":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/process/browser.js","inherits":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/util/node_modules/inherits/inherits_browser.js"}],"__IDYLL_AST__":[function(require,module,exports){
 "use strict";
 
-module.exports = { "id": 0, "type": "component", "name": "div", "children": [{ "id": 2, "type": "var", "properties": { "name": { "type": "value", "value": "userAEvents" }, "value": { "type": "expression", "value": "[{t: 1, o: \"added\", id: \"🍇\"},{t: 2, o: \"added\", id: \"🍉\"},{t: 3, o: \"removed\", id: \"🍉\"}]" } } }, { "id": 3, "type": "var", "properties": { "name": { "type": "value", "value": "userAEventsTimestamped" }, "value": { "type": "expression", "value": "[]" } } }, { "id": 4, "type": "var", "properties": { "name": { "type": "value", "value": "userBEvents" }, "value": { "type": "expression", "value": "[{t: 1, o: \"added\", id: \"🥦\"},{t: 2, o: \"removed\", id: \"🍇\"},{t: 3, o: \"added\", id: \"🍉\"}]" } } }, { "id": 5, "type": "var", "properties": { "name": { "type": "value", "value": "userBEventsTimestamped" }, "value": { "type": "expression", "value": "[]" } } }, { "id": 6, "type": "var", "properties": { "name": { "type": "value", "value": "timeA" }, "value": { "type": "expression", "value": "5" } } }, { "id": 7, "type": "var", "properties": { "name": { "type": "value", "value": "timeB" }, "value": { "type": "expression", "value": "5" } } }, { "id": 8, "type": "component", "name": "TextContainer", "children": [{ "id": 9, "type": "meta", "properties": { "title": { "type": "value", "value": "Crdt" }, "description": { "type": "value", "value": "Short description of your project" } } }] }, { "id": 10, "type": "component", "name": "Header", "properties": { "title": { "type": "value", "value": "CRDTs" }, "subtitle": { "type": "value", "value": "Conflict-free Replicated Data Types and collaboration" }, "author": { "type": "value", "value": "Colton Pierson" }, "authorLink": { "type": "value", "value": "https://coltonpierson.com" }, "date": { "type": "expression", "value": "(new Date()).toDateString()" }, "background": { "type": "value", "value": "#222222" }, "color": { "type": "value", "value": "#ffffff" } }, "children": [] }, { "id": 11, "type": "component", "name": "TextContainer", "children": [{ "id": 12, "type": "component", "name": "h1", "children": [{ "id": 13, "type": "textnode", "value": "So what is a CRDT" }] }, { "id": 14, "type": "component", "name": "p", "children": [{ "id": 15, "type": "textnode", "value": "CRDTs (Conflict-free Replicated Data Type)s enable eventual consistency.\nAs multiple instances of them are either merged or their operations are\nevaluated, they will always resolve to a consistent final state.\nThey’re often used in distributed systems or for other collaborative applications." }] }, { "id": 16, "type": "component", "name": "h1", "children": [{ "id": 17, "type": "textnode", "value": "A Simple CRDT (" }, { "id": 18, "type": "textnode", "value": "2" }, { "id": 19, "type": "textnode", "value": "P-Set)" }] }, { "id": 20, "type": "component", "name": "h2", "children": [{ "id": 21, "type": "textnode", "value": "A Grocery List" }] }, { "id": 22, "type": "component", "name": "p", "children": [{ "id": 23, "type": "textnode", "value": "We’re going to use a grocery list as an approximation of a set.\nTry adding or remove items from your cart." }] }, { "id": 24, "type": "component", "name": "Aside", "children": [{ "id": 25, "type": "component", "name": "caption", "children": [{ "id": 26, "type": "textnode", "value": "Your Events" }] }, { "id": 27, "type": "component", "name": "Flex", "children": [{ "id": 28, "type": "component", "name": "SetEventEditor", "properties": { "events": { "type": "variable", "value": "userAEvents" }, "time": { "type": "variable", "value": "timeA" } }, "children": [] }] }] }, { "id": 29, "type": "component", "name": "SetEditor", "properties": { "events": { "type": "variable", "value": "userAEvents" }, "time": { "type": "variable", "value": "timeA" } }, "children": [] }, { "id": 30, "type": "component", "name": "p", "children": [{ "id": 31, "type": "textnode", "value": "We’re going to use some timelines to play around\nwhen events occur. Press play to see the series of changes to your\ngrocery list take place. Everything will resolve to the same state you see above." }] }, { "id": 32, "type": "component", "name": "h2", "children": [{ "id": 33, "type": "textnode", "value": "A Friend" }] }, { "id": 34, "type": "component", "name": "Aside", "children": [{ "id": 35, "type": "component", "name": "caption", "children": [{ "id": 36, "type": "textnode", "value": "Your Friend’s Events" }] }, { "id": 37, "type": "component", "name": "Flex", "children": [{ "id": 38, "type": "component", "name": "SetEventEditor", "properties": { "events": { "type": "variable", "value": "userBEvents" }, "time": { "type": "variable", "value": "timeB" } }, "children": [] }] }] }, { "id": 39, "type": "component", "name": "p", "children": [{ "id": 40, "type": "textnode", "value": "This is going to be a friend of your’s editing the same grocery\nlist at around the same time." }] }, { "id": 41, "type": "component", "name": "SetEditor", "properties": { "events": { "type": "variable", "value": "userBEvents" }, "time": { "type": "variable", "value": "timeB" } }, "children": [] }, { "id": 42, "type": "component", "name": "h2", "children": [{ "id": 43, "type": "textnode", "value": "A Conflict" }] }, { "id": 44, "type": "component", "name": "Aside", "children": [{ "id": 45, "type": "component", "name": "caption", "children": [{ "id": 46, "type": "textnode", "value": "Comparing Our Events" }] }, { "id": 47, "type": "component", "name": "Flex", "children": [{ "id": 48, "type": "component", "name": "SetEventEditor", "properties": { "events": { "type": "variable", "value": "userAEvents" }, "time": { "type": "variable", "value": "timeA" }, "showShuffle": { "type": "value", "value": 1 } }, "children": [] }, { "id": 49, "type": "component", "name": "SetEventEditor", "properties": { "events": { "type": "variable", "value": "userBEvents" }, "time": { "type": "variable", "value": "timeB" }, "showShuffle": { "type": "value", "value": 1 } }, "children": [] }] }] }, { "id": 50, "type": "component", "name": "p", "children": [{ "id": 51, "type": "textnode", "value": "Lets take a look at what happens when don’t use something like a CRDT.\nIf events take place in different orders, we’ll get different results. Try\nhitting the " }, { "id": 52, "type": "component", "name": "em", "children": [{ "id": 53, "type": "textnode", "value": "shuffle" }] }, { "id": 54, "type": "textnode", "value": " button to mix up the order our events take place in." }] }, { "id": 55, "type": "component", "name": "CombinedSetRepresentationDumb", "properties": { "timeA": { "type": "variable", "value": "timeA" }, "timeB": { "type": "variable", "value": "timeB" }, "eventsA": { "type": "variable", "value": "userAEvents" }, "eventsB": { "type": "variable", "value": "userBEvents" } }, "children": [] }, { "id": 56, "type": "component", "name": "p", "children": [{ "id": 57, "type": "textnode", "value": "We get different results for different orders of operations." }] }, { "id": 58, "type": "component", "name": "h2", "children": [{ "id": 59, "type": "textnode", "value": "Conflict-free" }] }, { "id": 60, "type": "component", "name": "p", "children": [{ "id": 61, "type": "textnode", "value": "In contrast, using the CRDT structure fixes this.\nNo matter what order all of the events occur, the final state of our list will\nbe the same. This is the goal of eventual consistency. Everything is\ndeterministic, anything can happen in any order but we get the same result." }] }, { "id": 62, "type": "component", "name": "CombinedSetRepresentation", "properties": { "timeA": { "type": "variable", "value": "timeA" }, "timeB": { "type": "variable", "value": "timeB" }, "eventsA": { "type": "variable", "value": "userAEvents" }, "eventsB": { "type": "variable", "value": "userBEvents" } }, "children": [] }, { "id": 63, "type": "component", "name": "p", "children": [{ "id": 64, "type": "textnode", "value": "The red box you see is what is often called a " }, { "id": 65, "type": "component", "name": "em", "children": [{ "id": 66, "type": "textnode", "value": "tombstone" }] }, { "id": 67, "type": "textnode", "value": " set. Many CRDTs use similar models.\nThings that are removed are removed forever and tracked. This allows the merger of the data structure. \nUser A and User B can know that whatever they removed will be gone when their states are combined." }] }] }] };
+module.exports = { "id": 0, "type": "component", "name": "div", "children": [{ "id": 2, "type": "var", "properties": { "name": { "type": "value", "value": "userAEvents" }, "value": { "type": "expression", "value": "[{t: 1, o: \"added\", id: \"🍇\"},{t: 2, o: \"added\", id: \"🍉\"},{t: 3, o: \"removed\", id: \"🍉\"},{t: 4, o: \"added\", id: \"🥑\"},{t: 5, o: \"added\", id: \"🍌\"} ]" } } }, { "id": 3, "type": "var", "properties": { "name": { "type": "value", "value": "userAEventsTimestamped" }, "value": { "type": "expression", "value": "[]" } } }, { "id": 4, "type": "var", "properties": { "name": { "type": "value", "value": "userBEvents" }, "value": { "type": "expression", "value": "[{t: 1, o: \"added\", id: \"🥦\"},{t: 2, o: \"removed\", id: \"🍇\"},{t: 3, o: \"added\", id: \"🍉\"}]" } } }, { "id": 5, "type": "var", "properties": { "name": { "type": "value", "value": "userBEventsTimestamped" }, "value": { "type": "expression", "value": "[]" } } }, { "id": 6, "type": "var", "properties": { "name": { "type": "value", "value": "timeA" }, "value": { "type": "expression", "value": "5" } } }, { "id": 7, "type": "var", "properties": { "name": { "type": "value", "value": "timeB" }, "value": { "type": "expression", "value": "5" } } }, { "id": 8, "type": "component", "name": "TextContainer", "children": [{ "id": 9, "type": "meta", "properties": { "title": { "type": "value", "value": "Crdt" }, "description": { "type": "value", "value": "Short description of your project" } } }] }, { "id": 10, "type": "component", "name": "Header", "properties": { "title": { "type": "value", "value": "CRDTs" }, "subtitle": { "type": "value", "value": "Conflict-free Replicated Data Types and collaboration" }, "author": { "type": "value", "value": "Colton Pierson" }, "authorLink": { "type": "value", "value": "https://coltonpierson.com" }, "date": { "type": "expression", "value": "(new Date()).toDateString()" }, "background": { "type": "value", "value": "#222222" }, "color": { "type": "value", "value": "#ffffff" } }, "children": [] }, { "id": 11, "type": "component", "name": "TextContainer", "children": [{ "id": 12, "type": "component", "name": "h1", "children": [{ "id": 13, "type": "textnode", "value": "So what is a CRDT" }] }, { "id": 14, "type": "component", "name": "p", "children": [{ "id": 15, "type": "textnode", "value": "CRDTs (Conflict-free Replicated Data Type)s enable eventual consistency.\nAs multiple instances of them are either merged or their operations are\nevaluated, they will always resolve to a consistent final state.\nThey’re often used in distributed systems or for other collaborative applications." }] }, { "id": 16, "type": "component", "name": "h1", "children": [{ "id": 17, "type": "textnode", "value": "A Simple CRDT (" }, { "id": 18, "type": "textnode", "value": "2" }, { "id": 19, "type": "textnode", "value": "P-Set)" }] }, { "id": 20, "type": "component", "name": "h2", "children": [{ "id": 21, "type": "textnode", "value": "A Grocery List" }] }, { "id": 22, "type": "component", "name": "p", "children": [{ "id": 23, "type": "textnode", "value": "We’re going to use a grocery list as an approximation of a set.\nTry adding or remove items from your cart." }] }, { "id": 24, "type": "component", "name": "Aside", "children": [{ "id": 25, "type": "component", "name": "caption", "children": [{ "id": 26, "type": "textnode", "value": "Your Events" }] }, { "id": 27, "type": "component", "name": "Flex", "children": [{ "id": 28, "type": "component", "name": "SetEventEditor", "properties": { "events": { "type": "variable", "value": "userAEvents" }, "time": { "type": "variable", "value": "timeA" } }, "children": [] }] }] }, { "id": 29, "type": "component", "name": "SetEditor", "properties": { "events": { "type": "variable", "value": "userAEvents" }, "time": { "type": "variable", "value": "timeA" } }, "children": [] }, { "id": 30, "type": "component", "name": "p", "children": [{ "id": 31, "type": "textnode", "value": "We’re going to use some timelines to play around\nwhen events occur. Press play to see the series of changes to your\ngrocery list take place. Everything will resolve to the same state you see above." }] }, { "id": 32, "type": "component", "name": "TimeSlider", "properties": { "value": { "type": "variable", "value": "timeA" }, "events": { "type": "variable", "value": "userAEvents" }, "timestampedEvents": { "type": "variable", "value": "userAEventsTimestamped" } }, "children": [] }, { "id": 33, "type": "component", "name": "SetRepresentation", "properties": { "events": { "type": "variable", "value": "userAEvents" }, "time": { "type": "variable", "value": "timeA" } }, "children": [] }, { "id": 34, "type": "component", "name": "h2", "children": [{ "id": 35, "type": "textnode", "value": "A Friend" }] }, { "id": 36, "type": "component", "name": "Aside", "children": [{ "id": 37, "type": "component", "name": "caption", "children": [{ "id": 38, "type": "textnode", "value": "Your Friend’s Events" }] }, { "id": 39, "type": "component", "name": "Flex", "children": [{ "id": 40, "type": "component", "name": "SetEventEditor", "properties": { "events": { "type": "variable", "value": "userBEvents" }, "time": { "type": "variable", "value": "timeB" } }, "children": [] }] }] }, { "id": 41, "type": "component", "name": "p", "children": [{ "id": 42, "type": "textnode", "value": "This is going to be a friend of your’s editing the same grocery\nlist at around the same time." }] }, { "id": 43, "type": "component", "name": "SetEditor", "properties": { "events": { "type": "variable", "value": "userBEvents" }, "time": { "type": "variable", "value": "timeB" } }, "children": [] }, { "id": 44, "type": "component", "name": "p", "children": [{ "id": 45, "type": "textnode", "value": "We can scrub through each of their events taking place as well:" }] }, { "id": 46, "type": "component", "name": "TimeSlider", "properties": { "value": { "type": "variable", "value": "timeB" }, "events": { "type": "variable", "value": "userBEvents" }, "timestampedEvents": { "type": "variable", "value": "userBEventsTimestamped" } }, "children": [] }, { "id": 47, "type": "component", "name": "SetRepresentation", "properties": { "events": { "type": "variable", "value": "userBEvents" }, "time": { "type": "variable", "value": "timeB" } }, "children": [] }, { "id": 48, "type": "component", "name": "h2", "children": [{ "id": 49, "type": "textnode", "value": "A Conflict" }] }, { "id": 50, "type": "component", "name": "Aside", "children": [{ "id": 51, "type": "component", "name": "caption", "children": [{ "id": 52, "type": "textnode", "value": "Comparing Our Events" }] }, { "id": 53, "type": "component", "name": "Flex", "children": [{ "id": 54, "type": "component", "name": "SetEventEditor", "properties": { "events": { "type": "variable", "value": "userAEvents" }, "time": { "type": "variable", "value": "timeA" }, "showShuffle": { "type": "value", "value": 1 } }, "children": [] }, { "id": 55, "type": "component", "name": "SetEventEditor", "properties": { "events": { "type": "variable", "value": "userBEvents" }, "time": { "type": "variable", "value": "timeB" }, "showShuffle": { "type": "value", "value": 1 } }, "children": [] }] }] }, { "id": 56, "type": "component", "name": "p", "children": [{ "id": 57, "type": "textnode", "value": "Lets take a look at what happens when don’t use something like a CRDT.\nIf events take place in different orders, we’ll get different results. Try\nhitting the " }, { "id": 58, "type": "component", "name": "em", "children": [{ "id": 59, "type": "textnode", "value": "shuffle" }] }, { "id": 60, "type": "textnode", "value": " button to mix up the order our events take place in." }] }, { "id": 61, "type": "component", "name": "CombinedSetRepresentationDumb", "properties": { "timeA": { "type": "variable", "value": "timeA" }, "timeB": { "type": "variable", "value": "timeB" }, "eventsA": { "type": "variable", "value": "userAEvents" }, "eventsB": { "type": "variable", "value": "userBEvents" } }, "children": [] }, { "id": 62, "type": "component", "name": "p", "children": [{ "id": 63, "type": "textnode", "value": "We get different results for different orders of operations." }] }, { "id": 64, "type": "component", "name": "h2", "children": [{ "id": 65, "type": "textnode", "value": "Conflict-free" }] }, { "id": 66, "type": "component", "name": "p", "children": [{ "id": 67, "type": "textnode", "value": "In contrast, using the CRDT structure fixes this.\nNo matter what order all of the events occur, the final state of our list will\nbe the same. This is the goal of eventual consistency. Everything is\ndeterministic, anything can happen in any order but we get the same result." }] }, { "id": 68, "type": "component", "name": "CombinedSetRepresentation", "properties": { "timeA": { "type": "variable", "value": "timeA" }, "timeB": { "type": "variable", "value": "timeB" }, "eventsA": { "type": "variable", "value": "userAEvents" }, "eventsB": { "type": "variable", "value": "userBEvents" } }, "children": [] }, { "id": 69, "type": "component", "name": "p", "children": [{ "id": 70, "type": "textnode", "value": "The red box you see is what is often called a " }, { "id": 71, "type": "component", "name": "em", "children": [{ "id": 72, "type": "textnode", "value": "tombstone" }] }, { "id": 73, "type": "textnode", "value": " set. Many CRDTs use similar models.\nThings that are removed are removed forever and tracked. This allows the merger of the data structure. \nUser A and User B can know that whatever they removed will be gone when their states are combined." }] }, { "id": 74, "type": "component", "name": "p", "children": [{ "id": 75, "type": "textnode", "value": "Because items have been removed are never coming back, it doesn’t matter when\nthe remove action occurred, only that at some point it did occur." }] }] }] };
 
 },{}],"__IDYLL_COMPONENTS__":[function(require,module,exports){
 'use strict';
@@ -86949,11 +92047,13 @@ module.exports = {
 	'flex': require('/Users/coltonpierson/work/interviews/openai/crdt/components/flex.js'),
 	'aside': require('/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/aside.js'),
 	'set-editor': require('/Users/coltonpierson/work/interviews/openai/crdt/components/set-editor.js'),
+	'time-slider': require('/Users/coltonpierson/work/interviews/openai/crdt/components/time-slider.js'),
+	'set-representation': require('/Users/coltonpierson/work/interviews/openai/crdt/components/set-representation.js'),
 	'combined-set-representation-dumb': require('/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation-dumb.js'),
 	'combined-set-representation': require('/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation.js')
 };
 
-},{"/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation-dumb.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation-dumb.js","/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation.js","/Users/coltonpierson/work/interviews/openai/crdt/components/flex.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/flex.js","/Users/coltonpierson/work/interviews/openai/crdt/components/set-editor.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/set-editor.js","/Users/coltonpierson/work/interviews/openai/crdt/components/set-event-editor.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/set-event-editor.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/aside.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/aside.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/h1.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/h1.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/h2.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/h2.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/header.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/header.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/text-container.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/text-container.js"}],"__IDYLL_CONTEXT__":[function(require,module,exports){
+},{"/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation-dumb.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation-dumb.js","/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/combined-set-representation.js","/Users/coltonpierson/work/interviews/openai/crdt/components/flex.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/flex.js","/Users/coltonpierson/work/interviews/openai/crdt/components/set-editor.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/set-editor.js","/Users/coltonpierson/work/interviews/openai/crdt/components/set-event-editor.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/set-event-editor.js","/Users/coltonpierson/work/interviews/openai/crdt/components/set-representation.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/set-representation.js","/Users/coltonpierson/work/interviews/openai/crdt/components/time-slider.js":"/Users/coltonpierson/work/interviews/openai/crdt/components/time-slider.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/aside.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/aside.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/h1.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/h1.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/h2.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/h2.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/header.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/header.js","/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/text-container.js":"/Users/coltonpierson/work/interviews/openai/crdt/node_modules/idyll-components/dist/cjs/text-container.js"}],"__IDYLL_CONTEXT__":[function(require,module,exports){
 
 module.exports = function () {
 
