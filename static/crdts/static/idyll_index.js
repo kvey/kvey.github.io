@@ -528,10 +528,7 @@ var SetEventEditor = function SetEventEditor(_ref2) {
       events.map(function (x, i) {
         return React.createElement(
           "div",
-          { className: "m-2 border-2 border-gray-400 rounded p-2 flex justify-between content-end " + (time >= x["t"] ? "border-blue-400 bg-blue-200" : ""),
-            onClick: function onClick() {
-              return toggleAddRemove(events, i);
-            }
+          { className: "m-2 border-2 border-gray-400 rounded p-2 flex justify-between content-end " + (time >= x["t"] ? "border-blue-400 bg-blue-200" : "")
           },
           React.createElement(
             "span",
