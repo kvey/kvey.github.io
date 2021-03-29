@@ -1,8 +1,6 @@
 # The URL the site will be built for
 base_url = "https://blog.coltonpierson.com"
 
-theme = "after-dark"
-
 # Whether to automatically compile all Sass files in the sass directory
 compile_sass = true
 
@@ -15,16 +13,17 @@ build_search_index = true
 
 taxonomies = [
     # You can enable/disable RSS
-    {name = "categories", rss = true},
-    {name = "tags", rss = true},
+    {name = "categories", rss = false},
+    {name = "tags", rss = false},
 ]
 
 [extra]
+date_format = "%e %B %Y"
 # Put all your custom variables here
-after_dark_menu = [
+menu_links = [
     {url = "/", name = "Home"},
+    {url = "/blog", name = "Blog"},
     {url = "/categories", name = "Categories"},
-    {url = "/tags", name = "Tags"},
-    {url = "/about", name = "About"},
+    {url = "/tags", name = "Tags"}
 ]
 

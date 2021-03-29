@@ -42,39 +42,11 @@
                   {% endfor %}
                   {{ page_macros::page_pagination(paginator=paginator) }}
                 {% else %}
+                  {% for page in section.pages %}
+                      {{ page_macros::page_listing(page=page) }}
+                  {% endfor %}
                 {% endif %}
             {% endblock content %}
-
-          {% if section.content %}
-            <div style="display: flex;">
-              <div style="flex: 0.8;">
-                  <h1>
-                    {{ section.title }}
-                  </h1>
-                  {{ section.content | safe }}
-              </div>
-              <div style="flex: 0.2; margin: 6px;">
-                <ul style="list-style-type: none;">
-                  <li style="margin-bottom: 12px;">
-                    Recent Posts
-                  </li>
-                {% for subsection_path in section.subsections %}
-                  {% set subsection = get_section(path=subsection_path) %}
-                  {% for page in subsection.pages | slice(start=0, end=5) %}
-                  <li style="margin-bottom: 12px;">
-                    <a href="{{ page.permalink }}">
-                        <small>{{page.date}} </small>
-                        <div>
-                          {{ page.title }}
-                        </div>
-                      </a>
-                  </li>
-                  {% endfor %}
-                {% endfor %}
-                </ul>
-              </div>
-            </div>
-            {% endif %}
         </main>
         <footer>
             <p> © {{ config.title }} {{ now() | date(format="%Y") }}</p>

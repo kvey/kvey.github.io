@@ -1,0 +1,2 @@
+`zola build`
+`zola serve`
