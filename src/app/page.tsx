@@ -26,7 +26,7 @@ const Home = () => {
             </p>
             {/*<h1 className='text-2xl'>ABOUT</h1>*/}
             {/*<LineBreakDouble />*/}
-            <h2 className={"text-2xl mt-12"}>Experience</h2>
+            <h2 className={"text-2xl mt-12"}>Background</h2>
             <LineBreak/>
             <table className={"my-2"}>
               <thead className={"text-left"}>
