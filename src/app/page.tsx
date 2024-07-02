@@ -52,14 +52,14 @@ const Home = () => {
                 </td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>VP of Engineering</td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
-                  36m+ COVID-19 tests, {">"}$1b revenue, and 7000 employees in first year
+                  36m+ COVID tests, {">"}$1B revenue, and 7000 employees in first year
                 </td>
               </tr>
               <tr>
                 <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://figma.com"} className={"underline text-blue-600"}>Figma</a></td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>Software Engineer</td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
-                  Infrastructure and editor performance
+                  Valued @ $12.5B, worked on editor + viewer performance.
                 </td>
               </tr>
               <tr>
