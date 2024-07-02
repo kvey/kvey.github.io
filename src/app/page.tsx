@@ -55,7 +55,7 @@ const Home = () => {
                 {/*</td>*/}
               </tr>
               <tr>
-                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://assembly.com"} className={"underline text-blue-600"}>Assembly</a></td>
+                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://asm.co"} className={"underline text-blue-600"}>Assembly</a></td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>CTO, Co-Founder</td>
                 {/*<td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>*/}
                 {/*  Backed by YC in 2015. QC platform for manufacturing.*/}
