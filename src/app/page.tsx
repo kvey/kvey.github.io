@@ -30,10 +30,11 @@ const Home = () => {
             <LineBreak/>
             <table className={"my-2"}>
               <thead className={"text-left"}>
-                <tr className={""}>
-                  <th className={"border py-2 px-2"}>Workplace</th>
-                  <th className={"border py-2 px-2"}>Role</th>
-                </tr>
+              <tr className={""}>
+                <th className={"border py-2 px-2"}>Workplace</th>
+                <th className={"border py-2 px-2"}>Role</th>
+                <th className={"border py-2 px-2"}>About</th>
+              </tr>
               </thead>
               <tbody>
               <tr>
@@ -51,21 +52,21 @@ const Home = () => {
                 </td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>VP of Engineering</td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
-                  36m+ COVID-19 tests and 600k+ vaccinations. {">"}$1b revenue and 7000 employees in first year.
+                  36m+ COVID-19 tests, {">"}$1b revenue, and 7000 employees in first year
                 </td>
               </tr>
               <tr>
                 <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://figma.com"} className={"underline text-blue-600"}>Figma</a></td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>Software Engineer</td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
-                  Infrastructure and editor performance.
+                  Infrastructure and editor performance
                 </td>
               </tr>
               <tr>
                 <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://asm.co"} className={"underline text-blue-600"}>Assembly</a></td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>CTO, Co-Founder</td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
-                  Backed by YC in 2015. QC platform for manufacturing.
+                  YC S2015. QC platform for manufacturing.
                 </td>
               </tr>
               </tbody>
