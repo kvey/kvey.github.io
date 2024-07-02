@@ -37,29 +37,36 @@ const Home = () => {
               </thead>
               <tbody>
               <tr>
-                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://thousandbirds.ai"} className={"underline text-blue-600"}>Thousand Birds</a></td>
+                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://thousandbirds.ai"}
+                                                                             className={"underline text-blue-600"}>Thousand
+                  Birds</a></td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>Founder</td>
+                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
+                  Infrastructure for AI agents. Backed by HF0.
+                </td>
               </tr>
               <tr>
-                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://curative.com"} className={"underline text-blue-600"}>Curative</a></td>
+                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://curative.com"}
+                                                                             className={"underline text-blue-600"}>Curative</a>
+                </td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>VP of Engineering</td>
-                {/*<td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>*/}
-                {/*  36m+ COVID-19 tests and 600k+ vaccinations.*/}
-                {/*</td>*/}
+                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
+                  36m+ COVID-19 tests and 600k+ vaccinations. {">"}$1b revenue and 7000 employees in first year.
+                </td>
               </tr>
               <tr>
                 <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://figma.com"} className={"underline text-blue-600"}>Figma</a></td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>Software Engineer</td>
-                {/*<td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>*/}
-                {/*  Made Figma load faster.*/}
-                {/*</td>*/}
+                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
+                  Infrastructure and editor performance.
+                </td>
               </tr>
               <tr>
                 <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://asm.co"} className={"underline text-blue-600"}>Assembly (YCS15)</a></td>
                 <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>CTO, Co-Founder</td>
-                {/*<td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>*/}
-                {/*  Backed by YC in 2015. QC platform for manufacturing.*/}
-                {/*</td>*/}
+                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
+                  Backed by YC in 2015. QC platform for manufacturing.
+                </td>
               </tr>
               </tbody>
             </table>
