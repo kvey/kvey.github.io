@@ -22,7 +22,7 @@ const Home = () => {
                 <h1 className="text-4xl font-bold text-blue-800 mb-4">AI Agents: Unraveling the Hype and Reclaiming the
                   Concept</h1>
                 <p className="text-lg text-gray-600">In the rapidly evolving landscape of artificial intelligence, few
-                  terms have become as ubiquitous – and as misunderstood – as "AI agents." This article aims to unpack
+                  terms have become as ubiquitous – and as misunderstood – as &quot;AI agents.&quot; This article aims to unpack
                   the complexity behind this concept, explore how it has been oversimplified for marketing purposes, and
                   chart a path towards reclaiming its true meaning and potential.</p>
               </header>
@@ -38,7 +38,7 @@ const Home = () => {
                     misinterpretation. Like humans, true agents are designed to address ambiguity, take initiative, and
                     attempt tasks with the potential for failure. This characteristic sets them apart from other AI
                     systems that operate within more constrained parameters.</p>
-                  <p className="mb-4">The ability to fail might seem counterintuitive as a defining feature, but it's
+                  <p className="mb-4">The ability to fail might seem counterintuitive as a defining feature, but it&apos;s
                     crucial for understanding the nature of true agency. An agent must be able to:</p>
                   <ol className="list-decimal pl-6 space-y-2 mb-4">
                     <li>Interpret ambiguous instructions or situations</li>
@@ -51,7 +51,7 @@ const Home = () => {
 
                   <h3 className="text-2xl font-semibold text-blue-600 mb-4">Distinguishing Agents from Other AI
                     Systems</h3>
-                  <p className="mb-4">To better understand what constitutes an AI agent, it's helpful to contrast them
+                  <p className="mb-4">To better understand what constitutes an AI agent, it&apos;s helpful to contrast them
                     with other types of AI systems:</p>
 
                   <h4 className="text-xl font-semibold text-blue-500 mb-2">Creative Tools</h4>
@@ -63,7 +63,7 @@ const Home = () => {
                   <h4 className="text-xl font-semibold text-blue-500 mb-2">Classifiers</h4>
                   <p className="mb-4">Systems that make optimistic categorization choices are classifiers. These include
                     image recognition software, spam filters, and sentiment analysis tools. Classifiers excel at
-                    categorizing inputs based on predefined criteria but don't exhibit the initiative or adaptability of
+                    categorizing inputs based on predefined criteria but don&apos;t exhibit the initiative or adaptability of
                     agents.</p>
 
                   <h4 className="text-xl font-semibold text-blue-500 mb-2">Software with LLM Integration</h4>
@@ -77,19 +77,19 @@ const Home = () => {
                   <h2 className="text-3xl font-semibold text-blue-700 mb-6">The Dumbing Down of AI Agents: From Complex
                     Concept to Buzzword</h2>
                   <p className="mb-4">In recent years, the concept of AI agents has undergone a significant
-                    transformation in how it's presented to investors, enterprises, and the public. What was once a
+                    transformation in how it&apos;s presented to investors, enterprises, and the public. What was once a
                     complex and nuanced idea in artificial intelligence research has been increasingly simplified and
-                    repackaged as a catchy buzzword. This shift has lowered the bar for what qualifies as an "agent,"
+                    repackaged as a catchy buzzword. This shift has lowered the bar for what qualifies as an &quot;agent,&quot;
                     making it an easily achievable pitch for marketing purposes.</p>
 
                   <h3 className="text-2xl font-semibold text-blue-600 mb-4">The Simplification Process</h3>
                   <ol className="list-decimal pl-6 space-y-2 mb-4">
-                    <li><strong className="font-semibold">Broadening the Definition</strong>: The term "agent" has been
+                    <li><strong className="font-semibold">Broadening the Definition</strong>: The term &quot;agent&quot; has been
                       stretched to encompass a wide range of AI-powered tools and systems, many of which lack the core
                       characteristics of true agency.
                     </li>
                     <li><strong className="font-semibold">Emphasizing Autonomy</strong>: Marketers often focus on any
-                      level of autonomous operation, even if it's highly constrained, to label a system as an "agent."
+                      level of autonomous operation, even if it&apos;s highly constrained, to label a system as an &quot;agent.&quot;
                     </li>
                     <li><strong className="font-semibold">Overemphasizing Natural Language Interfaces</strong>: Systems
                       with conversational abilities are frequently branded as agents, regardless of their underlying
@@ -105,38 +105,19 @@ const Home = () => {
                   <p className="mb-4">This simplified concept of AI agents has become particularly appealing to
                     investors and enterprises for several reasons:</p>
                   <ol className="list-decimal pl-6 space-y-2 mb-4">
-                    <li><strong className="font-semibold">Easily Demonstrable</strong>: Simplified "agents" can quickly
+                    <li><strong className="font-semibold">Easily Demonstrable</strong>: Simplified &quot;agents&quot; can quickly
                       showcase apparent intelligence through scripted interactions or narrow task completion.
                     </li>
                     <li><strong className="font-semibold">Lower Development Costs</strong>: By relaxing the requirements
-                      for true agency, companies can produce marketable "agent" products more quickly and cheaply.
+                      for true agency, companies can produce marketable &quot;agent&quot; products more quickly and cheaply.
                     </li>
                     <li><strong className="font-semibold">Alignment with Existing Workflows</strong>: These dumbed-down
                       agents often fit more easily into existing business processes, making them an easier sell to
                       enterprises.
                     </li>
-                    <li><strong className="font-semibold">Futuristic Appeal</strong>: The term "agent" carries
+                    <li><strong className="font-semibold">Futuristic Appeal</strong>: The term &quot;agent&quot; carries
                       connotations of cutting-edge AI, even when applied to relatively simple systems, making it
                       attractive for companies wanting to appear innovative.
-                    </li>
-                  </ol>
-
-                  <h3 className="text-2xl font-semibold text-blue-600 mb-4">The Consequences of Oversimplification</h3>
-                  <p className="mb-4">While this marketable version of AI agents has driven investment and adoption, it
-                    has also led to several issues:</p>
-                  <ol className="list-decimal pl-6 space-y-2 mb-4">
-                    <li><strong className="font-semibold">Misaligned Expectations</strong>: Customers and end-users may
-                      expect capabilities far beyond what these simplified "agents" can actually deliver.
-                    </li>
-                    <li><strong className="font-semibold">Dilution of Research Focus</strong>: The focus on marketable
-                      but limited agents may divert resources from the development of more sophisticated AI systems.
-                    </li>
-                    <li><strong className="font-semibold">Ethical Concerns</strong>: Presenting limited AI systems as
-                      more capable "agents" raises questions about transparency and responsible AI development.
-                    </li>
-                    <li><strong className="font-semibold">Potential for Disillusionment</strong>: As the limitations of
-                      these marketed "agents" become apparent, there's a risk of creating a backlash against AI
-                      technology in general.
                     </li>
                   </ol>
                 </section>
@@ -168,7 +149,7 @@ const Home = () => {
 
                   <h3 className="text-2xl font-semibold text-blue-600 mb-4">External World Models and Simulation</h3>
                   <p className="mb-4">Developing more sophisticated external world models and simulation capabilities
-                    could enhance an agent's ability to reason about complex scenarios and generalize across domains.
+                    could enhance an agent&apos;s ability to reason about complex scenarios and generalize across domains.
                     This might involve:</p>
                   <ul className="list-disc pl-6 space-y-2 mb-4">
                     <li>Creating detailed virtual environments for training and testing</li>
@@ -178,11 +159,11 @@ const Home = () => {
 
                   <h3 className="text-2xl font-semibold text-blue-600 mb-4">Surfacing Connections to Human
                     Observers</h3>
-                  <p className="mb-4">Facilitating insights by making an agent's reasoning process more transparent to
+                  <p className="mb-4">Facilitating insights by making an agent&apos;s reasoning process more transparent to
                     human observers could lead to breakthroughs in AI capabilities. This might include:</p>
                   <ul className="list-disc pl-6 space-y-2 mb-4">
                     <li>Developing better explainable AI techniques</li>
-                    <li>Creating intuitive visualizations of an agent's decision-making process</li>
+                    <li>Creating intuitive visualizations of an agent&apos;s decision-making process</li>
                     <li>Designing collaborative interfaces that allow humans and AI to work together more effectively
                     </li>
                   </ul>
@@ -190,7 +171,7 @@ const Home = () => {
 
                 <section className="mb-12">
                   <h2 className="text-3xl font-semibold text-blue-700 mb-6">Reclaiming the Concept of AI Agents</h2>
-                  <p className="mb-4">To address the issues arising from the oversimplification of AI agents, it's
+                  <p className="mb-4">To address the issues arising from the oversimplification of AI agents, it&apos;s
                     crucial for the AI community, including researchers, developers, and ethical AI advocates, to:</p>
                   <ol className="list-decimal pl-6 space-y-2 mb-4">
                     <li>Promote a more nuanced understanding of what constitutes a true AI agent.</li>
@@ -202,7 +183,7 @@ const Home = () => {
                 </section>
 
                 <section>
-                  <p className="mb-4">As we navigate the complex landscape of AI development, it's crucial to maintain a
+                  <p className="mb-4">As we navigate the complex landscape of AI development, it&apos;s crucial to maintain a
                     clear understanding of what constitutes an AI agent. By focusing on the capacity for failure,
                     initiative, and decision-making in ambiguous situations, we can distinguish true agents from other
                     AI systems and marketing hype.</p>
@@ -213,7 +194,7 @@ const Home = () => {
                   <p className="mb-4">The journey from current AI agents to AGI remains long and challenging. However,
                     by continuing to push the boundaries of agent capabilities, developing more sophisticated world
                     models, and improving human-AI collaboration, we may eventually unlock the full potential of
-                    artificial intelligence. As we do so, it's essential to maintain a grounded perspective on current
+                    artificial intelligence. As we do so, it&apos;s essential to maintain a grounded perspective on current
                     capabilities while fostering responsible and transparent development practices.</p>
                 </section>
               </main>
