@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import type { AppProps } from 'next/app'
 import Nav from '@/components/nav';
 import {berkeleyMono} from "@/components/font";
+import { Analytics } from "@vercel/analytics/react"
 
 export const metadata: Metadata = {
   title: 'Colton Pierson',
