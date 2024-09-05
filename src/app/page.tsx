@@ -13,7 +13,7 @@ function formatDate(date: Date) {
 const Home = () => {
   return (
     <div>
-      <div className='flex flex-col mx-4'>
+      <div className='flex flex-col pb-24'>
         <div
              className='mx-4 mb-0 md:px-4 px-8 md:pt-8 pt-8 pb-2 mt-8 max-w-4xl flex flex-col md:gap-x-26 gap-8 w-full'>
           <div className={"pb-40"}>
@@ -37,62 +37,62 @@ const Home = () => {
               </thead>
               <tbody className="lg:table-row-group block">
               {/* Thousand Birds */}
-              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+              <tr className="lg:table-row flex flex-col mb-4 border ">
+                <td className="lg:table-cell whitespace-nowrap overflow-ellipsis   block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Workplace:</span>
                   <a href="https://thousandbirds.ai" target="_blank" className="underline text-blue-600">Thousand
                     Birds</a>
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Role:</span>
                   Founder
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">About:</span>
                   Infrastructure for AI agents. Backed by HF0.
                 </td>
               </tr>
               {/* Curative */}
-              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+              <tr className="lg:table-row flex flex-col mb-4 border ">
+                <td className="lg:table-cell lg:whitespace-nowrap overflow-ellipsis block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Workplace:</span>
                   <a href="https://curative.com" target="_blank" className="underline text-blue-600">Curative</a>
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border lg:whitespace-nowrap overflow-ellipsis  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Role:</span>
                   VP of Engineering
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border lg:whitespace-nowrap overflow-ellipsis  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">About:</span>
                   36m+ COVID tests, {">"}$1B revenue, and 7000 employees in first year
                 </td>
               </tr>
               {/* Figma */}
-              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+              <tr className="lg:table-row flex flex-col mb-4 border ">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Workplace:</span>
                   <a href="https://figma.com" target="_blank" className="underline text-blue-600">Figma</a>
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Role:</span>
                   Software Engineer
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">About:</span>
                   Valued @ $12.5B, worked on editor + viewer performance.
                 </td>
               </tr>
               {/* Assembly */}
-              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+              <tr className="lg:table-row flex flex-col mb-4 border ">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Workplace:</span>
                   <a href="https://asm.co" target="_blank" className="underline text-blue-600">Assembly</a>
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Role:</span>
                   CTO, Co-Founder
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">About:</span>
                   YC S2015. QC platform for manufacturing.
                 </td>
@@ -111,31 +111,31 @@ const Home = () => {
               </thead>
               <tbody className="lg:table-row-group block">
               {/* First row */}
-              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+              <tr className="lg:table-row flex flex-col mb-4 border ">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Date:</span>
                   <a href="/blog/2024-08-27" className="underline text-blue-600">2024-08-27</a>
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Title:</span>
                   What is an AI Agent
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Description:</span>
                   Attempting to clarify the overloaded buzzword.
                 </td>
               </tr>
               {/* Second row */}
-              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+              <tr className="lg:table-row flex flex-col mb-4 border ">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Date:</span>
                   <a href="/blog/2024-07-09" className="underline text-blue-600">2024-07-09</a>
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Title:</span>
                   Opinions
                 </td>
-                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                <td className="lg:table-cell block border  px-2 py-1">
                   <span className="font-bold lg:hidden mr-2">Description:</span>
                   Strong opinions weakly held.
                 </td>
