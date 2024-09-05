@@ -27,54 +27,73 @@ const Home = () => {
             <LineBreakDouble/>
             <h2 className={"text-2xl mt-12"}>Background</h2>
             <LineBreak/>
-            <table className={"my-2"}>
-              <thead className={"text-left"}>
-              <tr className={""}>
-                <th className={"border py-2 px-2"}>Workplace</th>
-                <th className={"border py-2 px-2"}>Role</th>
-                <th className={"border py-2 px-2"}>About</th>
+            <table className="w-full my-2 lg:table block">
+              <thead className="lg:table-header-group hidden">
+              <tr>
+                <th className="border py-2 px-2 text-left">Workplace</th>
+                <th className="border py-2 px-2 text-left">Role</th>
+                <th className="border py-2 px-2 text-left">About</th>
               </tr>
               </thead>
-              <tbody>
-              <tr>
-                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://thousandbirds.ai"} target={"_blank"}
-                                                                             className={"underline text-blue-600"}>Thousand
-                  Birds</a></td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>Founder</td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
+              <tbody className="lg:table-row-group block">
+              {/* Thousand Birds */}
+              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Workplace:</span>
+                  <a href="https://thousandbirds.ai" target="_blank" className="underline text-blue-600">Thousand
+                    Birds</a>
+                </td>
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Role:</span>
+                  Founder
+                </td>
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">About:</span>
                   Infrastructure for AI agents. Backed by HF0.
                 </td>
               </tr>
-              <tr>
-                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://curative.com"} target={"_blank"}
-                                                                             className={"underline text-blue-600"}>Curative</a>
+              {/* Curative */}
+              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Workplace:</span>
+                  <a href="https://curative.com" target="_blank" className="underline text-blue-600">Curative</a>
                 </td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>VP of
-                  Engineering
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Role:</span>
+                  VP of Engineering
                 </td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden"}>
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">About:</span>
                   36m+ COVID tests, {">"}$1B revenue, and 7000 employees in first year
                 </td>
               </tr>
-              <tr>
-                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://figma.com"} target={"_blank"}
-                                                                             className={"underline text-blue-600"}>Figma</a>
+              {/* Figma */}
+              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Workplace:</span>
+                  <a href="https://figma.com" target="_blank" className="underline text-blue-600">Figma</a>
                 </td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>Software
-                  Engineer
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Role:</span>
+                  Software Engineer
                 </td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden"}>
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">About:</span>
                   Valued @ $12.5B, worked on editor + viewer performance.
                 </td>
               </tr>
-              <tr>
-                <td className={"border px-2 whitespace-nowrap pr-4 w-60"}><a href={"https://asm.co"} target={"_blank"}
-                                                                             className={"underline text-blue-600"}>Assembly</a>
+              {/* Assembly */}
+              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Workplace:</span>
+                  <a href="https://asm.co" target="_blank" className="underline text-blue-600">Assembly</a>
                 </td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>CTO,
-                  Co-Founder
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Role:</span>
+                  CTO, Co-Founder
                 </td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden"}>
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">About:</span>
                   YC S2015. QC platform for manufacturing.
                 </td>
               </tr>
@@ -82,32 +101,42 @@ const Home = () => {
             </table>
             <h2 className={"text-2xl mt-12"}>Articles</h2>
             <LineBreak/>
-            <table className={"my-2"}>
-              <thead className={"text-left"}>
-              <tr className={""}>
-                <th className={"border py-2 px-2"}>Date</th>
-                <th className={"border py-2 px-2"}>Title</th>
-                <th className={"border py-2 px-2"}>Description</th>
+            <table className="w-full my-2 lg:table block">
+              <thead className="lg:table-header-group hidden">
+              <tr>
+                <th className="border py-2 px-2 text-left">Date</th>
+                <th className="border py-2 px-2 text-left">Title</th>
+                <th className="border py-2 px-2 text-left">Description</th>
               </tr>
               </thead>
-              <tbody>
-              <tr>
-                <td className={"border px-2 whitespace-nowrap pr-4 w-30"}>
-                  <a href={"/blog/2024-08-27"} className={"underline text-blue-600"}>2024-08-27</a></td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
+              <tbody className="lg:table-row-group block">
+              {/* First row */}
+              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Date:</span>
+                  <a href="/blog/2024-08-27" className="underline text-blue-600">2024-08-27</a>
+                </td>
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Title:</span>
                   What is an AI Agent
                 </td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Description:</span>
                   Attempting to clarify the overloaded buzzword.
                 </td>
               </tr>
-              <tr>
-                <td className={"border px-2 whitespace-nowrap pr-4 w-30"}>
-                  <a href={"/blog/2024-07-09"} className={"underline text-blue-600"}>2024-07-09</a></td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
+              {/* Second row */}
+              <tr className="lg:table-row flex flex-col mb-4 border lg:border-none">
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Date:</span>
+                  <a href="/blog/2024-07-09" className="underline text-blue-600">2024-07-09</a>
+                </td>
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Title:</span>
                   Opinions
                 </td>
-                <td className={"border px-2 whitespace-nowrap overflow-ellipsis overflow-hidden max-w-lg"}>
+                <td className="lg:table-cell block border lg:border-none px-2 py-1">
+                  <span className="font-bold lg:hidden mr-2">Description:</span>
                   Strong opinions weakly held.
                 </td>
               </tr>
@@ -121,7 +150,8 @@ const Home = () => {
               {"I am the founder of Thousand Birds Inc, where I'm building the future of developer experiences for agentic AI software systems."}
               <br/>
               <br/>
-              {'My favorite quote is '} <i>{'"Sometimes magic is just someone spending more time on something than anyone else might reasonably expect"'}</i> {" - Teller"}
+              {'My favorite quote is '}
+              <i>{'"Sometimes magic is just someone spending more time on something than anyone else might reasonably expect"'}</i> {" - Teller"}
             </p>
           </div>
         </div>
