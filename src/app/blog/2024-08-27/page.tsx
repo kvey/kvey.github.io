@@ -191,12 +191,6 @@ const Home = () => {
                     it has also led to misaligned expectations and potential ethical concerns. By reclaiming a more
                     accurate and nuanced understanding of AI agents, we can better chart the path forward in AI
                     development.</p>
-                  <p className="mb-4">The journey from current AI agents to AGI remains long and challenging. However,
-                    by continuing to push the boundaries of agent capabilities, developing more sophisticated world
-                    models, and improving human-AI collaboration, we may eventually unlock the full potential of
-                    artificial intelligence. As we do so, it&apos;s essential to maintain a grounded perspective on current
-                    capabilities while fostering responsible and transparent development practices.</p>
-                </section>
               </main>
             </div>
           </div>

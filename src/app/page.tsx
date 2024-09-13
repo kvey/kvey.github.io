@@ -111,20 +111,20 @@ const Home = () => {
               </thead>
               <tbody className="lg:table-row-group block">
               {/* First row */}
-              <tr className="lg:table-row flex flex-col mb-4 border ">
-                <td className="lg:table-cell block border  px-2 py-1">
-                  <span className="font-bold lg:hidden mr-2">Date:</span>
-                  <a href="/blog/2024-08-27" className="underline text-blue-600">2024-08-27</a>
-                </td>
-                <td className="lg:table-cell block border  px-2 py-1">
-                  <span className="font-bold lg:hidden mr-2">Title:</span>
-                  What is an AI Agent
-                </td>
-                <td className="lg:table-cell block border  px-2 py-1">
-                  <span className="font-bold lg:hidden mr-2">Description:</span>
-                  Attempting to clarify the overloaded buzzword.
-                </td>
-              </tr>
+              {/*<tr className="lg:table-row flex flex-col mb-4 border ">*/}
+              {/*  <td className="lg:table-cell block border  px-2 py-1">*/}
+              {/*    <span className="font-bold lg:hidden mr-2">Date:</span>*/}
+              {/*    <a href="/blog/2024-08-27" className="underline text-blue-600">2024-08-27</a>*/}
+              {/*  </td>*/}
+              {/*  <td className="lg:table-cell block border  px-2 py-1">*/}
+              {/*    <span className="font-bold lg:hidden mr-2">Title:</span>*/}
+              {/*    What is an AI Agent*/}
+              {/*  </td>*/}
+              {/*  <td className="lg:table-cell block border  px-2 py-1">*/}
+              {/*    <span className="font-bold lg:hidden mr-2">Description:</span>*/}
+              {/*    Attempting to clarify the overloaded buzzword.*/}
+              {/*  </td>*/}
+              {/*</tr>*/}
               {/* Second row */}
               <tr className="lg:table-row flex flex-col mb-4 border ">
                 <td className="lg:table-cell block border  px-2 py-1">
