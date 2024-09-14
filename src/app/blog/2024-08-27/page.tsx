@@ -191,6 +191,7 @@ const Home = () => {
                     it has also led to misaligned expectations and potential ethical concerns. By reclaiming a more
                     accurate and nuanced understanding of AI agents, we can better chart the path forward in AI
                     development.</p>
+                </section>
               </main>
             </div>
           </div>
