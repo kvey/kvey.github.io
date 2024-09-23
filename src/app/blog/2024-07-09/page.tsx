@@ -43,7 +43,7 @@ const Home = () => {
                 I believe in bias to action. Our best option is to keep learning, explore the environment, and reduce
                 unknowns. Action will short circuit debate and I believe that’s the correct tradeoff. I would rather we
                 do something 50% wrong but learn something than wait and do something perfectly after a significant
-                delay. I believe incremental change and course correction is more effective that initial precision.
+                delay. I believe incremental change and course correction is more effective than initial precision.
               </li>
             </ul>
             <h2 className={"text-2xl mt-12 mb-4"}>AI</h2>
