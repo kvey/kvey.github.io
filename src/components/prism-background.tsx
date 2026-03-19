@@ -336,7 +336,6 @@ export default function PrismBackground() {
       const fy = e.clientY / window.innerHeight;
 
       if (target === 'light') {
-        if (!e.shiftKey) return;
         lightAutoRef.current = false;
         dragRef.current = {
           target: 'light', mode: 'translate',
@@ -354,20 +353,20 @@ export default function PrismBackground() {
 
       if (e.shiftKey) {
         dragRef.current = {
-          target, mode: 'translate',
-          startX: e.clientX, startY: e.clientY,
-          startAngle: tAngleRef.current,
-          offsetX: tPos.cx - fx, offsetY: tPos.cy - fy,
-        };
-        document.body.style.cursor = 'grabbing';
-      } else {
-        dragRef.current = {
           target, mode: 'rotate',
           startX: e.clientX, startY: e.clientY,
           startAngle: tAngleRef.current,
           offsetX: 0, offsetY: 0,
         };
         document.body.style.cursor = 'ew-resize';
+      } else {
+        dragRef.current = {
+          target, mode: 'translate',
+          startX: e.clientX, startY: e.clientY,
+          startAngle: tAngleRef.current,
+          offsetX: tPos.cx - fx, offsetY: tPos.cy - fy,
+        };
+        document.body.style.cursor = 'grabbing';
       }
       e.preventDefault();
     };
@@ -395,9 +394,9 @@ export default function PrismBackground() {
       } else {
         const target = hitTest(e.clientX, e.clientY);
         if (target === 'light') {
-          document.body.style.cursor = e.shiftKey ? 'grab' : '';
+          document.body.style.cursor = 'grab';
         } else if (target) {
-          document.body.style.cursor = e.shiftKey ? 'grab' : 'ew-resize';
+          document.body.style.cursor = e.shiftKey ? 'ew-resize' : 'grab';
         } else {
           document.body.style.cursor = '';
         }
