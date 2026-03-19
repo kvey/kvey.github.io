@@ -271,6 +271,8 @@ export default function PrismBackground() {
     const charW = ctx.measureText('M').width;
     const charH = CELL_SIZE * 1.2;
 
+
+
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -336,6 +338,7 @@ export default function PrismBackground() {
       const fy = e.clientY / window.innerHeight;
 
       if (target === 'light') {
+        if (e.shiftKey) return; // light has no rotation
         lightAutoRef.current = false;
         dragRef.current = {
           target: 'light', mode: 'translate',
