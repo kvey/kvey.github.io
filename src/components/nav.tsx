@@ -18,8 +18,8 @@ export default function Nav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <header className="bg-white fixed top-0 left-0 w-full">
-      <nav className="mx-auto flex max-w-7xl items-start p-6 lg:px-2" aria-label="Global">
+    <header className="w-full">
+      <nav className="mx-auto flex max-w-7xl items-start py-2 lg:px-2" aria-label="Global">
         <div className="flex lg:hidden">
           <button
             type="button"
@@ -30,7 +30,7 @@ export default function Nav() {
             <Bars3Icon className="h-6 w-6" aria-hidden="true" />
           </button>
         </div>
-        <div className="hidden lg:flex lg:gap-x-12">
+        <div className="hidden lg:flex lg:gap-x-4">
           {navigation.map((item) => (
             <a key={item.name} href={item.href} className="text-sm font-semibold leading-6 text-black">
               {item.name}

@@ -1,6 +1,7 @@
 import Head from 'next/head'
 import { LineBreak, LineBreakDouble } from '@/components/linebreak';
 import { Logo } from '@/components/logo';
+import Nav from '@/components/nav';
 
 function formatDate(date: Date) {
   const year = date.getFullYear();
@@ -25,9 +26,10 @@ const Home = () => {
                 Building infrastructure for AI Agents.
               </p>
               <LineBreakDouble/>
+              <Nav />
               <h2 className={"text-2xl mt-12"}>Background</h2>
               <LineBreak/>
-              <table className="w-full my-2 lg:table block">
+              <table className="w-full my-2 lg:table block bg-white">
                 <thead className="lg:table-header-group hidden">
                 <tr>
                   <th className="border py-2 px-2 text-left">Workplace</th>
@@ -101,7 +103,7 @@ const Home = () => {
               </table>
               <h2 className={"text-2xl mt-12"}>Articles</h2>
               <LineBreak/>
-              <table className="w-full my-2 lg:table block">
+              <table className="w-full my-2 lg:table block bg-white">
                 <thead className="lg:table-header-group hidden">
                 <tr>
                   <th className="border py-2 px-2 text-left">Date</th>

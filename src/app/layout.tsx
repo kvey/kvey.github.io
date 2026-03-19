@@ -1,10 +1,16 @@
 import './globals.css'
 import type { Metadata } from 'next'
-import type { AppProps } from 'next/app'
-import Nav from '@/components/nav';
 import {berkeleyMono} from "@/components/font";
 import { Analytics } from "@vercel/analytics/react"
-
+import { BackgroundProvider } from '@/components/background-provider';
+import FlockingBackground from '@/components/flocking-background';
+import SimplexNoiseBackground from '@/components/simplex-noise-background';
+import BackgroundSelector from '@/components/background-selector';
+import PageContent from '@/components/page-content';
+import FluidBackground from '@/components/fluid-background';
+import SolidsBackground from '@/components/solids-background';
+import PrismBackground from '@/components/prism-background';
+import BackgroundWrapper from '@/components/background-wrapper';
 export const metadata: Metadata = {
   title: 'Colton Pierson',
   description: 'Colton Pierson - founder @ ThousandBirds',
@@ -19,7 +25,17 @@ export default function RootLayout({
     <html lang="en">
       <body className={berkeleyMono.className}>
       <Analytics/>
-      {children}
+      <BackgroundProvider>
+        <BackgroundWrapper>
+          <FlockingBackground />
+          <SimplexNoiseBackground />
+          <FluidBackground />
+          <SolidsBackground />
+          <PrismBackground />
+        </BackgroundWrapper>
+        <BackgroundSelector />
+        <PageContent>{children}</PageContent>
+      </BackgroundProvider>
       </body>
     </html>
   )
