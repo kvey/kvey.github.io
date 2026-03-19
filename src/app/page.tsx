@@ -81,7 +81,7 @@ const Home = () => {
                   </td>
                   <td className="lg:table-cell block border  px-2 py-1">
                     <span className="font-bold lg:hidden mr-2">About:</span>
-                    Valued @ $12.5B, worked on editor + viewer performance.
+                    <a href="https://finance.yahoo.com/quote/FIG/" target="_blank">FIG</a>, worked on collaboration and editor/viewer performance.
                   </td>
                 </tr>
                 {/* Assembly */}
@@ -96,7 +96,7 @@ const Home = () => {
                   </td>
                   <td className="lg:table-cell block border  px-2 py-1">
                     <span className="font-bold lg:hidden mr-2">About:</span>
-                    YC S2015. QC platform for manufacturing.
+                    YC S2015. Quality control platform for manufacturing.
                   </td>
                 </tr>
                 </tbody>

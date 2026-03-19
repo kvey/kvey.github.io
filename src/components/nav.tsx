@@ -11,7 +11,6 @@ import {berkeleyMono} from "@/components/font";
 const navigation = [
   { name: '(Home)', href: '/' },
   { name: '(Blog)', href: '/blog' },
-  { name: '(Thousand Birds)', href: 'https://thousandbirds.ai' },
 ]
 
 export default function Nav() {

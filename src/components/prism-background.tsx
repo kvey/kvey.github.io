@@ -245,8 +245,11 @@ export default function PrismBackground() {
   const mirrorPosRef = useRef({ cx: 0.75, cy: 0.5 });
   const mirrorAngleRef = useRef(0.4);
 
+  const lightPosRef = useRef({ cx: 0.08, cy: 0.5 });
+  const lightAutoRef = useRef(true);
+
   const dragRef = useRef<{
-    target: 'prism' | 'mirror';
+    target: 'prism' | 'mirror' | 'light';
     mode: 'rotate' | 'translate';
     startX: number; startY: number;
     startAngle: number;
@@ -292,7 +295,10 @@ export default function PrismBackground() {
       [sz * 0.15, sz * 0.7],
     ];
 
-    const hitTest = (mx: number, my: number): 'prism' | 'mirror' | null => {
+    const lightPos = lightPosRef.current;
+    const LIGHT_RADIUS = 3; // radius in character cells
+
+    const hitTest = (mx: number, my: number): 'prism' | 'mirror' | 'light' | null => {
       const cols = Math.ceil(canvas.width / charW);
       const rows = Math.ceil(canvas.height / charH);
       const col = mx / charW;
@@ -300,7 +306,13 @@ export default function PrismBackground() {
       const sz = Math.min(cols, rows) * 0.32;
       const msz = Math.min(cols, rows) * 0.22;
 
-      // Check mirror first (it's usually on top / in front)
+      // Check light source first
+      const lightCol = lightPos.cx * cols;
+      const lightRow = lightPos.cy * rows;
+      const lightDist = Math.sqrt((col - lightCol) ** 2 + (row - lightRow) ** 2);
+      if (lightDist <= LIGHT_RADIUS + 1) return 'light';
+
+      // Check mirror
       const mv = mirrorBaseVerts(msz).map(([x, y]) => {
         const [rx, ry] = rot2D(x, y, mirrorAngleRef.current);
         return [mirrorPos.cx * cols + rx, mirrorPos.cy * rows + ry] as const;
@@ -320,10 +332,25 @@ export default function PrismBackground() {
       const target = hitTest(e.clientX, e.clientY);
       if (!target) return;
 
-      const tPos = target === 'prism' ? prismPos : mirrorPos;
-      const tAngleRef = target === 'prism' ? prismAngleRef : mirrorAngleRef;
       const fx = e.clientX / window.innerWidth;
       const fy = e.clientY / window.innerHeight;
+
+      if (target === 'light') {
+        if (!e.shiftKey) return;
+        lightAutoRef.current = false;
+        dragRef.current = {
+          target: 'light', mode: 'translate',
+          startX: e.clientX, startY: e.clientY,
+          startAngle: 0,
+          offsetX: lightPos.cx - fx, offsetY: lightPos.cy - fy,
+        };
+        document.body.style.cursor = 'grabbing';
+        e.preventDefault();
+        return;
+      }
+
+      const tPos = target === 'prism' ? prismPos : mirrorPos;
+      const tAngleRef = target === 'prism' ? prismAngleRef : mirrorAngleRef;
 
       if (e.shiftKey) {
         dragRef.current = {
@@ -347,20 +374,29 @@ export default function PrismBackground() {
 
     const onMouseMove = (e: MouseEvent) => {
       if (dragRef.current) {
-        const tPos = dragRef.current.target === 'prism' ? prismPos : mirrorPos;
-        const tAngleRef = dragRef.current.target === 'prism' ? prismAngleRef : mirrorAngleRef;
-        if (dragRef.current.mode === 'translate') {
+        if (dragRef.current.target === 'light') {
           const fx = e.clientX / window.innerWidth;
           const fy = e.clientY / window.innerHeight;
-          tPos.cx = fx + dragRef.current.offsetX;
-          tPos.cy = fy + dragRef.current.offsetY;
+          lightPos.cx = fx + dragRef.current.offsetX;
+          lightPos.cy = fy + dragRef.current.offsetY;
         } else {
-          const dx = e.clientX - dragRef.current.startX;
-          tAngleRef.current = dragRef.current.startAngle + dx * 0.005;
+          const tPos = dragRef.current.target === 'prism' ? prismPos : mirrorPos;
+          const tAngleRef = dragRef.current.target === 'prism' ? prismAngleRef : mirrorAngleRef;
+          if (dragRef.current.mode === 'translate') {
+            const fx = e.clientX / window.innerWidth;
+            const fy = e.clientY / window.innerHeight;
+            tPos.cx = fx + dragRef.current.offsetX;
+            tPos.cy = fy + dragRef.current.offsetY;
+          } else {
+            const dx = e.clientX - dragRef.current.startX;
+            tAngleRef.current = dragRef.current.startAngle + dx * 0.005;
+          }
         }
       } else {
         const target = hitTest(e.clientX, e.clientY);
-        if (target) {
+        if (target === 'light') {
+          document.body.style.cursor = e.shiftKey ? 'grab' : '';
+        } else if (target) {
           document.body.style.cursor = e.shiftKey ? 'grab' : 'ew-resize';
         } else {
           document.body.style.cursor = '';
@@ -402,9 +438,14 @@ export default function PrismBackground() {
       const mirrorSize = Math.min(cols, rows) * 0.22;
       const mirrorTri = makeTriangle(mirrorCenterCol, mirrorCenterRow, mirrorAngleRef.current, mirrorBaseVerts(mirrorSize));
 
+      // Update light source position (auto-oscillate or manual)
+      if (lightAutoRef.current) {
+        lightPos.cy = 0.5 + Math.sin(elapsed * 0.4) * 0.5;
+      }
+
       // Input beam
-      const beamOriginX = 0;
-      const beamOriginY = rows * 0.5 + Math.sin(elapsed * 0.4) * rows * 0.5;
+      const beamOriginX = lightPos.cx * cols;
+      const beamOriginY = lightPos.cy * rows;
       const [beamDirX, beamDirY] = normalize2D(prismCenterCol - beamOriginX, prismCenterRow - beamOriginY);
 
       // Check if the source beam hits the mirror first
@@ -611,6 +652,20 @@ export default function PrismBackground() {
                 Math.min(255, Math.floor(bestC[2] * bestI)),
               ];
             }
+          }
+        }
+      }
+
+      // ── Light source circle ──
+      const lightCol = lightPos.cx * cols;
+      const lightRow = lightPos.cy * rows;
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const dist = Math.sqrt((col - lightCol) ** 2 + (row - lightRow) ** 2);
+          if (dist <= LIGHT_RADIUS) {
+            const idx = row * cols + col;
+            output[idx] = '@';
+            colorBuf[idx] = [60, 60, 60];
           }
         }
       }
