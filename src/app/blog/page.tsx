@@ -3,11 +3,6 @@ import Nav from '@/components/nav';
 
 const posts = [
   {
-    date: '2024-08-27',
-    title: 'What is an AI Agent',
-    description: 'Attempting to clarify the overloaded buzzword.',
-  },
-  {
     date: '2024-07-09',
     title: 'Opinions',
     description: 'Strong opinions weakly held.',
