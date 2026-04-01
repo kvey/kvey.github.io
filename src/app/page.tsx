@@ -146,7 +146,7 @@ const Home = () => {
               </table>
               <h2 className={"text-2xl mt-12"}></h2>
               <p>
-                {"I've co-founded a YC-backed manufacturing startup (Assembly Inc), made critical contributions at a unicorn (Figma) as it leapt to becoming the de-facto tool for designers, and led engineering at a 7000+ employee COVID-testing organization at the peak of the pandemic (Curative)."}
+                {"I've co-founded a YC-backed manufacturing startup (Assembly Inc), made critical contributions at (Figma) as it leapt to becoming the de-facto tool for designers, and led engineering at a 7000+ employee COVID-testing organization at the peak of the pandemic (Curative)."}
                 <br/>
                 <br/>
                 {"I am the founder of Thousand Birds Inc, where I'm building the future of developer experiences for agentic AI software systems."}

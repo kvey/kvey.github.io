@@ -28,7 +28,14 @@ export function BackgroundProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const saved = localStorage.getItem('background') as BackgroundType | null;
-    if (saved) setBackgroundState(saved);
+    if (saved) {
+      setBackgroundState(saved);
+    } else {
+      const options: BackgroundType[] = ['flocking', 'simplex-noise', 'fluid', 'solids', 'prism'];
+      const random = options[Math.floor(Math.random() * options.length)];
+      setBackgroundState(random);
+      localStorage.setItem('background', random);
+    }
   }, []);
 
   const setBackground = (bg: BackgroundType) => {
