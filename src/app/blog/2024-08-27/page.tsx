@@ -8,31 +8,32 @@ const Home = () => {
       <div>
         <div className='flex flex-col mx-4'>
           <div className='mx-4 mb-0 md:px-4 px-8 md:pt-8 pt-8 pb-2 mt-8 max-w-4xl flex flex-col md:gap-x-26 gap-8 w-full'>
-            <a href={"/"} className={"text-blue-600 underline"}>
+            <a href={"/"} className={"text-blue-600 dark:text-blue-400 underline"}>
               {"<<< Back"}
             </a>
             <div className={"pb-40"}>
-              <h1 className='text-4xl'> What is an AI Agent? </h1>
-              <p className='text pt-4'>
-                Agents have broadly been overloaded by the marketing engine, this is my attempt to define them.
-                Unraveling the Hype and Reclaiming the Concept
-              </p>
-              <LineBreakDouble/>
-              <header className="mb-8">
-                <h1 className="text-4xl font-bold text-blue-800 mb-4">AI Agents: Unraveling the Hype and Reclaiming the
+              <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                <h1 className='text-4xl'> What is an AI Agent? </h1>
+                <p className='text pt-4'>
+                  Agents have broadly been overloaded by the marketing engine, this is my attempt to define them.
+                  Unraveling the Hype and Reclaiming the Concept
+                </p>
+              </div>
+              <header className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                <h1 className="text-4xl font-bold text-blue-800 dark:text-blue-300 mb-4">AI Agents: Unraveling the Hype and Reclaiming the
                   Concept</h1>
-                <p className="text-lg text-gray-600">In the rapidly evolving landscape of artificial intelligence, few
+                <p className="text-lg text-gray-600 dark:text-gray-300">In the rapidly evolving landscape of artificial intelligence, few
                   terms have become as ubiquitous – and as misunderstood – as &quot;AI agents.&quot; This article aims to unpack
                   the complexity behind this concept, explore how it has been oversimplified for marketing purposes, and
                   chart a path towards reclaiming its true meaning and potential.</p>
               </header>
 
               <main>
-                <section className="mb-12">
-                  <h2 className="text-3xl font-semibold text-blue-700 mb-6">The Ambiguity of AI Agents: Separating Hype
+                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                  <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">The Ambiguity of AI Agents: Separating Hype
                     from Reality</h2>
 
-                  <h3 className="text-2xl font-semibold text-blue-600 mb-4">Defining AI Agents: The Capacity for Failure
+                  <h3 className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mb-4">Defining AI Agents: The Capacity for Failure
                     and Initiative</h3>
                   <p className="mb-4">At its core, an AI agent is defined by its capacity for failure and
                     misinterpretation. Like humans, true agents are designed to address ambiguity, take initiative, and
@@ -49,32 +50,32 @@ const Home = () => {
                   <p className="mb-4">These capabilities inherently involve the risk of failure, much like human
                     decision-making and learning processes.</p>
 
-                  <h3 className="text-2xl font-semibold text-blue-600 mb-4">Distinguishing Agents from Other AI
+                  <h3 className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mb-4">Distinguishing Agents from Other AI
                     Systems</h3>
                   <p className="mb-4">To better understand what constitutes an AI agent, it&apos;s helpful to contrast them
                     with other types of AI systems:</p>
 
-                  <h4 className="text-xl font-semibold text-blue-500 mb-2">Creative Tools</h4>
+                  <h4 className="text-xl font-semibold text-blue-500 dark:text-blue-400 mb-2">Creative Tools</h4>
                   <p className="mb-4">Systems that can generate content with low risk are more accurately described as
                     creative tools. These include text generators, image creation tools, and music composition software.
                     While these tools can produce impressive outputs, they lack the decision-making capabilities and
                     potential for failure that define true agents.</p>
 
-                  <h4 className="text-xl font-semibold text-blue-500 mb-2">Classifiers</h4>
+                  <h4 className="text-xl font-semibold text-blue-500 dark:text-blue-400 mb-2">Classifiers</h4>
                   <p className="mb-4">Systems that make optimistic categorization choices are classifiers. These include
                     image recognition software, spam filters, and sentiment analysis tools. Classifiers excel at
                     categorizing inputs based on predefined criteria but don&apos;t exhibit the initiative or adaptability of
                     agents.</p>
 
-                  <h4 className="text-xl font-semibold text-blue-500 mb-2">Software with LLM Integration</h4>
+                  <h4 className="text-xl font-semibold text-blue-500 dark:text-blue-400 mb-2">Software with LLM Integration</h4>
                   <p className="mb-4">Systems operating within highly reliable environments, with a large language model
                     (LLM) added for natural language processing, are essentially just traditional software with enhanced
                     communication capabilities. While they may appear more intelligent due to their natural language
                     interfaces, they lack the core characteristics of agents.</p>
                 </section>
 
-                <section className="mb-12">
-                  <h2 className="text-3xl font-semibold text-blue-700 mb-6">The Dumbing Down of AI Agents: From Complex
+                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                  <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">The Dumbing Down of AI Agents: From Complex
                     Concept to Buzzword</h2>
                   <p className="mb-4">In recent years, the concept of AI agents has undergone a significant
                     transformation in how it&apos;s presented to investors, enterprises, and the public. What was once a
@@ -82,7 +83,7 @@ const Home = () => {
                     repackaged as a catchy buzzword. This shift has lowered the bar for what qualifies as an &quot;agent,&quot;
                     making it an easily achievable pitch for marketing purposes.</p>
 
-                  <h3 className="text-2xl font-semibold text-blue-600 mb-4">The Simplification Process</h3>
+                  <h3 className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mb-4">The Simplification Process</h3>
                   <ol className="list-decimal pl-6 space-y-2 mb-4">
                     <li><strong className="font-semibold">Broadening the Definition</strong>: The term &quot;agent&quot; has been
                       stretched to encompass a wide range of AI-powered tools and systems, many of which lack the core
@@ -101,7 +102,7 @@ const Home = () => {
                     </li>
                   </ol>
 
-                  <h3 className="text-2xl font-semibold text-blue-600 mb-4">The Appeal to Investors and Enterprises</h3>
+                  <h3 className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mb-4">The Appeal to Investors and Enterprises</h3>
                   <p className="mb-4">This simplified concept of AI agents has become particularly appealing to
                     investors and enterprises for several reasons:</p>
                   <ol className="list-decimal pl-6 space-y-2 mb-4">
@@ -122,8 +123,8 @@ const Home = () => {
                   </ol>
                 </section>
 
-                <section className="mb-12">
-                  <h2 className="text-3xl font-semibold text-blue-700 mb-6">The Divide Between Agents and AGI</h2>
+                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                  <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">The Divide Between Agents and AGI</h2>
                   <p className="mb-4">While AI agents represent a significant step forward in artificial intelligence,
                     they are still distinct from artificial general intelligence (AGI). The key differences include:</p>
                   <ol className="list-decimal pl-6 space-y-2 mb-4">
@@ -142,12 +143,12 @@ const Home = () => {
                   </ol>
                 </section>
 
-                <section className="mb-12">
-                  <h2 className="text-3xl font-semibold text-blue-700 mb-6">Bridging the Gap: From Agents to AGI</h2>
+                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                  <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">Bridging the Gap: From Agents to AGI</h2>
                   <p className="mb-4">As research in AI progresses, we can identify some key areas that may help bridge
                     the gap between current AI agents and AGI:</p>
 
-                  <h3 className="text-2xl font-semibold text-blue-600 mb-4">External World Models and Simulation</h3>
+                  <h3 className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mb-4">External World Models and Simulation</h3>
                   <p className="mb-4">Developing more sophisticated external world models and simulation capabilities
                     could enhance an agent&apos;s ability to reason about complex scenarios and generalize across domains.
                     This might involve:</p>
@@ -157,7 +158,7 @@ const Home = () => {
                     <li>Incorporating multi-modal data to build richer world representations</li>
                   </ul>
 
-                  <h3 className="text-2xl font-semibold text-blue-600 mb-4">Surfacing Connections to Human
+                  <h3 className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mb-4">Surfacing Connections to Human
                     Observers</h3>
                   <p className="mb-4">Facilitating insights by making an agent&apos;s reasoning process more transparent to
                     human observers could lead to breakthroughs in AI capabilities. This might include:</p>
@@ -169,8 +170,8 @@ const Home = () => {
                   </ul>
                 </section>
 
-                <section className="mb-12">
-                  <h2 className="text-3xl font-semibold text-blue-700 mb-6">Reclaiming the Concept of AI Agents</h2>
+                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                  <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">Reclaiming the Concept of AI Agents</h2>
                   <p className="mb-4">To address the issues arising from the oversimplification of AI agents, it&apos;s
                     crucial for the AI community, including researchers, developers, and ethical AI advocates, to:</p>
                   <ol className="list-decimal pl-6 space-y-2 mb-4">
@@ -182,7 +183,7 @@ const Home = () => {
                   </ol>
                 </section>
 
-                <section>
+                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
                   <p className="mb-4">As we navigate the complex landscape of AI development, it&apos;s crucial to maintain a
                     clear understanding of what constitutes an AI agent. By focusing on the capacity for failure,
                     initiative, and decision-making in ambiguous situations, we can distinguish true agents from other

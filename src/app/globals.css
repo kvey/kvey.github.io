@@ -9,9 +9,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --foreground-rgb: 0, 0, 0;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+    --foreground-rgb: 212, 212, 212;
+    --background-rgb: 10, 10, 10;
   }
 }
 
@@ -20,9 +19,10 @@ body {
   background: rgb(var(--background-rgb));
 }
 
-
-/*h1, p {*/
-/*  background: -webkit-linear-gradient(rgb(188, 12, 241), rgb(212, 4, 4));*/
-/*  -webkit-background-clip: text;*/
-/*  -webkit-text-fill-color: transparent;*/
-/*}*/
+@media (prefers-color-scheme: dark) {
+  *,
+  ::before,
+  ::after {
+    border-color: rgb(64, 64, 64);
+  }
+}
