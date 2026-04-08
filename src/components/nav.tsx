@@ -9,8 +9,8 @@ import localFont from 'next/font/local';
 import {berkeleyMono} from "@/components/font";
 
 const navigation = [
-  { name: '(Home)', href: '/' },
-  { name: '(Blog)', href: '/blog' },
+  { name: 'Home', href: '/' },
+  { name: 'Blog', href: '/blog' },
 ]
 
 export default function Nav() {
@@ -31,7 +31,7 @@ export default function Nav() {
         </div>
         <div className="hidden lg:flex lg:gap-x-4">
           {navigation.map((item) => (
-            <a key={item.name} href={item.href} className="text-sm font-semibold leading-6 text-black dark:text-gray-100">
+            <a key={item.name} href={item.href} className="text-sm font-semibold leading-6 text-black dark:text-gray-100 underline hover:text-gray-600 dark:hover:text-gray-300">
               {item.name}
             </a>
           ))}
@@ -57,7 +57,7 @@ export default function Nav() {
                   <a
                     key={item.name}
                     href={item.href}
-                    className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-black dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-neutral-900"
+                    className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-black dark:text-gray-100 underline hover:text-gray-600 dark:hover:text-gray-300"
                   >
                     {item.name}
                   </a>
