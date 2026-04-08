@@ -11,6 +11,7 @@ import FluidBackground from '@/components/fluid-background';
 import SolidsBackground from '@/components/solids-background';
 import PrismBackground from '@/components/prism-background';
 import BackgroundWrapper from '@/components/background-wrapper';
+import { ThemeProvider } from '@/components/theme-provider';
 export const metadata: Metadata = {
   title: 'Colton Pierson',
   description: 'Colton Pierson - founder @ ThousandBirds',
@@ -22,9 +23,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body className={berkeleyMono.className}>
       <Analytics/>
+      <ThemeProvider>
       <BackgroundProvider>
         <BackgroundWrapper>
           <FlockingBackground />
@@ -36,6 +38,7 @@ export default function RootLayout({
         <BackgroundSelector />
         <PageContent>{children}</PageContent>
       </BackgroundProvider>
+      </ThemeProvider>
       </body>
     </html>
   )

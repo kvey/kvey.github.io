@@ -14,11 +14,11 @@ function formatDate(date: Date) {
 const Home = () => {
   return (
       <div>
-        <div className='flex flex-col pb-24'>
+        <div className='flex flex-col items-center pb-24'>
           <div
               className='mx-4 mb-0 md:px-4 px-8 md:pt-8 pt-8 pb-2 mt-8 max-w-4xl flex flex-col md:gap-x-26 gap-8 w-full'>
             <div className={"pb-40"}>
-              <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+              <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                 <h1 className='text-4xl'> COLTON PIERSON </h1>
                 <p className='text-xl pt-2'>
                   Founder @ THOUSAND BIRDS INC
@@ -29,145 +29,124 @@ const Home = () => {
                 <LineBreakDouble/>
                 <Nav />
               </div>
-              <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+              <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                 <h2 className={"text-2xl"}>Background</h2>
-                <LineBreak/>
-                <table className="w-full my-2 lg:table block">
+
+                <table className="w-full my-4 lg:table block border-collapse">
                 <thead className="lg:table-header-group hidden">
-                <tr>
-                  <th className="border py-2 px-2 text-left w-[1%] whitespace-nowrap">Workplace</th>
-                  <th className="border py-2 px-2 text-left w-[1%] whitespace-nowrap">Role</th>
-                  <th className="border py-2 px-2 text-left">About</th>
+                <tr className="border-b border-gray-300 dark:border-neutral-600">
+                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Workplace</th>
+                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Role</th>
+                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400">About</th>
                 </tr>
                 </thead>
                 <tbody className="lg:table-row-group block">
                 {/* Thousand Birds */}
-                <tr className="lg:table-row flex flex-col mb-4 border ">
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Workplace:</span>
-                    <a href="https://thousandbirds.ai" target="_blank" className="underline text-blue-600 dark:text-blue-400">Thousand
-                      Birds</a>
+                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0 border-b border-gray-200 dark:border-neutral-700">
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Workplace</span>
+                    <a href="https://thousandbirds.ai" target="_blank" className="underline text-blue-600 dark:text-blue-400">Thousand Birds</a>
                   </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Role:</span>
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Role</span>
                     Founder
                   </td>
-                  <td className="lg:table-cell align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">About:</span>
+                  <td className="lg:table-cell align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">About</span>
                     Infrastructure for AI agents. Backed by HF0.
                   </td>
                 </tr>
                 {/* Curative */}
-                <tr className="lg:table-row flex flex-col mb-4 border ">
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Workplace:</span>
+                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0 border-b border-gray-200 dark:border-neutral-700">
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Workplace</span>
                     <a href="https://curative.com" target="_blank" className="underline text-blue-600 dark:text-blue-400">Curative</a>
                   </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Role:</span>
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Role</span>
                     VP of Engineering
                   </td>
-                  <td className="lg:table-cell align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">About:</span>
+                  <td className="lg:table-cell align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">About</span>
                     36m+ COVID tests, {">"}$1B revenue, and 7000 employees in first year
                   </td>
                 </tr>
                 {/* Figma */}
-                <tr className="lg:table-row flex flex-col mb-4 border ">
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Workplace:</span>
+                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0 border-b border-gray-200 dark:border-neutral-700">
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Workplace</span>
                     <a href="https://www.figma.com/about" target="_blank" className="underline text-blue-600 dark:text-blue-400">Figma</a>
                   </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Role:</span>
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Role</span>
                     Software Engineer
                   </td>
-                  <td className="lg:table-cell align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">About:</span>
-                    <a href="https://finance.yahoo.com/quote/FIG/" target="_blank">FIG</a>, worked on collaboration and editor/viewer performance.
+                  <td className="lg:table-cell align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">About</span>
+                    <a href="https://finance.yahoo.com/quote/FIG/" target="_blank" className="underline text-blue-600 dark:text-blue-400">FIG</a>, worked on collaboration and editor/viewer performance.
                   </td>
                 </tr>
                 {/* Assembly */}
-                <tr className="lg:table-row flex flex-col mb-4 border ">
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Workplace:</span>
+                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0">
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Workplace</span>
                     <a href="https://asm.co" target="_blank" className="underline text-blue-600 dark:text-blue-400">Assembly</a>
                   </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Role:</span>
-                    CTO, Co-Founder
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Role</span>
+                    Co-Founder, CTO
                   </td>
-                  <td className="lg:table-cell align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">About:</span>
+                  <td className="lg:table-cell align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">About</span>
                     YC S2015. Quality control platform for manufacturing.
                   </td>
                 </tr>
                 </tbody>
               </table>
               </div>
-              <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+              <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                 <h2 className={"text-2xl"}>Articles</h2>
-                <LineBreak/>
-                <table className="w-full my-2 lg:table block">
+
+                <table className="w-full my-4 lg:table block border-collapse">
                 <thead className="lg:table-header-group hidden">
-                <tr>
-                  <th className="border py-2 px-2 text-left w-[1%] whitespace-nowrap">Date</th>
-                  <th className="border py-2 px-2 text-left w-[1%] whitespace-nowrap">Title</th>
-                  <th className="border py-2 px-2 text-left">Description</th>
+                <tr className="border-b border-gray-300 dark:border-neutral-600">
+                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Date</th>
+                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Title</th>
+                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400">Description</th>
                 </tr>
                 </thead>
                 <tbody className="lg:table-row-group block">
-                {/* First row */}
-                {/*<tr className="lg:table-row flex flex-col mb-4 border ">*/}
-                {/*  <td className="lg:table-cell align-top block border  px-2 py-1">*/}
-                {/*    <span className="font-bold lg:hidden mr-2">Date:</span>*/}
-                {/*    <a href="/blog/2024-08-27" className="underline text-blue-600 dark:text-blue-400">2024-08-27</a>*/}
-                {/*  </td>*/}
-                {/*  <td className="lg:table-cell align-top block border  px-2 py-1">*/}
-                {/*    <span className="font-bold lg:hidden mr-2">Title:</span>*/}
-                {/*    What is an AI Agent*/}
-                {/*  </td>*/}
-                {/*  <td className="lg:table-cell align-top block border  px-2 py-1">*/}
-                {/*    <span className="font-bold lg:hidden mr-2">Description:</span>*/}
-                {/*    Attempting to clarify the overloaded buzzword.*/}
-                {/*  </td>*/}
-                {/*</tr>*/}
-                {/* Second row */}
-                <tr className="lg:table-row flex flex-col mb-4 border ">
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Date:</span>
+                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0">
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Date</span>
                     <a href="/blog/2024-07-09" className="underline text-blue-600 dark:text-blue-400">2024-07-09</a>
                   </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Title:</span>
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Title</span>
                     Opinions
                   </td>
-                  <td className="lg:table-cell align-top block border  px-2 py-1">
-                    <span className="font-bold lg:hidden mr-2">Description:</span>
+                  <td className="lg:table-cell align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Description</span>
                     Strong opinions weakly held.
                   </td>
                 </tr>
                 </tbody>
               </table>
               </div>
-              <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+              <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
               <p>
-                {"I've co-founded a YC-backed manufacturing startup ("}
+                {"I started by co-founding "}
                 <a href="https://asm.co" target="_blank" className="underline text-blue-600 dark:text-blue-400">Assembly Inc</a>
-                {"), made critical contributions at ("}
+                {" through YC to rethink manufacturing quality control. At "}
                 <a href="https://www.figma.com/about" target="_blank" className="underline text-blue-600 dark:text-blue-400">Figma</a>
-                {") as it leapt to becoming the de-facto tool for designers, and led engineering at a 7000+ employee COVID-testing organization at the peak of the pandemic ("}
+                {", I worked on the collaboration and performance that helped it become the tool every designer reaches for. At "}
                 <a href="https://curative.com" target="_blank" className="underline text-blue-600 dark:text-blue-400">Curative</a>
-                {")."}
+                {", I led engineering as we scaled to 7000 people and 36M+ COVID tests at the height of the pandemic. Now I'm building "}
+                <a href="https://thousandbirds.ai" target="_blank" className="underline text-blue-600 dark:text-blue-400">Thousand Birds</a>
+                {" \u2014 infrastructure for AI agents."}
                 <br/>
                 <br/>
-                {"I am the founder of "}
-                <a href="https://thousandbirds.ai" target="_blank" className="underline text-blue-600 dark:text-blue-400">Thousand Birds Inc</a>
-                {", where I'm building the future of developer experiences for agentic AI software systems."}
-                <br/>
-                <br/>
-                {'My favorite quote is '}
-                <i>{'"Sometimes magic is just someone spending more time on something than anyone else might reasonably expect"'}</i> {" - Teller"}
+                <i>{"\u201CSometimes magic is just someone spending more time on something than anyone else might reasonably expect\u201D"}</i> {" \u2014 Teller"}
               </p>
               </div>
             </div>

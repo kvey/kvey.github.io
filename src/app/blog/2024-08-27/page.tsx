@@ -6,20 +6,20 @@ import { Logo } from '@/components/logo';
 const Home = () => {
   return (
       <div>
-        <div className='flex flex-col mx-4'>
+        <div className='flex flex-col items-center mx-4'>
           <div className='mx-4 mb-0 md:px-4 px-8 md:pt-8 pt-8 pb-2 mt-8 max-w-4xl flex flex-col md:gap-x-26 gap-8 w-full'>
             <a href={"/"} className={"text-blue-600 dark:text-blue-400 underline"}>
               {"<<< Back"}
             </a>
             <div className={"pb-40"}>
-              <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+              <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                 <h1 className='text-4xl'> What is an AI Agent? </h1>
                 <p className='text pt-4'>
                   Agents have broadly been overloaded by the marketing engine, this is my attempt to define them.
                   Unraveling the Hype and Reclaiming the Concept
                 </p>
               </div>
-              <header className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+              <header className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                 <h1 className="text-4xl font-bold text-blue-800 dark:text-blue-300 mb-4">AI Agents: Unraveling the Hype and Reclaiming the
                   Concept</h1>
                 <p className="text-lg text-gray-600 dark:text-gray-300">In the rapidly evolving landscape of artificial intelligence, few
@@ -29,7 +29,7 @@ const Home = () => {
               </header>
 
               <main>
-                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                <section className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                   <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">The Ambiguity of AI Agents: Separating Hype
                     from Reality</h2>
 
@@ -74,7 +74,7 @@ const Home = () => {
                     interfaces, they lack the core characteristics of agents.</p>
                 </section>
 
-                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                <section className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                   <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">The Dumbing Down of AI Agents: From Complex
                     Concept to Buzzword</h2>
                   <p className="mb-4">In recent years, the concept of AI agents has undergone a significant
@@ -123,7 +123,7 @@ const Home = () => {
                   </ol>
                 </section>
 
-                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                <section className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                   <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">The Divide Between Agents and AGI</h2>
                   <p className="mb-4">While AI agents represent a significant step forward in artificial intelligence,
                     they are still distinct from artificial general intelligence (AGI). The key differences include:</p>
@@ -143,7 +143,7 @@ const Home = () => {
                   </ol>
                 </section>
 
-                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                <section className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                   <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">Bridging the Gap: From Agents to AGI</h2>
                   <p className="mb-4">As research in AI progresses, we can identify some key areas that may help bridge
                     the gap between current AI agents and AGI:</p>
@@ -170,7 +170,7 @@ const Home = () => {
                   </ul>
                 </section>
 
-                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                <section className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                   <h2 className="text-3xl font-semibold text-blue-700 dark:text-blue-300 mb-6">Reclaiming the Concept of AI Agents</h2>
                   <p className="mb-4">To address the issues arising from the oversimplification of AI agents, it&apos;s
                     crucial for the AI community, including researchers, developers, and ethical AI advocates, to:</p>
@@ -183,7 +183,7 @@ const Home = () => {
                   </ol>
                 </section>
 
-                <section className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+                <section className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
                   <p className="mb-4">As we navigate the complex landscape of AI development, it&apos;s crucial to maintain a
                     clear understanding of what constitutes an AI agent. By focusing on the capacity for failure,
                     initiative, and decision-making in ambiguous situations, we can distinguish true agents from other

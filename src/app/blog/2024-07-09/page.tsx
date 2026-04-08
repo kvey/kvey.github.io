@@ -6,19 +6,19 @@ import { Logo } from '@/components/logo';
 const Home = () => {
   return (
     <div>
-      <div className='flex flex-col mx-4'>
+      <div className='flex flex-col items-center mx-4'>
         <div className='mx-4 mb-0 md:px-4 px-8 md:pt-8 pt-8 pb-2 mt-8 max-w-4xl flex flex-col md:gap-x-26 gap-8 w-full'>
           <a href={"/"} className={"text-blue-600 dark:text-blue-400 underline"}>
             {"<<< Back"}
           </a>
           <div className={"pb-40"}>
-            <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+            <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
               <h1 className='text-4xl'> Opinions </h1>
               <p className='text pt-4'>
                 A distillation of some accumulated opinions
               </p>
             </div>
-            <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+            <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
               <h2 className={"text-2xl mb-4"}>Engineering</h2>
               <ul className={"list-disc flex flex-col gap-2"}>
                 <li className={"ml-8"}>
@@ -30,7 +30,7 @@ const Home = () => {
                 </li>
               </ul>
             </div>
-            <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+            <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
               <h2 className={"text-2xl mb-4"}>Leadership</h2>
               <ul className={"list-disc"}>
                 <li className={"ml-8"}>
@@ -51,7 +51,7 @@ const Home = () => {
                 </li>
               </ul>
             </div>
-            <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-gray-200 dark:border-neutral-700 p-6 mb-4">
+            <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
               <h2 className={"text-2xl mb-4"}>AI</h2>
               <ul className={"list-disc"}>
                 <li className={"ml-8"}>

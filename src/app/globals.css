@@ -7,22 +7,29 @@
   --background-rgb: 255, 255, 255;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 212, 212, 212;
-    --background-rgb: 10, 10, 10;
-  }
+.dark {
+  --foreground-rgb: 212, 212, 212;
+  --background-rgb: 10, 10, 10;
 }
 
 body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-rgb));
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  *,
-  ::before,
-  ::after {
-    border-color: rgb(64, 64, 64);
-  }
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 300;
+}
+
+th {
+  font-weight: 400;
+}
+
+.dark *,
+.dark ::before,
+.dark ::after {
+  border-color: rgb(64, 64, 64);
 }
