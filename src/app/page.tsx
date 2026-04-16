@@ -116,6 +116,20 @@ const Home = () => {
                 </tr>
                 </thead>
                 <tbody className="lg:table-row-group block">
+                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0 border-b border-gray-200 dark:border-neutral-700">
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Date</span>
+                    <a href="/blog/2026-04-13" className="underline text-blue-600 dark:text-blue-400">2026-04-13</a>
+                  </td>
+                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Title</span>
+                    Design Patterns in the Age of AI
+                  </td>
+                  <td className="lg:table-cell align-top block px-4 py-3">
+                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Description</span>
+                    Which engineering patterns should change now that AI can read, write, and refactor code for us.
+                  </td>
+                </tr>
                 <tr className="lg:table-row flex flex-col mb-4 lg:mb-0">
                   <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
                     <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Date</span>

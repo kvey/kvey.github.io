@@ -3,6 +3,12 @@ import Nav from '@/components/nav';
 
 const posts = [
   {
+    date: '2026-04-13',
+    title: 'Design Patterns in the Age of AI',
+
+    description: 'Which engineering patterns should change now that AI can read, write, and refactor code for us.',
+  },
+  {
     date: '2024-07-09',
     title: 'Opinions',
     description: 'Strong opinions weakly held.',
