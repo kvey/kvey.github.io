@@ -206,7 +206,7 @@
     .gui-panel-foot a:hover { color: #fff; }
 
     .gui-memorial {
-      margin: 4px 0 10px !important;
+      margin: 4px 0 10px;
       padding: 10px 12px;
       border-left: 2px solid var(--accent-warm);
       background: rgba(255, 247, 234, 0.05);
@@ -214,11 +214,16 @@
       color: var(--text);
       font-size: 13px;
       letter-spacing: 0.01em;
+      display: grid;
+      gap: 8px;
     }
-    .gui-memorial strong { font-weight: 700; }
+    .gui-memorial-name {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .gui-memorial-name strong { font-weight: 700; }
     .gui-memorial-dates {
-      display: inline-block;
-      margin-top: 2px;
       font-size: 11px;
       letter-spacing: 0.10em;
       color: var(--text-muted);
