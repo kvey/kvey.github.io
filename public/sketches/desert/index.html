@@ -582,14 +582,63 @@
     }
 
     /* ---------- Responsive ---------- */
-    @media (max-width: 560px) {
-      .gui-toolbar-left, .gui-toolbar-right { top: 14px; }
+    @media (max-width: 640px) {
+      .gui-toolbar-left, .gui-toolbar-right { top: 12px; }
       .gui-toolbar-left { left: 12px; }
       .gui-toolbar-right { right: 12px; }
-      .gui-panel { max-width: calc(100vw - 24px); }
-      .gui-controls { width: calc(100vw - 24px); }
+
+      /* Left toolbar: collapse to icons only so it doesn't collide with the right toggle */
+      .gui-toolbar-left .gui-icon-button span:last-child {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .gui-toolbar-left .gui-icon-button { padding: 8px 10px; gap: 0; }
+
+      /* Mode toggle: tighter */
       .gui-toggle { min-width: 0; }
-      .gui-toggle span { padding: 7px 10px; }
+      .gui-toggle span {
+        padding: 7px 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.06em;
+      }
+
+      /* Help / About panels: full-width sheet below the top toolbars */
+      .gui-toolbar-left .gui-panel {
+        position: fixed;
+        top: 60px;
+        left: 12px;
+        right: 12px;
+        max-width: none;
+      }
+
+      /* Simple sun controls: dock to the bottom of the screen */
+      .gui-toolbar-right .gui-controls {
+        position: fixed;
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+        width: auto;
+        max-width: none;
+      }
+
+      /* Generation progress: drop below the toolbars so it doesn't get covered */
+      .gui-progress {
+        top: 64px;
+        width: calc(100vw - 24px);
+      }
+    }
+
+    @media (max-width: 380px) {
+      .gui-toolbar-left .gui-icon-button { padding: 7px 8px; }
+      .gui-toggle span { padding: 6px 9px; font-size: 10px; }
+      .gui-pill { padding: 3px; }
     }
   </style>
 </head>
