@@ -31,12 +31,12 @@ export default function Nav() {
       >
         <a
           href="/"
-          className="nav-link font-mono text-[11px] uppercase tracking-[0.18em]"
+          className="nav-link hidden font-mono text-[11px] uppercase tracking-[0.18em] sm:block"
         >
           Colton Pierson
         </a>
 
-        <div className="flex items-center gap-x-6 sm:gap-x-8">
+        <div className="flex flex-1 items-center justify-between gap-x-6 sm:flex-none sm:justify-start sm:gap-x-8">
           <ul className="flex items-center gap-x-5 sm:gap-x-7">
             {navigation.map((item) => (
               <li key={item.name}>
