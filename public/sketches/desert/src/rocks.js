@@ -65,10 +65,10 @@ export function generateRock(rng, opts = {}) {
 
   // Vertex color: desert rock palettes, with shaded lower faces and dusty tops.
   const palettes = [
-    [new THREE.Color(0x96704f), new THREE.Color(0x5f4430), new THREE.Color(0xc2a477)], // tan
-    [new THREE.Color(0x9b684d), new THREE.Color(0x603b2b), new THREE.Color(0xbf8460)], // red sandstone
-    [new THREE.Color(0x837768), new THREE.Color(0x514a40), new THREE.Color(0xb9ab94)], // gray-tan
-    [new THREE.Color(0x7c5b3d), new THREE.Color(0x46331f), new THREE.Color(0xaa8155)], // dark brown
+    [new THREE.Color(0x9a7752), new THREE.Color(0x66503a), new THREE.Color(0xc7aa78)], // tan
+    [new THREE.Color(0x927057), new THREE.Color(0x5f4734), new THREE.Color(0xb9966a)], // warm talus
+    [new THREE.Color(0x8d7a62), new THREE.Color(0x5a4f40), new THREE.Color(0xb8a884)], // gray-tan
+    [new THREE.Color(0x876447), new THREE.Color(0x55402d), new THREE.Color(0xad875c)], // weathered brown
   ];
   const [light, dark, dust] = rngPick(rng, palettes);
   const colors = new Float32Array(pos.count * 3);

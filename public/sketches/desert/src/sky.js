@@ -36,6 +36,12 @@ function createSunsetDome() {
         return fract((p3.x + p3.y) * p3.z);
       }
 
+      vec3 hash33(vec3 p3) {
+        p3 = fract(p3 * vec3(0.1031, 0.11369, 0.13787));
+        p3 += dot(p3, p3.yxz + 19.19);
+        return fract((p3.xxy + p3.yzz) * p3.zyx);
+      }
+
       float noise(vec2 p) {
         vec2 i = floor(p);
         vec2 f = fract(p);
@@ -58,18 +64,53 @@ function createSunsetDome() {
         return v;
       }
 
+      float skyFbm(vec3 dir, float scale, vec2 offset) {
+        vec3 w = abs(dir);
+        w = pow(w, vec3(4.0));
+        w /= max(w.x + w.y + w.z, 0.0001);
+        float xy = fbm(dir.xy * scale + offset);
+        float yz = fbm(dir.yz * scale + offset * 1.37 + vec2(12.1, 4.6));
+        float zx = fbm(dir.zx * scale + offset * 0.73 + vec2(2.7, 18.3));
+        return xy * w.z + yz * w.x + zx * w.y;
+      }
+
       vec2 safeNormalize(vec2 v) {
         return v / max(length(v), 0.0001);
       }
 
-      float starField(vec3 dir, float scale, float threshold) {
-        vec2 p = vec2(atan(dir.z, dir.x) * 0.15915494 + 0.5, asin(clamp(dir.y, -1.0, 1.0)) * 0.31830989 + 0.5);
-        vec2 cell = floor(p * scale);
-        vec2 cellUv = fract(p * scale) - 0.5;
-        float rnd = hash(cell);
-        float core = 1.0 - smoothstep(0.018, 0.072, length(cellUv));
-        float visible = smoothstep(threshold, 1.0, rnd);
-        return core * visible * (0.62 + rnd * 0.55);
+      vec3 starLayer(vec3 dir, float scale, float threshold, float radius, float glowRadius, vec3 tint) {
+        vec3 p = normalize(dir) * scale;
+        vec3 cell = floor(p);
+        vec3 cellUv = fract(p);
+        vec3 rnd = hash33(cell + scale);
+        vec3 starPos = 0.20 + rnd * 0.60;
+        float d = length(cellUv - starPos);
+        float visible = smoothstep(threshold, 1.0, rnd.x);
+        float core = 1.0 - smoothstep(radius * 0.24, radius, d);
+        float halo = 1.0 - smoothstep(radius, glowRadius, d);
+        float sparkle = 0.58 + 0.42 * hash(cell.xy + floor(cloudTime * 0.08) + scale);
+        float magnitude = pow(smoothstep(threshold, 1.0, rnd.x), 0.52);
+        return tint * visible * (core * 1.35 + halo * 0.22) * magnitude * sparkle;
+      }
+
+      vec3 starField(vec3 dir, vec3 moonDir) {
+        vec3 stars = vec3(0.0);
+        stars += starLayer(dir, 165.0, 0.935, 0.055, 0.155, vec3(0.72, 0.78, 1.00));
+        stars += starLayer(dir + vec3(0.19, 0.07, -0.11), 285.0, 0.952, 0.044, 0.120, vec3(1.00, 0.92, 0.76));
+        stars += starLayer(dir + vec3(-0.08, 0.17, 0.23), 470.0, 0.964, 0.035, 0.095, vec3(0.82, 0.92, 1.00));
+        stars += starLayer(dir + vec3(0.31, -0.12, 0.09), 760.0, 0.982, 0.030, 0.076, vec3(1.00, 0.96, 0.88));
+
+        vec3 milkyAxis = normalize(vec3(0.22, 0.76, -0.61));
+        float band = exp(-pow(abs(dot(dir, milkyAxis)) * 5.8, 2.0));
+        float dust = skyFbm(dir, 22.0, vec2(7.2, 13.1));
+        float lanes = skyFbm(dir, 52.0, vec2(2.0, 9.0));
+        float moonWash = smoothstep(0.10, 0.64, dot(dir, moonDir));
+        vec3 milkyWay = vec3(0.30, 0.34, 0.52) * band * smoothstep(0.34, 0.78, dust) * (0.58 + lanes * 0.46);
+        return stars * (1.0 - moonWash * 0.28) + milkyWay;
+      }
+
+      float moonNoise(vec2 p) {
+        return fbm(p * 4.0 + vec2(11.4, 3.8)) * 0.62 + fbm(p * 13.0 + vec2(2.3, 18.7)) * 0.38;
       }
 
       void main() {
@@ -135,18 +176,22 @@ function createSunsetDome() {
 
         float aboveHorizon = smoothstep(0.02, 0.22, dir.y);
         float starMask = skyObjects * aboveHorizon * (1.0 - cloudMask * 0.74);
-        float stars = starField(dir, 92.0, 0.965) + starField(dir + vec3(0.13, 0.31, -0.07), 168.0, 0.988);
-        color += vec3(0.60, 0.68, 1.0) * stars * starMask * 0.92;
+        vec3 stars = starField(dir, moonDir);
+        color += stars * starMask * 1.16;
 
         float moonDot = dot(dir, moonDir);
-        float moonDisc = smoothstep(0.99912, 0.99976, moonDot);
-        float moonInner = smoothstep(0.99970, 0.99994, moonDot);
-        float moonGlow = pow(max(moonDot, 0.0), 360.0) * 0.55 + pow(max(moonDot, 0.0), 48.0) * 0.16;
+        float moonDisc = smoothstep(0.99902, 0.99958, moonDot);
+        float moonInner = smoothstep(0.99952, 0.99991, moonDot);
+        float moonGlow = pow(max(moonDot, 0.0), 220.0) * 0.72 + pow(max(moonDot, 0.0), 34.0) * 0.18;
         float moonVisible = skyObjects * smoothstep(0.01, 0.16, moonDir.y);
-        vec3 moonColor = vec3(0.78, 0.84, 1.0);
-        color += moonColor * moonGlow * moonVisible * aboveHorizon;
+        vec2 moonPlane = vec2(dot(dir, normalize(vec3(moonDir.z, 0.0, -moonDir.x))), dir.y - moonDir.y) * 42.0;
+        float maria = moonNoise(moonPlane);
+        float limb = 1.0 - smoothstep(0.18, 0.88, length(moonPlane));
+        vec3 moonColor = mix(vec3(0.66, 0.73, 0.94), vec3(0.96, 0.97, 1.0), limb);
+        moonColor *= 0.86 + maria * 0.22;
+        color += vec3(0.62, 0.70, 1.0) * moonGlow * moonVisible * aboveHorizon;
         color = mix(color, moonColor, moonDisc * moonVisible);
-        color = mix(color, vec3(0.92, 0.95, 1.0), moonInner * moonVisible * 0.72);
+        color = mix(color, vec3(1.0, 0.99, 0.93), moonInner * moonVisible * 0.34);
 
         float alpha = clamp(0.36 + horizon * 0.38 + sunset * 0.18 + goldGlow * 0.18 + belowHorizon * 0.46, 0.0, 0.98);
         gl_FragColor = vec4(color, alpha);
@@ -154,7 +199,7 @@ function createSunsetDome() {
     `,
   });
 
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1200, 64, 32), material);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1200, 192, 96), material);
   mesh.renderOrder = -50;
   return { mesh, uniforms };
 }

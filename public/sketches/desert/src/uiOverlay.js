@@ -109,6 +109,7 @@ function DesertUi({
   initialSunAzimuth = 145,
   onControlModeChange = () => {},
   onSunControlsChange = () => {},
+  onPlaybackChange = () => {},
 }) {
   const [activePanel, setActivePanel] = useState(null);
   const [isFullControls, setIsFullControls] = useState(false);
@@ -136,6 +137,10 @@ function DesertUi({
   useEffect(() => {
     onControlModeChange(isFullControls);
   }, [isFullControls, onControlModeChange]);
+
+  useEffect(() => {
+    onPlaybackChange({ isPlaying, rate });
+  }, [isPlaying, rate, onPlaybackChange]);
 
   useEffect(() => {
     if (!isPlaying) return undefined;

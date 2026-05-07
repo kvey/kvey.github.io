@@ -19,7 +19,7 @@ const sketches: Sketch[] = [
   {
     id: 'desert',
     title: 'Desert',
-    description: 'Procedurally generated Tucson desert. Layered terrain, scattered rocks, plants, and a hand-shaded sky. Fly the camera with WASD, drag to look around.',
+    description: 'Procedurally generated Tucson desert, built as a zen garden out of love for Tucson and the desert. In memory of my brother Larry William Pierson (1966-2025) and my Aunt Alice Gutierrez, born Alice Pierson (1949-2026). Layered terrain, scattered rocks, plants, and sky.',
     tech: 'Three.js · simplex-noise · lil-gui',
     year: '2026',
     kind: 'standalone',

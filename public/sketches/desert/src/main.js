@@ -21,12 +21,13 @@ import { createTerrainMaterial } from './materials/terrainMaterial.js';
 import { createTreeMaterial } from './materials/treeMaterial.js';
 import { createSunLensFlare } from './lensFlare.js';
 import { createProportionOracle } from './proportions.js';
+import { createRainOverlay } from './rainOverlay.js';
 
 // ---------- Renderer / scene boilerplate ----------
 const app = document.getElementById('app');
 const uiRoot = document.getElementById('ui-root');
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio));
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -50,6 +51,7 @@ controls.minDistance = 3;
 controls.maxDistance = 220;
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.target.set(0, 1.5, 0);
+const rainOverlay = createRainOverlay(scene, camera);
 
 const CAMERA_TERRAIN_CLEARANCE = 1.15;
 const TARGET_TERRAIN_CLEARANCE = 0.2;
@@ -205,7 +207,7 @@ sun.shadow.radius = 2.2;
 scene.add(sun);
 scene.add(sun.target);
 
-const moonLight = new THREE.DirectionalLight(0x9fb4ff, 0);
+const moonLight = new THREE.DirectionalLight(0xaec0ff, 0);
 moonLight.castShadow = false;
 scene.add(moonLight);
 scene.add(moonLight.target);
@@ -214,6 +216,8 @@ const sunLensFlare = createSunLensFlare(scene);
 // Sky-bounce ambient: soft blue from above, warm desert albedo from below.
 const hemi = new THREE.HemisphereLight(0xb8d8ff, 0xb98260, 0.42);
 scene.add(hemi);
+const moonAmbient = new THREE.HemisphereLight(0x718aff, 0x050713, 0.0);
+scene.add(moonAmbient);
 const skyFill = new THREE.DirectionalLight(0xb9d6ff, 0.0);
 skyFill.castShadow = false;
 scene.add(skyFill);
@@ -227,24 +231,42 @@ const sunWarmColor = new THREE.Color(0xff9a56);
 const sunCoolColor = new THREE.Color(0xfff2d6);
 const sunNightColor = new THREE.Color(0x2c3f7a);
 const sunColor = new THREE.Color();
-const fogWarmColor = new THREE.Color(0xe9a171);
-const fogVioletColor = new THREE.Color(0xb199b6);
+const fogWarmColor = new THREE.Color(0xc9865a);
+const fogVioletColor = new THREE.Color(0x4f3a55);
 const fogCoolColor = new THREE.Color(0xc8d4dd);
 const fogNightColor = new THREE.Color(0x11182d);
+const fogRainColor = new THREE.Color(0x5d6870);
 const fogColor = new THREE.Color();
+const fogSunsetSunColor = new THREE.Color(0xc86f45);
+const fogSunsetShadowColor = new THREE.Color(0x211824);
 const hemiSunsetColor = new THREE.Color(0x7b8ac4);
 const hemiNightColor = new THREE.Color(0x10183b);
 const hemiGroundSunsetColor = new THREE.Color(0xd07658);
 const hemiGroundNightColor = new THREE.Color(0x080814);
+const moonAmbientSkyColor = new THREE.Color(0x718aff);
+const moonAmbientHighColor = new THREE.Color(0xb0beff);
+const moonAmbientGroundColor = new THREE.Color(0x04050d);
+const moonLightHighColor = new THREE.Color(0xd8e1ff);
 const skyFillDayColor = new THREE.Color(0xb9d6ff);
 const skyFillTwilightColor = new THREE.Color(0xb7a0d4);
 const skyFillNightColor = new THREE.Color(0x273c82);
 const sandBounceDayColor = new THREE.Color(0xd7a36b);
 const sandBounceSunsetColor = new THREE.Color(0xea8959);
 const sandBounceNightColor = new THREE.Color(0x15101c);
+const JULY_TENTH_DAY_OF_YEAR = 191;
 const environmentTexture = createAtmosphereEnvironmentTexture();
 scene.environment = environmentTexture;
 let currentEnvironmentIntensity = 0.16;
+const directionalFogUniforms = {
+  directionalFogSunViewDirection: { value: new THREE.Vector3(0, 0, -1) },
+  directionalFogUpViewDirection: { value: new THREE.Vector3(0, 1, 0) },
+  directionalFogSunsetAmount: { value: 0 },
+  directionalFogNightAmount: { value: 0 },
+  directionalFogSunColor: { value: fogSunsetSunColor.clone() },
+  directionalFogShadowColor: { value: fogSunsetShadowColor.clone() },
+};
+const directionalFogSunViewScratch = new THREE.Vector3();
+const directionalFogUpViewScratch = new THREE.Vector3(0, 1, 0);
 
 // ---------- Shared materials ----------
 const ocotilloMaterial = createOcotilloMaterial();
@@ -272,7 +294,12 @@ const DEFAULT_SIMPLE_TIME_OF_DAY = (() => {
   const now = new Date();
   return now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
 })();
-const DEFAULT_SIMPLE_TIME_OF_YEAR = 80;
+const DEFAULT_SIMPLE_TIME_OF_YEAR = (() => {
+  const now = new Date();
+  const start = Date.UTC(now.getFullYear(), 0, 0);
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.floor((today - start) / 86400000);
+})();
 const DEFAULT_SOLAR_POSITION = tucsonSolarPosition(DEFAULT_SIMPLE_TIME_OF_DAY, DEFAULT_SIMPLE_TIME_OF_YEAR);
 const DEFAULT_SEASONAL_PLANTS = deriveSeasonalPlantState(DEFAULT_SIMPLE_TIME_OF_YEAR);
 // NPS 2020 Saguaro Census: 21,517 saguaros across 45 200 m x 200 m plots.
@@ -363,6 +390,10 @@ function applySeasonalPlantState(timeOfYear) {
   }
   if (changed) updateSeasonalPlantVisibility();
   return changed;
+}
+
+function rainAmountForDate(timeOfYear) {
+  return Math.round(timeOfYear) === JULY_TENTH_DAY_OF_YEAR ? 1 : 0;
 }
 
 function updateSeasonalPlantVisibility() {
@@ -1338,6 +1369,9 @@ function scatterRenderConfig(key, proportions) {
 // ---------- Sun update ----------
 function updateSun() {
   const dir = skyCtl.update({ azimuth: params.sunAzimuth, elevation: params.sunElevation });
+  const rain01 = rainAmountForDate(params.timeOfYear);
+  rainOverlay.setActive(rain01 > 0);
+  updateRendererExposure(rain01);
   updateLightAnchors(dir);
   markShadowMapDirty();
   desertUi?.setSunControls({
@@ -1355,14 +1389,20 @@ function updateSun() {
   sunColor.copy(sunWarmColor).lerp(sunCoolColor, elev01 * 0.85).lerp(sunNightColor, night01);
   sun.color.copy(sunColor);
   const daylightIntensity = THREE.MathUtils.lerp(0.85, 3.35, Math.pow(elev01, 0.72)) + sunset01 * 0.24;
-  sun.intensity = THREE.MathUtils.lerp(0.0, daylightIntensity, daylight01);
+  sun.intensity = THREE.MathUtils.lerp(0.0, daylightIntensity, daylight01) * THREE.MathUtils.lerp(1.0, 0.34, rain01);
 
-  moonLight.intensity = THREE.MathUtils.lerp(0.0, 0.34, night01);
+  const moonAltitude01 = THREE.MathUtils.smoothstep(skyCtl.moon.y, 0.02, 0.42);
+  const moonPresence = night01 * moonAltitude01;
+  moonLight.intensity = THREE.MathUtils.lerp(0.0, 0.24, moonPresence) * THREE.MathUtils.lerp(1.0, 0.42, rain01);
+  moonLight.color.set(0xaec0ff).lerp(moonLightHighColor, moonAltitude01 * 0.42);
+  moonAmbient.intensity = THREE.MathUtils.lerp(0.0, 0.16, moonPresence) * THREE.MathUtils.lerp(1.0, 0.56, rain01);
+  moonAmbient.color.copy(moonAmbientSkyColor).lerp(moonAmbientHighColor, moonAltitude01 * 0.24);
+  moonAmbient.groundColor.copy(moonAmbientGroundColor);
   skyFill.intensity = THREE.MathUtils.lerp(
     THREE.MathUtils.lerp(0.055, 0.18, daylight01),
-    0.04,
+    THREE.MathUtils.lerp(0.025, 0.055, moonPresence),
     night01,
-  );
+  ) * THREE.MathUtils.lerp(1.0, 0.62, rain01);
   skyFill.color.copy(skyFillDayColor)
     .lerp(skyFillTwilightColor, sunset01 * 0.62)
     .lerp(skyFillNightColor, night01);
@@ -1372,25 +1412,32 @@ function updateSun() {
     THREE.MathUtils.lerp(0.035, 0.18, daylight01) * THREE.MathUtils.lerp(1.18, 0.78, elev01),
     0.0,
     night01,
-  );
+  ) * THREE.MathUtils.lerp(1.0, 0.32, rain01);
   sandBounce.color.copy(sandBounceDayColor)
     .lerp(sandBounceSunsetColor, sunset01 * 0.72)
     .lerp(sandBounceNightColor, night01);
   updateSandBounceAnchor(dir);
 
-  // Match fog to the sky's hazy ground band.
+  // Keep the base fog darker at sunset; material shaders add the sunward glow directionally.
   fogColor.copy(fogWarmColor)
-    .lerp(fogVioletColor, sunset01 * 0.35)
     .lerp(fogCoolColor, elev01 * 0.42)
-    .lerp(fogNightColor, night01);
+    .lerp(fogVioletColor, sunset01 * 0.58)
+    .lerp(fogNightColor, night01)
+    .lerp(fogRainColor, rain01 * 0.76);
   scene.fog.color.copy(fogColor);
   const dayFogDensity = THREE.MathUtils.lerp(1.28, 0.84, elev01);
-  scene.fog.density = params.fogDensity * THREE.MathUtils.lerp(dayFogDensity, 0.62, night01);
+  const sunsetFogDensity = THREE.MathUtils.lerp(dayFogDensity, 0.78, sunset01);
+  scene.fog.density = params.fogDensity * THREE.MathUtils.lerp(sunsetFogDensity, 0.62, night01) * THREE.MathUtils.lerp(1.0, 2.35, rain01);
+  directionalFogUniforms.directionalFogSunsetAmount.value = sunset01;
+  directionalFogUniforms.directionalFogNightAmount.value = night01;
+  directionalFogUniforms.directionalFogSunColor.value.copy(fogSunsetSunColor).lerp(fogNightColor, night01 * 0.55);
+  directionalFogUniforms.directionalFogShadowColor.value.copy(fogSunsetShadowColor).lerp(fogNightColor, night01 * 0.72);
+  updateDirectionalFogViewUniforms();
   hemi.intensity = THREE.MathUtils.lerp(
     THREE.MathUtils.lerp(0.10, 0.42, daylight01),
     0.055,
     night01,
-  );
+  ) * THREE.MathUtils.lerp(1.0, 0.68, rain01);
   hemi.color.set(0xb8d8ff)
     .lerp(hemiSunsetColor, sunset01 * 0.35)
     .lerp(hemiNightColor, night01);
@@ -1398,8 +1445,12 @@ function updateSun() {
     .lerp(hemiGroundSunsetColor, sunset01 * 0.45)
     .lerp(hemiGroundNightColor, night01);
   updateAtmosphereEnvironment({ elev01, daylight01, sunset01, night01 });
-  setEnvironmentIntensity(THREE.MathUtils.lerp(0.06, 0.22, daylight01) * (1 - night01 * 0.45));
+  setEnvironmentIntensity(THREE.MathUtils.lerp(0.06, 0.22, daylight01) * (1 - night01 * 0.45) * THREE.MathUtils.lerp(1.0, 0.58, rain01));
   updateLensFlare();
+}
+
+function updateRendererExposure(rain01 = rainAmountForDate(params.timeOfYear)) {
+  renderer.toneMappingExposure = params.exposure * THREE.MathUtils.lerp(1.0, 0.82, rain01);
 }
 
 function updateLightAnchors(sunDirection = skyCtl.sun) {
@@ -1450,11 +1501,75 @@ function updateLensFlare() {
     camera,
     sunDirection: skyCtl.sun,
     sunElevation: params.sunElevation,
-    enabled: params.lensFlare,
+    enabled: params.lensFlare && rainAmountForDate(params.timeOfYear) === 0,
   });
 }
 
+function updateDirectionalFogViewUniforms() {
+  directionalFogSunViewScratch.copy(skyCtl.sun).transformDirection(camera.matrixWorldInverse);
+  directionalFogUpViewScratch.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
+  directionalFogUniforms.directionalFogSunViewDirection.value.copy(directionalFogSunViewScratch);
+  directionalFogUniforms.directionalFogUpViewDirection.value.copy(directionalFogUpViewScratch);
+}
+
+function installDirectionalFog(material) {
+  if (material.userData.directionalFogInstalled) return material;
+  material.userData.directionalFogInstalled = true;
+  const previousOnBeforeCompile = material.onBeforeCompile.bind(material);
+  material.onBeforeCompile = (shader, rendererArg) => {
+    previousOnBeforeCompile(shader, rendererArg);
+    shader.uniforms.directionalFogSunViewDirection = directionalFogUniforms.directionalFogSunViewDirection;
+    shader.uniforms.directionalFogUpViewDirection = directionalFogUniforms.directionalFogUpViewDirection;
+    shader.uniforms.directionalFogSunsetAmount = directionalFogUniforms.directionalFogSunsetAmount;
+    shader.uniforms.directionalFogNightAmount = directionalFogUniforms.directionalFogNightAmount;
+    shader.uniforms.directionalFogSunColor = directionalFogUniforms.directionalFogSunColor;
+    shader.uniforms.directionalFogShadowColor = directionalFogUniforms.directionalFogShadowColor;
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+uniform vec3 directionalFogSunViewDirection;
+uniform vec3 directionalFogUpViewDirection;
+uniform float directionalFogSunsetAmount;
+uniform float directionalFogNightAmount;
+uniform vec3 directionalFogSunColor;
+uniform vec3 directionalFogShadowColor;
+
+vec3 directionalFogColor(vec3 baseFogColor) {
+  vec3 viewRay = normalize(-vViewPosition);
+  float sunFacing = dot(viewRay, normalize(directionalFogSunViewDirection)) * 0.5 + 0.5;
+  float worldHorizon = 1.0 - smoothstep(0.035, 0.48, abs(dot(viewRay, normalize(directionalFogUpViewDirection))));
+  float sunsetFog = directionalFogSunsetAmount * worldHorizon * (1.0 - directionalFogNightAmount);
+  float sunwardGlow = smoothstep(0.48, 1.0, sunFacing);
+  float shadowSide = 1.0 - smoothstep(0.18, 0.72, sunFacing);
+  vec3 duskFog = mix(baseFogColor, directionalFogShadowColor, shadowSide * 0.78);
+  duskFog = mix(duskFog, directionalFogSunColor, sunwardGlow * 0.46);
+  return mix(baseFogColor, duskFog, sunsetFog);
+}`,
+      )
+      .replace(
+        '#include <fog_fragment>',
+        `#ifdef USE_FOG
+  #ifdef FOG_EXP2
+    float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
+  #else
+    float fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
+  #endif
+  gl_FragColor.rgb = mix( gl_FragColor.rgb, directionalFogColor(fogColor), fogFactor );
+#endif`,
+      );
+  };
+  const previousCacheKey = material.customProgramCacheKey?.bind(material);
+  material.customProgramCacheKey = () => {
+    const baseKey = previousCacheKey ? previousCacheKey() : '';
+    return `${baseKey}|directional-fog-v1`;
+  };
+  material.needsUpdate = true;
+  return material;
+}
+
 function registerEnvironmentMaterial(material, scale = 1) {
+  installDirectionalFog(material);
   material.userData.environmentScale = scale;
   environmentMaterials.add(material);
   material.envMapIntensity = currentEnvironmentIntensity * scale;
@@ -1598,7 +1713,7 @@ addGuiControl(fSun, 'sunElevation', -18, 80, 0.5).onChange(value => {
   updateSun();
 }).name('elevation');
 addGuiControl(fSun, 'fogDensity', 0, 0.02, 0.0005).onChange(updateSun).name('fog');
-addGuiControl(fSun, 'exposure', 0.4, 1.6, 0.05).onChange(value => { renderer.toneMappingExposure = value; }).name('exposure');
+addGuiControl(fSun, 'exposure', 0.4, 1.6, 0.05).onChange(() => updateRendererExposure()).name('exposure');
 addGuiControl(fSun, 'lensFlare').onChange(updateLensFlare).name('lens flare');
 addGuiControl(fSun, 'cloudRate', 0, 5, 0.05).name('cloud rate');
 
@@ -1615,6 +1730,9 @@ function setFullControlsVisible(isVisible) {
   }
   refreshGui();
 }
+
+let timeRate = 1;
+let timeIsPlaying = false;
 
 desertUi = mountDesertUi(uiRoot, {
   initialTimeOfDay: params.timeOfDay,
@@ -1633,6 +1751,10 @@ desertUi = mountDesertUi(uiRoot, {
     }
     updateSun();
     refreshGui();
+  },
+  onPlaybackChange: ({ isPlaying, rate }) => {
+    timeIsPlaying = isPlaying;
+    timeRate = rate;
   },
 });
 
@@ -1654,7 +1776,8 @@ function tick() {
   const now = performance.now();
   const deltaSeconds = Math.min((now - lastTick) / 1000, 0.1);
   lastTick = now;
-  cloudTime += deltaSeconds * params.cloudRate;
+  const cloudMultiplier = timeIsPlaying ? timeRate : 1;
+  cloudTime += deltaSeconds * params.cloudRate * cloudMultiplier;
   skyCtl.updateTime(cloudTime);
   updateFlight(deltaSeconds);
   updateTerrainChunks();
@@ -1664,6 +1787,8 @@ function tick() {
   constrainCameraToWorld();
   updateVisibilityCulling(now);
   updateLensFlare();
+  updateDirectionalFogViewUniforms();
+  rainOverlay.update(deltaSeconds);
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
