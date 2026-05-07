@@ -11,6 +11,7 @@ import {berkeleyMono} from "@/components/font";
 const navigation = [
   { name: 'Home', href: '/' },
   { name: 'Blog', href: '/blog' },
+  { name: 'Sketches', href: '/sketches' },
 ]
 
 export default function Nav() {
