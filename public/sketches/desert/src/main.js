@@ -2,11 +2,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 
-import { mulberry32, rngRange, subSeed } from './random.js';
-import { buildTerrain } from './terrain.js';
+import { mountDesertUi } from './uiOverlay.js';
+import { mulberry32, rngRange } from './random.js';
 import { buildSky } from './sky.js';
 import { generateRock } from './rocks.js';
-import { scatterPlants } from './scatter.js';
 import { generateSaguaro } from './plants/saguaro.js';
 import { generateBarrelCactus } from './plants/barrelCactus.js';
 import { generatePaloVerde } from './plants/paloVerde.js';
@@ -18,20 +17,24 @@ import { createCactusSpineMaterial } from './materials/cactusSpineMaterial.js';
 import { createCreosoteMaterial } from './materials/creosoteMaterial.js';
 import { createOcotilloMaterial } from './materials/ocotilloMaterial.js';
 import { createRockMaterial } from './materials/rockMaterial.js';
+import { createTerrainMaterial } from './materials/terrainMaterial.js';
 import { createTreeMaterial } from './materials/treeMaterial.js';
 import { createSunLensFlare } from './lensFlare.js';
 import { createProportionOracle } from './proportions.js';
 
 // ---------- Renderer / scene boilerplate ----------
 const app = document.getElementById('app');
+const uiRoot = document.getElementById('ui-root');
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -47,11 +50,68 @@ controls.maxDistance = 220;
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.target.set(0, 1.5, 0);
 
+const CAMERA_TERRAIN_CLEARANCE = 1.15;
+const TARGET_TERRAIN_CLEARANCE = 0.2;
+const CAMERA_COLLISION_RADIUS = 0.85;
+const CAMERA_COLLIDER_CELL_SIZE = 12;
+const CAMERA_COLLIDER_CONFIG = {
+  paloVerde: { radiusScale: 0.62, minRadius: 0.45 },
+  mesquite: { radiusScale: 0.62, minRadius: 0.45 },
+  saguaro: { radiusScale: 0.78, minRadius: 0.35 },
+  barrel: { radiusScale: 0.82, minRadius: 0.35 },
+  pricklyPear: { radiusScale: 0.82, minRadius: 0.35 },
+  ocotillo: { radiusScale: 0.42, minRadius: 0.3 },
+  boulders: { radiusScale: 0.95, minRadius: 0.35 },
+};
+const cameraColliders = [];
+const cameraColliderGrid = new Map();
+const nearbyColliderScratch = [];
+const cameraConstraintDelta = new THREE.Vector3();
+const cameraFallbackPush = new THREE.Vector3();
+let cameraColliderMaxRadius = 0;
+
 const plantLodLevels = [
   { name: 'near', distance: 45, detailScale: 1, castShadow: true },
-  { name: 'mid', distance: 95, detailScale: 0.72, castShadow: true },
+  { name: 'mid', distance: 95, detailScale: 0.72, castShadow: false },
   { name: 'far', distance: Infinity, detailScale: 0.48, castShadow: false },
 ];
+
+const TERRAIN_CULL_DISTANCE = 420;
+const DEFAULT_SCATTER_CULL_CELL = { size: 80, minInstances: 64 };
+const SCATTER_CULL_CELL = {
+  paloVerde: { size: 120, minInstances: 96 },
+  mesquite: { size: 120, minInstances: 96 },
+  saguaro: { size: 96, minInstances: 64 },
+  barrel: { size: 64, minInstances: 48 },
+  pricklyPear: { size: 64, minInstances: 48 },
+  ocotillo: { size: 96, minInstances: 64 },
+  creosote: { size: 56, minInstances: 48 },
+  pebbles: { size: 48, minInstances: 48 },
+  boulders: { size: 80, minInstances: 32 },
+};
+const SCATTER_CULL_DISTANCE = {
+  paloVerde: 300,
+  mesquite: 300,
+  saguaro: 320,
+  barrel: 210,
+  pricklyPear: 210,
+  ocotillo: 240,
+  creosote: 145,
+  pebbles: 55,
+  boulders: 260,
+};
+const DEFAULT_SCATTER_CULL_DISTANCE = 240;
+const cullingProjectionMatrix = new THREE.Matrix4();
+const cullingFrustum = new THREE.Frustum();
+const VISIBILITY_CULL_INTERVAL_MS = 90;
+const VISIBILITY_CULL_MOVE_EPSILON_SQ = 0.35 * 0.35;
+const VISIBILITY_CULL_ROTATE_EPSILON = 0.0015;
+const visibilityCullPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
+const visibilityCullQuaternion = new THREE.Quaternion();
+let visibilityCullDirty = true;
+let lastVisibilityCullAt = -Infinity;
+const SHADOW_UPDATE_TARGET_EPSILON_SQ = 6 * 6;
+const shadowTargetPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
 
 // ---------- Keyboard flight controls ----------
 const flightKeys = new Set();
@@ -60,12 +120,6 @@ const flightForward = new THREE.Vector3();
 const flightRight = new THREE.Vector3();
 const flightDelta = new THREE.Vector3();
 const flightSpeed = 22;
-const X_AXIS = new THREE.Vector3(1, 0, 0);
-const placementPos = new THREE.Vector3();
-const placementQuat = new THREE.Quaternion();
-const placementScale = new THREE.Vector3();
-const placementTilt = new THREE.Euler();
-const placementTiltQuat = new THREE.Quaternion();
 
 function isTypingTarget(target) {
   if (!target) return false;
@@ -129,10 +183,13 @@ window.addEventListener('blur', () => {
 
 // ---------- Sky + lights ----------
 const skyCtl = buildSky(scene, renderer);
+freezeStaticTransform(skyCtl.sky);
+freezeStaticTransform(skyCtl.sunsetDome);
+freezeStaticTransform(skyCtl.mountains);
 
 const sun = new THREE.DirectionalLight(0xfff0d6, 2.4);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(1024, 1024);
 sun.shadow.camera.near = 0.5;
 sun.shadow.camera.far = 200;
 sun.shadow.camera.left = -60;
@@ -153,6 +210,20 @@ const sunLensFlare = createSunLensFlare(scene);
 const hemi = new THREE.HemisphereLight(0xb8d8ff, 0xb98260, 0.6);
 scene.add(hemi);
 
+const sunWarmColor = new THREE.Color(0xff9a56);
+const sunCoolColor = new THREE.Color(0xfff2d6);
+const sunNightColor = new THREE.Color(0x2c3f7a);
+const sunColor = new THREE.Color();
+const fogWarmColor = new THREE.Color(0xe9a171);
+const fogVioletColor = new THREE.Color(0xb199b6);
+const fogCoolColor = new THREE.Color(0xc8d4dd);
+const fogNightColor = new THREE.Color(0x11182d);
+const fogColor = new THREE.Color();
+const hemiSunsetColor = new THREE.Color(0x7b8ac4);
+const hemiNightColor = new THREE.Color(0x10183b);
+const hemiGroundSunsetColor = new THREE.Color(0xd07658);
+const hemiGroundNightColor = new THREE.Color(0x080814);
+
 // ---------- Shared materials ----------
 const ocotilloMaterial = createOcotilloMaterial();
 const treeMaterial = createTreeMaterial();
@@ -160,8 +231,19 @@ const cactusMaterial = createCactusSpineMaterial();
 const creosoteMaterial = createCreosoteMaterial();
 const rockMaterial = createRockMaterial();
 const sharedMaterials = new Set([ocotilloMaterial, treeMaterial, cactusMaterial, creosoteMaterial, rockMaterial]);
+const SCATTER_GEOMETRY_CACHE_LIMIT = 192;
+const PERF_LOG_PREFIX = '[desert-perf]';
+const scatterGeometryCache = new Map();
+const cachedScatterGeometries = new Set();
+const scatterGeometryRefs = new Map();
 
 // ---------- Generation parameters ----------
+let desertUi = null;
+const guiControllers = [];
+// NPS 2020 Saguaro Census: 21,517 saguaros across 45 200 m x 200 m plots.
+// https://www.nps.gov/sagu/learn/nature/2020-saguaro-census-final-report.htm
+const SAGUARO_CENSUS_DENSITY = 21517 / (45 * 200 * 200);
+
 const params = {
   seed: 1337,
 
@@ -171,16 +253,16 @@ const params = {
   hydrologySegments: 88,
   heightScale: 5.5,
   macroScale: 0.012,
-  ridgeScale: 0.06,
-  rippleScale: 0.35,
+  ridgeScale: 0.035,
+  rippleScale: 0.16,
   washStrength: 0.6,
-  fanStrength: 0.9,
+  fanStrength: 0.72,
   erosionStrength: 0.75,
-  rockySlopeStrength: 0.65,
+  rockySlopeStrength: 0.38,
 
   // Plant densities (instances per m^2)
   saguaroEnabled: true,
-  saguaroDensity: 0.012,
+  saguaroDensity: SAGUARO_CENSUS_DENSITY,
   saguaroMaxHeight: 7.0,
   saguaroArmProbability: 0.7,
   barrelEnabled: true,
@@ -214,19 +296,41 @@ const params = {
   cloudRate: 1.0,
 
   regenerate: () => regenerate(),
-  randomSeed: () => { params.seed = Math.floor(Math.random() * 1e9); gui.controllers.forEach(c => c.updateDisplay()); regenerate(); },
+  randomSeed: () => {
+    params.seed = Math.floor(Math.random() * 1e9);
+    refreshGui();
+    regenerate();
+  },
 };
 
 // ---------- Scene root for procedural content ----------
 let world = new THREE.Group();
 scene.add(world);
+let buildGeneration = 0;
+let progressHideTimer = 0;
+let generationWorker = null;
+let generationProportions = null;
+let generationStartedAt = 0;
+const applyQueue = [];
+let applyQueueRunning = false;
+const APPLY_FRAME_BUDGET_MS = 6;
+const TERRAIN_CHUNK_LOAD_RADIUS = 1;
+const TERRAIN_CHUNK_UNLOAD_RADIUS = 2;
+const terrainChunks = new Map();
+const pendingChunkKeys = new Set();
+const desiredChunkKeys = new Set();
+let lastChunkCenterKey = '';
 
 function clearWorld() {
   // Dispose generated geometries and one-off materials. Plant/rock materials are
   // shared at module scope and survive regeneration.
   world.traverse(obj => {
     if (obj.isMesh) {
-      if (obj.geometry) obj.geometry.dispose();
+      if (obj.geometry && cachedScatterGeometries.has(obj.geometry)) {
+        releaseScatterGeometry(obj.geometry);
+      } else if (obj.geometry) {
+        obj.geometry.dispose();
+      }
       const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
       for (const material of materials) {
         if (material && !sharedMaterials.has(material)) material.dispose();
@@ -236,14 +340,74 @@ function clearWorld() {
   scene.remove(world);
   world = new THREE.Group();
   scene.add(world);
+  terrain = null;
+  terrainChunks.clear();
+  pendingChunkKeys.clear();
+  desiredChunkKeys.clear();
+  lastChunkCenterKey = '';
+  cameraColliders.length = 0;
+  cameraColliderGrid.clear();
+  cameraColliderMaxRadius = 0;
+  markVisibilityCullingDirty();
+  markShadowMapDirty();
 }
 
-function regenerate() {
-  const t0 = performance.now();
+async function regenerate() {
+  const generation = ++buildGeneration;
+  generationStartedAt = performance.now();
+  if (generationWorker) {
+    generationWorker.terminate();
+    generationWorker = null;
+  }
+  applyQueue.length = 0;
+  applyQueueRunning = false;
+  generationProportions = createProportionOracle({ rootMeasurement: params.saguaroMaxHeight });
   clearWorld();
-  buildWorld();
-  const t1 = performance.now();
-  console.log(`regenerate: ${(t1 - t0).toFixed(0)}ms`);
+  logPerf('generation-start', {
+    generation,
+    seed: params.seed,
+    terrainSize: params.terrainSize,
+    terrainSegments: params.terrainSegments,
+    paloVerdeEnabled: params.paloVerdeEnabled,
+    paloVerdeDensity: params.paloVerdeDensity,
+    cacheEntries: scatterGeometryCache.size,
+  });
+  setGenerationProgress(0, true, 'Starting generation worker');
+
+  generationWorker = new Worker(new URL('./generationWorker.js', import.meta.url), { type: 'module' });
+  generationWorker.onmessage = (event) => {
+    const message = event.data;
+    if (!message || message.generation !== buildGeneration) return;
+    if (message.perf) logPerf('worker-message', message.perf);
+    if (message.type === 'progress') {
+      setGenerationProgress(message.progress, true, message.phase);
+      return;
+    }
+    if (message.type === 'terrain') {
+      enqueueApply(generation, message.phase, message.progress, () => applyTerrainData(message.chunkKey, message.terrain));
+      return;
+    }
+    if (message.type === 'scatter') {
+      enqueueApply(generation, message.phase, message.progress, createScatterApplyTask(message.chunkKey, message.stage, generationProportions));
+      return;
+    }
+    if (message.type === 'chunkComplete') {
+      pendingChunkKeys.delete(message.chunkKey);
+      setGenerationProgress(message.progress, true, message.phase);
+      maybeFinishGeneration(generation);
+      return;
+    }
+    if (message.type === 'error') {
+      console.error(message.message);
+      setGenerationProgress(1, true, `Generation failed: ${message.message}`);
+    }
+  };
+  generationWorker.onerror = (event) => {
+    if (generation !== buildGeneration) return;
+    console.error(event.message);
+    setGenerationProgress(1, true, `Generation failed: ${event.message}`);
+  };
+  updateTerrainChunks(true);
 }
 
 // Coalesce rapid GUI changes (slider scrubbing) into one rebuild per frame.
@@ -260,13 +424,102 @@ function scheduleRegenerate() {
 // ---------- World construction ----------
 let terrain;
 
-function buildWorld() {
-  const proportions = createProportionOracle({ rootMeasurement: params.saguaroMaxHeight });
+function setGenerationProgress(progress, visible = true, phase = '') {
+  if (progressHideTimer) {
+    clearTimeout(progressHideTimer);
+    progressHideTimer = 0;
+  }
+  desertUi?.setGenerationProgress(progress, visible, phase);
+}
 
-  // Terrain
-  terrain = buildTerrain({
-    size: params.terrainSize,
-    segments: params.terrainSegments,
+function hideGenerationProgress(generation) {
+  progressHideTimer = window.setTimeout(() => {
+    if (generation !== buildGeneration) return;
+    desertUi?.setGenerationProgress(1, false);
+  }, 300);
+}
+
+function enqueueApply(generation, phase, progress, apply) {
+  applyQueue.push({ generation, phase, progress, apply });
+  if (!applyQueueRunning) processApplyQueue();
+}
+
+function processApplyQueue() {
+  if (applyQueueRunning) return;
+  applyQueueRunning = true;
+  requestAnimationFrame(() => {
+    const task = applyQueue.shift();
+    const deadline = performance.now() + APPLY_FRAME_BUDGET_MS;
+    if (task && task.generation === buildGeneration) {
+      setGenerationProgress(task.progress, true, `Rendering ${task.phase.toLowerCase()}`);
+      const applyStart = performance.now();
+      const complete = runApplyTask(task.apply, deadline);
+      if (!complete) {
+        applyQueue.unshift(task);
+      } else {
+        logPerf('main-apply', {
+          generation: task.generation,
+          phase: task.phase,
+          applyMs: roundMs(performance.now() - applyStart),
+          queuedAfter: applyQueue.length,
+        });
+      }
+    }
+    applyQueueRunning = false;
+    if (applyQueue.length > 0) {
+      processApplyQueue();
+    } else {
+      maybeFinishGeneration(buildGeneration);
+    }
+  });
+}
+
+function runApplyTask(apply, deadline) {
+  if (typeof apply === 'function') {
+    apply();
+    return true;
+  }
+  if (apply && typeof apply.run === 'function') {
+    return apply.run(deadline) !== false;
+  }
+  return true;
+}
+
+function maybeFinishGeneration(generation) {
+  if (generation !== buildGeneration || pendingChunkKeys.size > 0 || applyQueue.length > 0 || applyQueueRunning) return;
+  setGenerationProgress(1, true, 'Generation complete');
+  hideGenerationProgress(generation);
+  const t1 = performance.now();
+  logPerf('generation-complete', {
+    generation,
+    totalMs: roundMs(t1 - generationStartedAt),
+    chunks: terrainChunks.size,
+    cacheEntries: scatterGeometryCache.size,
+  });
+}
+
+function logPerf(event, data = {}) {
+  console.info(PERF_LOG_PREFIX, JSON.stringify({ event, ...data }));
+}
+
+function roundMs(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function freezeStaticTransform(object) {
+  object.traverse(child => {
+    child.updateMatrix();
+    child.updateMatrixWorld(true);
+    child.matrixAutoUpdate = false;
+    child.matrixWorldAutoUpdate = false;
+  });
+}
+
+function generationParams() {
+  return {
+    seed: params.seed,
+    terrainSize: params.terrainSize,
+    terrainSegments: params.terrainSegments,
     hydrologySegments: params.hydrologySegments,
     heightScale: params.heightScale,
     macroScale: params.macroScale,
@@ -276,543 +529,734 @@ function buildWorld() {
     fanStrength: params.fanStrength,
     erosionStrength: params.erosionStrength,
     rockySlopeStrength: params.rockySlopeStrength,
-  }, subSeed(params.seed, 1));
-  world.add(terrain.mesh);
-  terrain.mesh.castShadow = false;
-  terrain.mesh.receiveShadow = true;
-
-  const nursePlants = [];
-  const matureSaguaroZones = [];
-  const resourceZones = [];
-  const registerPlantZone = (mat, {
-    kind,
-    canopyRadius = 0,
-    rootRadius,
-    resourceUse = 0.5,
-  }) => {
-    mat.decompose(placementPos, placementQuat, placementScale);
-    const zone = {
-      x: placementPos.x,
-      z: placementPos.z,
-      radius: rootRadius * placementScale.x,
-      strength: resourceUse,
-      kind,
-    };
-    resourceZones.push(zone);
-    if (canopyRadius > 0) {
-      nursePlants.push({
-        x: placementPos.x,
-        z: placementPos.z,
-        radius: canopyRadius * placementScale.x,
-        rootRadius: zone.radius,
-        kind,
-      });
-    }
+    saguaroEnabled: params.saguaroEnabled,
+    saguaroDensity: params.saguaroDensity,
+    saguaroMaxHeight: params.saguaroMaxHeight,
+    saguaroArmProbability: params.saguaroArmProbability,
+    barrelEnabled: params.barrelEnabled,
+    barrelDensity: params.barrelDensity,
+    paloVerdeEnabled: params.paloVerdeEnabled,
+    paloVerdeDensity: params.paloVerdeDensity,
+    paloVerdeFlowering: params.paloVerdeFlowering,
+    mesquiteEnabled: params.mesquiteEnabled,
+    mesquiteDensity: params.mesquiteDensity,
+    mesquiteSeedPods: params.mesquiteSeedPods,
+    pricklyPearEnabled: params.pricklyPearEnabled,
+    pricklyPearDensity: params.pricklyPearDensity,
+    ocotilloEnabled: params.ocotilloEnabled,
+    ocotilloDensity: params.ocotilloDensity,
+    ocotilloFlowering: params.ocotilloFlowering,
+    creosoteEnabled: params.creosoteEnabled,
+    creosoteDensity: params.creosoteDensity,
+    smallRockDensity: params.smallRockDensity,
+    largeRockDensity: params.largeRockDensity,
   };
-
-  // Palo verde — terrain/wash first, then nurse shade for young saguaros.
-  scatterPlants({
-    generator: generatePaloVerde,
-    generatorOpts: (rng) => ({
-      flowering: params.paloVerdeFlowering,
-      age: Math.pow(rng(), 0.58),
-      proportions,
-    }),
-    material: treeMaterial,
-    terrain,
-    densityPerArea: params.paloVerdeEnabled ? params.paloVerdeDensity : 0,
-    maxSlope: 1.0,
-    scaleRange: [0.84, 1.12],
-    variantCount: 8,
-    seed: subSeed(params.seed, 4),
-    parent: world,
-    lodLevels: plantLodLevels,
-    lodOrigin: camera.position,
-    attemptMultiplier: 14,
-    candidateFilter: (ctx) => acceptPaloVerdeCandidate(ctx, resourceZones, proportions),
-    onPlace: (mat, rng, i, ctx) => {
-      const age = ctx.variantOpts.age ?? 0.58;
-      const maturity = THREE.MathUtils.smoothstep(age, 0.18, 0.76);
-      registerPlantZone(mat, {
-        kind: 'paloVerde',
-        canopyRadius: proportions.paloVerde.canopyRadius * THREE.MathUtils.lerp(0.42, 1.08, maturity),
-        rootRadius: proportions.paloVerde.rootRadius * THREE.MathUtils.lerp(0.34, 1.05, maturity),
-        resourceUse: THREE.MathUtils.lerp(0.22, 0.58, maturity),
-      });
-    },
-  });
-
-  // Mesquite — darker wash trees with broader shade and stronger water demand.
-  scatterPlants({
-    generator: generateMesquite,
-    generatorOpts: (rng) => ({
-      seedPods: params.mesquiteSeedPods,
-      age: Math.pow(rng(), 0.54),
-      proportions,
-    }),
-    material: treeMaterial,
-    terrain,
-    densityPerArea: params.mesquiteEnabled ? params.mesquiteDensity : 0,
-    maxSlope: 0.75,
-    scaleRange: [0.74, 1.08],
-    variantCount: 7,
-    seed: subSeed(params.seed, 10),
-    parent: world,
-    lodLevels: plantLodLevels,
-    lodOrigin: camera.position,
-    attemptMultiplier: 12,
-    candidateFilter: (ctx) => acceptMesquiteCandidate(ctx, resourceZones, proportions),
-    onPlace: (mat, rng, i, ctx) => {
-      const age = ctx.variantOpts.age ?? 0.58;
-      const maturity = THREE.MathUtils.smoothstep(age, 0.16, 0.74);
-      registerPlantZone(mat, {
-        kind: 'mesquite',
-        canopyRadius: proportions.mesquite.canopyRadius * THREE.MathUtils.lerp(0.36, 1.10, maturity),
-        rootRadius: proportions.mesquite.rootRadius * THREE.MathUtils.lerp(0.32, 1.08, maturity),
-        resourceUse: THREE.MathUtils.lerp(0.30, 0.82, maturity),
-      });
-    },
-  });
-
-  // Saguaros — seedlings cluster under nurse plants; old plants claim root space.
-  scatterPlants({
-    generator: generateSaguaro,
-    generatorOpts: (rng) => ({
-      proportions,
-      armProbability: params.saguaroArmProbability,
-      age: Math.pow(rng(), 0.68),
-    }),
-    material: cactusMaterial,
-    terrain,
-    densityPerArea: params.saguaroEnabled ? params.saguaroDensity : 0,
-    maxSlope: 0.9,
-    scaleRange: [0.92, 1.08],
-    variantCount: 12,
-    seed: subSeed(params.seed, 2),
-    parent: world,
-    lodLevels: plantLodLevels,
-    lodOrigin: camera.position,
-    attemptMultiplier: 24,
-    candidateFilter: (ctx) => acceptSaguaroCandidate(ctx, nursePlants, matureSaguaroZones, resourceZones, proportions),
-    onPlace: (mat, rng, i, ctx) => {
-      const age = ctx.variantOpts.age ?? 0.5;
-      const height = estimateSaguaroHeight(age, proportions) * ctx.scale;
-      if (age < 0.62) return;
-      matureSaguaroZones.push({
-        x: ctx.x,
-        z: ctx.z,
-        age,
-        radius: Math.max(proportions.ecology.minMatureSaguaroCanopy, height * THREE.MathUtils.lerp(0.55, 0.95, age)),
-      });
-      resourceZones.push({
-        x: ctx.x,
-        z: ctx.z,
-        radius: Math.max(proportions.ecology.minMatureSaguaroRoot, height * THREE.MathUtils.lerp(0.62, 0.92, age)),
-        strength: THREE.MathUtils.lerp(0.42, 0.82, age),
-        kind: 'saguaro',
-      });
-    },
-  });
-
-  // Barrel cactus — south-facing tilt, all slopes ok
-  scatterPlants({
-    generator: generateBarrelCactus,
-    generatorOpts: (rng) => ({
-      age: Math.pow(rng(), 0.62),
-      proportions,
-    }),
-    material: cactusMaterial,
-    terrain,
-    densityPerArea: params.barrelEnabled ? params.barrelDensity : 0,
-    maxSlope: 1.4,
-    scaleRange: [0.85, 1.25],
-    variantCount: 6,
-    seed: subSeed(params.seed, 3),
-    parent: world,
-    lodLevels: plantLodLevels,
-    lodOrigin: camera.position,
-    attemptMultiplier: 12,
-    candidateFilter: (ctx) => acceptBarrelCactusCandidate(ctx, nursePlants, matureSaguaroZones, resourceZones, proportions),
-    onPlace: (mat, rng, i, ctx) => {
-      // Older barrels lean more strongly toward the south (positive +Z here).
-      const age = ctx.variantOpts.age ?? 0.5;
-      const maturity = THREE.MathUtils.smoothstep(age, 0.22, 0.82);
-      const tilt = THREE.MathUtils.degToRad(rngRange(
-        rng,
-        THREE.MathUtils.lerp(2, 8, maturity),
-        THREE.MathUtils.lerp(8, 26, maturity),
-      ));
-      placementTiltQuat.setFromAxisAngle(X_AXIS, tilt);
-      mat.decompose(placementPos, placementQuat, placementScale);
-      placementQuat.multiply(placementTiltQuat);
-      mat.compose(placementPos, placementQuat, placementScale);
-    },
-  });
-
-  // Prickly pear — tolerates more terrain
-  scatterPlants({
-    generator: generatePricklyPear,
-    generatorOpts: (rng) => ({
-      age: Math.pow(rng(), 0.70),
-      proportions,
-    }),
-    material: cactusMaterial,
-    terrain,
-    densityPerArea: params.pricklyPearEnabled ? params.pricklyPearDensity : 0,
-    maxSlope: 1.4,
-    scaleRange: [0.85, 1.4],
-    variantCount: 6,
-    seed: subSeed(params.seed, 5),
-    parent: world,
-    lodLevels: plantLodLevels,
-    lodOrigin: camera.position,
-    attemptMultiplier: 12,
-    candidateFilter: (ctx) => acceptPricklyPearCandidate(ctx, nursePlants, matureSaguaroZones, resourceZones, proportions),
-  });
-
-  // Ocotillo — likes rocky runoff slopes more than wash bottoms.
-  scatterPlants({
-    generator: generateOcotillo,
-    generatorOpts: (rng) => ({
-      flowering: params.ocotilloFlowering,
-      age: Math.pow(rng(), 0.64),
-      proportions,
-    }),
-    material: ocotilloMaterial,
-    terrain,
-    densityPerArea: params.ocotilloEnabled ? params.ocotilloDensity : 0,
-    maxSlope: 2.0,
-    scaleRange: [0.8, 1.2],
-    variantCount: 6,
-    seed: subSeed(params.seed, 6),
-    parent: world,
-    lodLevels: plantLodLevels,
-    lodOrigin: camera.position,
-    attemptMultiplier: 10,
-    candidateFilter: (ctx) => acceptOcotilloCandidate(ctx, matureSaguaroZones, resourceZones, proportions),
-  });
-
-  // Creosote — dry open interfluves, thinned near active washes and strong roots.
-  scatterPlants({
-    generator: generateCreosote,
-    generatorOpts: (rng) => ({
-      age: Math.pow(rng(), 0.56),
-      proportions,
-    }),
-    material: creosoteMaterial,
-    terrain,
-    densityPerArea: params.creosoteEnabled ? params.creosoteDensity : 0,
-    maxSlope: 1.6,
-    scaleRange: [0.7, 1.3],
-    variantCount: 6,
-    seed: subSeed(params.seed, 7),
-    parent: world,
-    lodLevels: plantLodLevels,
-    lodOrigin: camera.position,
-    castShadow: false,
-    attemptMultiplier: 10,
-    candidateFilter: (ctx) => acceptCreosoteCandidate(ctx, matureSaguaroZones, resourceZones, proportions),
-  });
-
-  // Small rocks (pebble scatter)
-  scatterPlants({
-    generator: (rng) => generateRock(rng, { size: rngRange(rng, proportions.rocks.pebbleSize[0], proportions.rocks.pebbleSize[1]) }),
-    material: rockMaterial,
-    terrain,
-    densityPerArea: params.smallRockDensity,
-    maxSlope: 4.0,
-    scaleRange: [0.7, 1.4],
-    variantCount: 8,
-    seed: subSeed(params.seed, 8),
-    parent: world,
-    castShadow: false,
-    onPlace: (mat, rng) => {
-      // Sink rocks slightly so they look settled in the dirt.
-      mat.decompose(placementPos, placementQuat, placementScale);
-      placementPos.y -= rngRange(rng, proportions.rocks.pebbleSink[0], proportions.rocks.pebbleSink[1]);
-      placementTilt.set(rngRangeSigned(rng, 0.28), 0, rngRangeSigned(rng, 0.28));
-      placementQuat.multiply(placementTiltQuat.setFromEuler(placementTilt));
-      mat.compose(placementPos, placementQuat, placementScale);
-    },
-  });
-
-  // Big rocks (boulders)
-  scatterPlants({
-    generator: (rng) => generateRock(rng, { size: rngRange(rng, proportions.rocks.boulderSize[0], proportions.rocks.boulderSize[1]) }),
-    material: rockMaterial,
-    terrain,
-    densityPerArea: params.largeRockDensity,
-    maxSlope: 4.0,
-    scaleRange: [0.8, 1.5],
-    variantCount: 6,
-    seed: subSeed(params.seed, 9),
-    parent: world,
-    onPlace: (mat, rng) => {
-      mat.decompose(placementPos, placementQuat, placementScale);
-      placementPos.y -= rngRange(rng, proportions.rocks.boulderSink[0], proportions.rocks.boulderSink[1]);
-      placementTilt.set(rngRangeSigned(rng, 0.18), 0, rngRangeSigned(rng, 0.18));
-      placementQuat.multiply(placementTiltQuat.setFromEuler(placementTilt));
-      mat.compose(placementPos, placementQuat, placementScale);
-    },
-  });
 }
 
-function rngRangeSigned(rng, maxAbs) {
-  return (rng() * 2 - 1) * maxAbs;
+function chunkKey(cx, cz) {
+  return `${cx},${cz}`;
 }
 
-function estimateSaguaroHeight(age, proportions) {
-  return proportions.saguaro.heightForAge(age);
-}
-
-function distance2D(x0, z0, x1, z1) {
-  return Math.hypot(x0 - x1, z0 - z1);
-}
-
-function nearestPoint(x, z, points) {
-  let nearest = null;
-  let nearestDistance = Infinity;
-  for (const point of points) {
-    const distance = distance2D(x, z, point.x, point.z);
-    if (distance < nearestDistance) {
-      nearest = point;
-      nearestDistance = distance;
-    }
-  }
-  return nearest ? { point: nearest, distance: nearestDistance } : null;
-}
-
-function matureSaguaroPressure(x, z, zones, padding = 0) {
-  let pressure = 0;
-  for (const zone of zones) {
-    const d = distance2D(x, z, zone.x, zone.z);
-    const reach = zone.radius + padding;
-    if (d >= reach) continue;
-    pressure = Math.max(pressure, 1 - d / reach);
-  }
-  return pressure;
-}
-
-function resourcePressure(x, z, zones, {
-  padding = 0,
-  kinds = null,
-  ignoreKind = null,
-} = {}) {
-  let pressure = 0;
-  for (const zone of zones) {
-    if (kinds && !kinds.includes(zone.kind)) continue;
-    if (ignoreKind && zone.kind === ignoreKind) continue;
-    const d = distance2D(x, z, zone.x, zone.z);
-    const reach = zone.radius + padding;
-    if (reach <= 0 || d >= reach) continue;
-    pressure = Math.max(pressure, (1 - d / reach) * zone.strength);
-  }
-  return THREE.MathUtils.clamp(pressure, 0, 1);
-}
-
-function terrainWater(ctx) {
-  const info = ctx.terrainInfo;
-  if (!info) {
-    const moisture = THREE.MathUtils.clamp(0.34 - ctx.slope * 0.08 - ctx.height * 0.025, 0, 1);
-    return {
-      moisture,
-      flow: moisture,
-      runoff: THREE.MathUtils.clamp(ctx.slope * 0.25, 0, 1),
-      wash: 0,
-      gravel: 0,
-      basin: 0,
-      shoulder: 0,
-    };
-  }
+function chunkCenterForPoint(x, z) {
+  const size = params.terrainSize;
   return {
-    moisture: info.soilMoisture,
-    flow: info.flowAccumulation,
-    runoff: info.runoff,
-    wash: info.washProximity,
-    gravel: info.washGravel,
-    basin: info.basin,
-    shoulder: info.shoulder,
+    cx: Math.floor((x + size / 2) / size),
+    cz: Math.floor((z + size / 2) / size),
   };
 }
 
-function chanceFromScore(ctx, score) {
-  return ctx.rng() < THREE.MathUtils.clamp(score, 0.02, 0.98);
-}
-
-function acceptPaloVerdeCandidate(ctx, resourceZones, proportions) {
-  const water = terrainWater(ctx);
-  const washMargin = water.wash * (1 - water.gravel * 0.72);
-  const treePressure = resourcePressure(ctx.x, ctx.z, resourceZones, {
-    padding: proportions.ecology.treeCompetitionPadding,
-    kinds: ['paloVerde', 'mesquite'],
-  });
-  if (water.flow > 0.9 && water.gravel > 0.62) return ctx.rng() < 0.12;
-  if (water.moisture < 0.12) return ctx.rng() < 0.22;
-  const score =
-    0.24 +
-    water.moisture * 0.58 +
-    washMargin * 0.26 +
-    water.basin * 0.12 -
-    water.runoff * 0.26 -
-    treePressure * 0.64;
-  return chanceFromScore(ctx, score);
-}
-
-function acceptSaguaroCandidate(ctx, nursePlants, matureSaguaroZones, resourceZones, proportions) {
-  const age = ctx.variantOpts.age ?? 0.5;
-  const height = estimateSaguaroHeight(age, proportions) * ctx.scale;
-  const rootPadding = Math.max(proportions.ecology.minSaguaroRootPadding, height * 0.35);
-  const water = terrainWater(ctx);
-  if (matureSaguaroPressure(ctx.x, ctx.z, matureSaguaroZones, rootPadding) > 0) return false;
-  if (water.flow > 0.82 && water.gravel > 0.48) return ctx.rng() < 0.05;
-  if (water.moisture > 0.76) return ctx.rng() < 0.12;
-  if (water.runoff > 0.78 && age < 0.34) return ctx.rng() < 0.10;
-
-  const saguaroPressure = resourcePressure(ctx.x, ctx.z, resourceZones, {
-    padding: rootPadding,
-    kinds: ['saguaro'],
-  });
-  if (saguaroPressure > 0.12) return false;
-
-  const treePressure = resourcePressure(ctx.x, ctx.z, resourceZones, {
-    padding: age < 0.62 ? proportions.ecology.immatureSaguaroTreePadding : rootPadding * 0.7,
-    kinds: ['paloVerde', 'mesquite'],
-  });
-  if (age >= 0.62 && treePressure > 0.35) return ctx.rng() < THREE.MathUtils.lerp(0.44, 0.06, treePressure);
-
-  const nurse = nearestPoint(ctx.x, ctx.z, nursePlants);
-  if (age < 0.34) {
-    if (water.moisture < 0.08 && !nurse) return ctx.rng() < 0.01;
-    if (!nurse) return ctx.rng() < 0.02;
-    const canopy = nurse.point.radius;
-    if (nurse.distance < canopy * 0.18) return ctx.rng() < 0.45;
-    if (nurse.distance < canopy) return ctx.rng() < 0.96;
-    if (nurse.distance < canopy + proportions.ecology.youngSaguaroNurseEdge) return ctx.rng() < 0.32;
-    return ctx.rng() < 0.025;
-  }
-
-  if (age < 0.62) {
-    if (!nurse) return ctx.rng() < 0.22;
-    const canopy = nurse.point.radius;
-    if (nurse.distance < canopy * 1.25) return ctx.rng() < 0.78;
-    if (nurse.distance < canopy + proportions.ecology.juvenileSaguaroNurseEdge) return ctx.rng() < 0.45;
-    return ctx.rng() < 0.24;
-  }
-
-  if (!nurse) return ctx.rng() < 0.52;
-  const canopy = nurse.point.radius;
-  if (nurse.distance < canopy * 0.55) return ctx.rng() < 0.38;
-  if (nurse.distance < canopy + proportions.ecology.matureSaguaroNurseEdge) return ctx.rng() < 0.62;
-  return ctx.rng() < 0.46;
-}
-
-function acceptBarrelCactusCandidate(ctx, nursePlants, matureSaguaroZones, resourceZones, proportions) {
-  const water = terrainWater(ctx);
-  if (water.moisture > 0.72 || (water.flow > 0.78 && water.gravel > 0.42)) return ctx.rng() < 0.10;
-  if (water.moisture < 0.06 && water.runoff < 0.28) return ctx.rng() < 0.34;
-
-  const pressure = matureSaguaroPressure(ctx.x, ctx.z, matureSaguaroZones, proportions.ecology.barrelSaguaroPadding);
-  if (pressure > 0.72) return ctx.rng() < 0.04;
-  if (pressure > 0.18) return ctx.rng() < THREE.MathUtils.lerp(0.72, 0.12, pressure);
-  const rootPressure = resourcePressure(ctx.x, ctx.z, resourceZones, { padding: proportions.ecology.barrelRootPadding });
-  if (rootPressure > 0.76) return ctx.rng() < 0.06;
-  if (rootPressure > 0.28) return ctx.rng() < THREE.MathUtils.lerp(0.74, 0.18, rootPressure);
-
-  const nurse = nearestPoint(ctx.x, ctx.z, nursePlants);
-  if (!nurse) return true;
-  const canopy = nurse.point.radius;
-  if (nurse.distance < canopy * 0.65) return ctx.rng() < 0.25;
-  if (nurse.distance < canopy + proportions.ecology.barrelNurseEdge) return ctx.rng() < 0.58;
-  return true;
-}
-
-function acceptPricklyPearCandidate(ctx, nursePlants, matureSaguaroZones, resourceZones, proportions) {
-  const water = terrainWater(ctx);
-  if (water.flow > 0.9 && water.gravel > 0.62) return ctx.rng() < 0.18;
-  if (water.moisture < 0.05) return ctx.rng() < 0.24;
-
-  const pressure = matureSaguaroPressure(ctx.x, ctx.z, matureSaguaroZones, proportions.ecology.pricklyPearSaguaroPadding);
-  if (pressure > 0.70) return ctx.rng() < 0.07;
-  if (pressure > 0.25) return ctx.rng() < THREE.MathUtils.lerp(0.80, 0.20, pressure);
-  const rootPressure = resourcePressure(ctx.x, ctx.z, resourceZones, { padding: proportions.ecology.pricklyPearRootPadding });
-  if (rootPressure > 0.82) return ctx.rng() < 0.08;
-
-  const nurse = nearestPoint(ctx.x, ctx.z, nursePlants);
-  const waterScore = 0.52 + water.moisture * 0.32 + water.wash * (1 - water.gravel) * 0.18 - rootPressure * 0.24;
-  if (!nurse) return chanceFromScore(ctx, waterScore);
-  const canopy = nurse.point.radius;
-  if (nurse.distance < canopy * 0.25) return ctx.rng() < 0.45;
-  if (nurse.distance < canopy + proportions.ecology.pricklyPearNurseEdge) return ctx.rng() < 0.9;
-  return chanceFromScore(ctx, waterScore);
-}
-
-function acceptMesquiteCandidate(ctx, resourceZones, proportions) {
-  const water = terrainWater(ctx);
-  const treePressure = resourcePressure(ctx.x, ctx.z, resourceZones, {
-    padding: proportions.ecology.mesquiteCompetitionPadding,
-    kinds: ['paloVerde', 'mesquite'],
-  });
-  if (treePressure > 0.7) return ctx.rng() < 0.05;
-  if (water.moisture < 0.24 && water.flow < 0.32) return ctx.rng() < 0.08;
-
-  // Mesquite favors flatter wash margins and bajada toes more than exposed slopes.
-  let score =
-    0.12 +
-    water.moisture * 0.62 +
-    water.flow * 0.46 +
-    water.gravel * 0.18 -
-    water.runoff * 0.32 -
-    treePressure * 0.58;
-  if (ctx.slope > 0.55) score *= 0.35;
-  if (ctx.height > 1.1) score *= 0.52;
-  if (ctx.height < -0.8) score += 0.12;
-  return chanceFromScore(ctx, score);
-}
-
-function acceptOpenPlantCandidate(ctx, matureSaguaroZones, resourceZones, proportions, competitionTolerance = 0.3) {
-  const pressure = matureSaguaroPressure(ctx.x, ctx.z, matureSaguaroZones, proportions.ecology.openPlantSaguaroPadding);
-  const rootPressure = Math.max(
-    pressure,
-    resourcePressure(ctx.x, ctx.z, resourceZones, { padding: proportions.ecology.openPlantRootPadding }),
+function createChunkCullingSphere(cx, cz) {
+  const half = params.terrainSize / 2;
+  const radius = Math.sqrt(half * half * 2) + params.heightScale + 24;
+  return new THREE.Sphere(
+    new THREE.Vector3(cx * params.terrainSize, 0, cz * params.terrainSize),
+    radius,
   );
-  if (rootPressure <= competitionTolerance) return true;
-  return ctx.rng() < THREE.MathUtils.lerp(0.65, 0.06, rootPressure);
 }
 
-function acceptOcotilloCandidate(ctx, matureSaguaroZones, resourceZones, proportions) {
-  const water = terrainWater(ctx);
-  if (water.flow > 0.72 && water.gravel > 0.34) return ctx.rng() < 0.16;
-  const open = acceptOpenPlantCandidate(ctx, matureSaguaroZones, resourceZones, proportions, 0.42);
-  if (!open) return false;
-  const rockyRunoffScore =
-    0.18 +
-    ctx.slope * 0.24 +
-    water.runoff * 0.54 +
-    water.shoulder * 0.22 -
-    water.moisture * 0.22;
-  return chanceFromScore(ctx, rockyRunoffScore);
+function updateTerrainChunks(force = false) {
+  if (!generationWorker) return;
+  const center = chunkCenterForPoint(camera.position.x, camera.position.z);
+  const centerKey = chunkKey(center.cx, center.cz);
+  if (!force && centerKey === lastChunkCenterKey) return;
+  lastChunkCenterKey = centerKey;
+
+  desiredChunkKeys.clear();
+  const requests = [];
+  for (let dz = -TERRAIN_CHUNK_LOAD_RADIUS; dz <= TERRAIN_CHUNK_LOAD_RADIUS; dz++) {
+    for (let dx = -TERRAIN_CHUNK_LOAD_RADIUS; dx <= TERRAIN_CHUNK_LOAD_RADIUS; dx++) {
+      const cx = center.cx + dx;
+      const cz = center.cz + dz;
+      const key = chunkKey(cx, cz);
+      desiredChunkKeys.add(key);
+      if (!terrainChunks.has(key) && !pendingChunkKeys.has(key)) {
+        requests.push({ cx, cz, key, distance: Math.max(Math.abs(dx), Math.abs(dz)) });
+      }
+    }
+  }
+
+  requests
+    .sort((a, b) => a.distance - b.distance)
+    .forEach(({ cx, cz, key }) => requestTerrainChunk(cx, cz, key));
+
+  for (const [key, chunk] of terrainChunks) {
+    const distance = Math.max(Math.abs(chunk.cx - center.cx), Math.abs(chunk.cz - center.cz));
+    if (distance > TERRAIN_CHUNK_UNLOAD_RADIUS) unloadTerrainChunk(key);
+  }
 }
 
-function acceptCreosoteCandidate(ctx, matureSaguaroZones, resourceZones, proportions) {
-  const water = terrainWater(ctx);
-  if (water.flow > 0.78 || water.moisture > 0.7) return ctx.rng() < 0.10;
-  const open = acceptOpenPlantCandidate(ctx, matureSaguaroZones, resourceZones, proportions, 0.22);
-  if (!open) return false;
-  const dryOpenScore =
-    0.72 -
-    water.moisture * 0.42 -
-    water.wash * 0.18 -
-    water.runoff * 0.10 +
-    water.basin * 0.10;
-  return chanceFromScore(ctx, dryOpenScore);
+function requestTerrainChunk(cx, cz, key = chunkKey(cx, cz)) {
+  if (!generationWorker || terrainChunks.has(key) || pendingChunkKeys.has(key)) return;
+  const group = new THREE.Group();
+  group.name = `terrain-chunk-${key}`;
+  terrainChunks.set(key, {
+    key,
+    cx,
+    cz,
+    group,
+    terrain: null,
+    cullingSphere: createChunkCullingSphere(cx, cz),
+    cullables: [],
+  });
+  world.add(group);
+  freezeStaticTransform(group);
+  pendingChunkKeys.add(key);
+  setGenerationProgress(0, true, `Generating terrain chunk ${key}`);
+  generationWorker.postMessage({
+    type: 'generateChunk',
+    generation: buildGeneration,
+    chunk: {
+      key,
+      cx,
+      cz,
+      size: params.terrainSize,
+    },
+    params: generationParams(),
+    lodLevels: plantLodLevels,
+  });
+}
+
+function unloadTerrainChunk(key) {
+  const chunk = terrainChunks.get(key);
+  if (!chunk) return;
+  chunk.group.traverse(obj => {
+    if (obj.isMesh) {
+      if (obj.geometry && cachedScatterGeometries.has(obj.geometry)) {
+        releaseScatterGeometry(obj.geometry);
+      } else if (obj.geometry) {
+        obj.geometry.dispose();
+      }
+      const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for (const material of materials) {
+        if (material && !sharedMaterials.has(material)) material.dispose();
+      }
+    }
+  });
+  world.remove(chunk.group);
+  terrainChunks.delete(key);
+  pendingChunkKeys.delete(key);
+  removeChunkCameraColliders(key);
+  markVisibilityCullingDirty();
+  markShadowMapDirty();
+}
+
+function createTerrainHeightSampler(data) {
+  const positions = data.positions;
+  const segments = data.segments;
+  const gridStride = segments + 1;
+  const minX = data.originX - data.size / 2;
+  const minZ = data.originZ - data.size / 2;
+  const gridStep = data.size / segments;
+
+  return (x, z) => {
+    const gx = THREE.MathUtils.clamp((x - minX) / gridStep, 0, segments);
+    const gz = THREE.MathUtils.clamp((z - minZ) / gridStep, 0, segments);
+    const x0 = Math.floor(gx);
+    const z0 = Math.floor(gz);
+    const x1 = Math.min(segments, x0 + 1);
+    const z1 = Math.min(segments, z0 + 1);
+    const tx = gx - x0;
+    const tz = gz - z0;
+    const i00 = z0 * gridStride + x0;
+    const i10 = z0 * gridStride + x1;
+    const i01 = z1 * gridStride + x0;
+    const i11 = z1 * gridStride + x1;
+    const h0 = THREE.MathUtils.lerp(positions[i00 * 3 + 1], positions[i10 * 3 + 1], tx);
+    const h1 = THREE.MathUtils.lerp(positions[i01 * 3 + 1], positions[i11 * 3 + 1], tx);
+    return THREE.MathUtils.lerp(h0, h1, tz);
+  };
+}
+
+function terrainHeightAt(x, z) {
+  const center = chunkCenterForPoint(x, z);
+  const chunk = terrainChunks.get(chunkKey(center.cx, center.cz));
+  if (chunk?.terrain?.sampleHeight) return chunk.terrain.sampleHeight(x, z);
+  return null;
+}
+
+function addCameraColliders(stageKey, geometry, matrices, chunkKeyForCollider = null) {
+  const config = CAMERA_COLLIDER_CONFIG[stageKey];
+  if (!config || matrices.length === 0) return;
+  if (!geometry.boundingBox) geometry.computeBoundingBox();
+
+  const box = geometry.boundingBox;
+  if (!box) return;
+
+  const localRadius = Math.max(
+    Math.abs(box.min.x),
+    Math.abs(box.max.x),
+    Math.abs(box.min.z),
+    Math.abs(box.max.z),
+  );
+  const localMinY = box.min.y;
+  const localMaxY = box.max.y;
+
+  for (let i = 0; i < matrices.length; i += 16) {
+    const sx = Math.hypot(matrices[i], matrices[i + 1], matrices[i + 2]);
+    const sy = Math.hypot(matrices[i + 4], matrices[i + 5], matrices[i + 6]);
+    const sz = Math.hypot(matrices[i + 8], matrices[i + 9], matrices[i + 10]);
+    const xzScale = Math.max(sx, sz);
+    const yScale = sy || xzScale || 1;
+    const objectRadius = Math.max(
+      config.minRadius ?? 0,
+      localRadius * xzScale * (config.radiusScale ?? 1),
+    );
+
+    const collider = {
+      chunkKey: chunkKeyForCollider,
+      x: matrices[i + 12],
+      z: matrices[i + 14],
+      minY: matrices[i + 13] + localMinY * yScale - CAMERA_COLLISION_RADIUS,
+      maxY: matrices[i + 13] + localMaxY * yScale + CAMERA_COLLISION_RADIUS,
+      radius: objectRadius + CAMERA_COLLISION_RADIUS,
+    };
+    cameraColliders.push(collider);
+    indexCameraCollider(collider);
+  }
+}
+
+function indexCameraCollider(collider) {
+  cameraColliderMaxRadius = Math.max(cameraColliderMaxRadius, collider.radius);
+  const key = cameraColliderCellKey(collider.x, collider.z);
+  let cell = cameraColliderGrid.get(key);
+  if (!cell) {
+    cell = [];
+    cameraColliderGrid.set(key, cell);
+  }
+  cell.push(collider);
+}
+
+function cameraColliderCellKey(x, z) {
+  return `${Math.floor(x / CAMERA_COLLIDER_CELL_SIZE)},${Math.floor(z / CAMERA_COLLIDER_CELL_SIZE)}`;
+}
+
+function removeChunkCameraColliders(chunkKeyForCollider) {
+  for (let i = cameraColliders.length - 1; i >= 0; i--) {
+    if (cameraColliders[i].chunkKey === chunkKeyForCollider) cameraColliders.splice(i, 1);
+  }
+  rebuildCameraColliderGrid();
+}
+
+function rebuildCameraColliderGrid() {
+  cameraColliderGrid.clear();
+  cameraColliderMaxRadius = 0;
+  for (const collider of cameraColliders) indexCameraCollider(collider);
+}
+
+function nearbyCameraColliders(position) {
+  nearbyColliderScratch.length = 0;
+  if (cameraColliders.length === 0) return nearbyColliderScratch;
+  const queryRadius = Math.max(cameraColliderMaxRadius, CAMERA_COLLISION_RADIUS);
+  const minCellX = Math.floor((position.x - queryRadius) / CAMERA_COLLIDER_CELL_SIZE);
+  const maxCellX = Math.floor((position.x + queryRadius) / CAMERA_COLLIDER_CELL_SIZE);
+  const minCellZ = Math.floor((position.z - queryRadius) / CAMERA_COLLIDER_CELL_SIZE);
+  const maxCellZ = Math.floor((position.z + queryRadius) / CAMERA_COLLIDER_CELL_SIZE);
+
+  for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+    for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+      const cell = cameraColliderGrid.get(`${cellX},${cellZ}`);
+      if (cell) nearbyColliderScratch.push(...cell);
+    }
+  }
+
+  return nearbyColliderScratch;
+}
+
+function constrainCameraToWorld() {
+  cameraConstraintDelta.set(0, 0, 0);
+  resolveTerrainCollision(camera.position, CAMERA_TERRAIN_CLEARANCE, cameraConstraintDelta);
+
+  if (cameraConstraintDelta.lengthSq() > 0) {
+    camera.position.add(cameraConstraintDelta);
+    controls.target.add(cameraConstraintDelta);
+  }
+
+  resolveObjectCollisions();
+
+  cameraConstraintDelta.set(0, 0, 0);
+  resolveTerrainCollision(camera.position, CAMERA_TERRAIN_CLEARANCE, cameraConstraintDelta);
+  if (cameraConstraintDelta.lengthSq() > 0) {
+    camera.position.add(cameraConstraintDelta);
+    controls.target.add(cameraConstraintDelta);
+  }
+
+  clampTargetAboveTerrain();
+}
+
+function resolveTerrainCollision(position, clearance, delta) {
+  const terrainY = terrainHeightAt(position.x, position.z);
+  if (terrainY === null) return;
+
+  const minY = terrainY + clearance;
+  if (position.y < minY) delta.y += minY - position.y;
+}
+
+function resolveObjectCollisions() {
+  for (let pass = 0; pass < 2; pass++) {
+    cameraConstraintDelta.set(0, 0, 0);
+
+    for (const collider of nearbyCameraColliders(camera.position)) {
+      if (camera.position.y < collider.minY || camera.position.y > collider.maxY) continue;
+
+      const dx = camera.position.x - collider.x;
+      const dz = camera.position.z - collider.z;
+      const distanceSq = dx * dx + dz * dz;
+      const minDistance = collider.radius;
+      if (distanceSq >= minDistance * minDistance) continue;
+
+      const distance = Math.sqrt(distanceSq);
+      let nx = 1;
+      let nz = 0;
+      if (distance > 0.0001) {
+        nx = dx / distance;
+        nz = dz / distance;
+      } else {
+        cameraFallbackPush.subVectors(camera.position, controls.target);
+        cameraFallbackPush.y = 0;
+        if (cameraFallbackPush.lengthSq() > 0.0001) {
+          cameraFallbackPush.normalize();
+          nx = cameraFallbackPush.x;
+          nz = cameraFallbackPush.z;
+        }
+      }
+
+      const push = minDistance - distance;
+      cameraConstraintDelta.x += nx * push;
+      cameraConstraintDelta.z += nz * push;
+    }
+
+    if (cameraConstraintDelta.lengthSq() === 0) return;
+    camera.position.add(cameraConstraintDelta);
+    controls.target.add(cameraConstraintDelta);
+  }
+}
+
+function clampTargetAboveTerrain() {
+  const terrainY = terrainHeightAt(controls.target.x, controls.target.z);
+  if (terrainY === null) return;
+  controls.target.y = Math.max(controls.target.y, terrainY + TARGET_TERRAIN_CLEARANCE);
+}
+
+function applyTerrainData(chunkKeyForTerrain, data) {
+  const chunk = terrainChunks.get(chunkKeyForTerrain);
+  if (!chunk) return;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+  geometry.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(data.colors, 3));
+  geometry.setAttribute('terrainDetail', new THREE.BufferAttribute(data.terrainDetail, 4));
+  geometry.setIndex(new THREE.BufferAttribute(data.indices, 1));
+  geometry.computeBoundingSphere();
+
+  const mesh = new THREE.Mesh(geometry, createTerrainMaterial());
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+  mesh.userData.culling = {
+    sphere: chunk.cullingSphere,
+    maxDistance: TERRAIN_CULL_DISTANCE,
+  };
+  terrain = {
+    mesh,
+    size: data.size,
+    sampleHeight: createTerrainHeightSampler(data),
+  };
+  chunk.terrain = terrain;
+  chunk.cullables.push(mesh);
+  chunk.group.add(mesh);
+  freezeStaticTransform(mesh);
+  markVisibilityCullingDirty();
+  markShadowMapDirty();
+  constrainCameraToWorld();
+}
+
+function createScatterApplyTask(chunkKeyForStage, stage, proportions) {
+  const chunk = terrainChunks.get(chunkKeyForStage);
+  if (!chunk) return { run: () => true };
+  const stageStart = performance.now();
+  const config = scatterRenderConfig(stage.key, proportions);
+  if (!config) return { run: () => true };
+  const stats = {
+    generation: buildGeneration,
+    chunkKey: chunkKeyForStage,
+    key: stage.key,
+    buckets: stage.buckets.length,
+    cullCells: 0,
+    instances: 0,
+    vertices: 0,
+    triangles: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+    geometryMs: 0,
+    colliderMs: 0,
+  };
+  let bucketIndex = 0;
+  let activeBucket = null;
+
+  return {
+    run(deadline = Infinity) {
+      if (terrainChunks.get(chunkKeyForStage) !== chunk) return true;
+      let didWork = false;
+
+      while (bucketIndex < stage.buckets.length || activeBucket) {
+        if (!activeBucket) {
+          const bucket = stage.buckets[bucketIndex++];
+          const instanceCount = bucket.matrices.length / 16;
+          if (instanceCount === 0) continue;
+
+          const lodLevels = bucketLodLevels(bucket);
+          const geometryResults = lodLevels.map(level => {
+            const variantOpts = {
+              ...level.variantOpts,
+              proportions,
+            };
+            return {
+              level,
+              ...getScatterGeometry(stage.key, config, {
+                ...bucket,
+                lodName: level.name,
+                variantOpts: level.variantOpts,
+              }, variantOpts, proportions),
+            };
+          });
+
+          stats.instances += instanceCount;
+          for (const geometryResult of geometryResults) {
+            const geometry = geometryResult.geometry;
+            stats.vertices += geometry.attributes.position?.count ?? 0;
+            stats.triangles += geometry.index ? geometry.index.count / 3 : (geometry.attributes.position?.count ?? 0) / 3;
+            stats.geometryMs += geometryResult.generateMs;
+            if (geometryResult.cacheHit) {
+              stats.cacheHits++;
+            } else {
+              stats.cacheMisses++;
+            }
+          }
+
+          const cullCells = splitScatterMatricesForCulling(stage.key, bucket.matrices);
+          stats.cullCells += cullCells.length;
+          activeBucket = {
+            bucket,
+            lodLevels,
+            geometryResults,
+            cullCells,
+            cellIndex: 0,
+            collidersAdded: false,
+          };
+          didWork = true;
+          if (performance.now() >= deadline) return false;
+        }
+
+        while (activeBucket.cellIndex < activeBucket.cullCells.length) {
+          const matrices = activeBucket.cullCells[activeBucket.cellIndex++];
+          const cell = createScatterLodCell(
+            stage.key,
+            config,
+            activeBucket.bucket,
+            activeBucket.lodLevels,
+            activeBucket.geometryResults,
+            matrices,
+          );
+          if (cell) {
+            chunk.cullables.push(cell);
+            chunk.group.add(cell);
+            freezeStaticTransform(cell);
+          }
+          didWork = true;
+          if (performance.now() >= deadline) return false;
+        }
+
+        if (!activeBucket.collidersAdded) {
+          const colliderStart = performance.now();
+          addCameraColliders(stage.key, activeBucket.geometryResults[0].geometry, activeBucket.bucket.matrices, chunkKeyForStage);
+          stats.colliderMs += performance.now() - colliderStart;
+          activeBucket.collidersAdded = true;
+          didWork = true;
+        }
+
+        activeBucket = null;
+        if (didWork && performance.now() >= deadline) return false;
+      }
+
+      constrainCameraToWorld();
+      pruneScatterGeometryCache();
+      markVisibilityCullingDirty();
+      markShadowMapDirty();
+      stats.totalMs = roundMs(performance.now() - stageStart);
+      stats.geometryMs = roundMs(stats.geometryMs);
+      stats.colliderMs = roundMs(stats.colliderMs);
+      stats.triangles = Math.round(stats.triangles);
+      logPerf('main-scatter-apply-detail', stats);
+      return true;
+    },
+  };
+}
+
+function bucketLodLevels(bucket) {
+  if (bucket.lodLevels?.length) return bucket.lodLevels;
+  return [{
+    name: bucket.lodName ?? 'full',
+    distance: Infinity,
+    castShadow: bucket.castShadow,
+    receiveShadow: bucket.receiveShadow,
+    variantOpts: bucket.variantOpts,
+  }];
+}
+
+function createScatterLodCell(stageKey, config, bucket, lodLevels, geometryResults, matrices) {
+  const instanceCount = matrices.length / 16;
+  if (instanceCount === 0) return null;
+
+  const group = new THREE.Group();
+  group.name = `${stageKey}-cell`;
+  const lodMeshes = [];
+  let cullingSphere = null;
+
+  for (let lodIdx = 0; lodIdx < geometryResults.length; lodIdx++) {
+    const { geometry, level } = geometryResults[lodIdx];
+    const inst = new THREE.InstancedMesh(geometry, config.material, instanceCount);
+    inst.castShadow = level.castShadow ?? bucket.castShadow ?? config.castShadow ?? true;
+    inst.receiveShadow = level.receiveShadow ?? bucket.receiveShadow ?? config.receiveShadow ?? true;
+    inst.visible = lodIdx === 0;
+    inst.userData.lod = level.name;
+    inst.userData.stageKey = stageKey;
+    inst.instanceMatrix.array.set(matrices);
+    inst.instanceMatrix.needsUpdate = true;
+    inst.computeBoundingSphere();
+    retainScatterGeometry(geometry);
+    if (!cullingSphere && inst.boundingSphere) {
+      cullingSphere = inst.boundingSphere.clone();
+      cullingSphere.radius += 4;
+    }
+    lodMeshes.push(inst);
+    group.add(inst);
+  }
+
+  group.userData.culling = {
+    sphere: cullingSphere,
+    maxDistance: scatterCullDistance(stageKey),
+    lodLevels,
+    lodDistanceSq: lodLevels.map(level => {
+      const distance = level.distance ?? Infinity;
+      return Number.isFinite(distance) ? distance * distance : Infinity;
+    }),
+    lodMeshes,
+  };
+  return group;
+}
+
+function splitScatterMatricesForCulling(stageKey, matrices) {
+  const instanceCount = matrices.length / 16;
+  const config = SCATTER_CULL_CELL[stageKey] ?? DEFAULT_SCATTER_CULL_CELL;
+  if (instanceCount < config.minInstances) return [matrices];
+
+  const cells = new Map();
+  for (let i = 0; i < matrices.length; i += 16) {
+    const cellX = Math.floor(matrices[i + 12] / config.size);
+    const cellZ = Math.floor(matrices[i + 14] / config.size);
+    const key = `${cellX},${cellZ}`;
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = [];
+      cells.set(key, cell);
+    }
+    for (let e = 0; e < 16; e++) cell.push(matrices[i + e]);
+  }
+
+  if (cells.size <= 1) return [matrices];
+  return Array.from(cells.values(), cell => new Float32Array(cell));
+}
+
+function scatterCullDistance(stageKey) {
+  return SCATTER_CULL_DISTANCE[stageKey] ?? DEFAULT_SCATTER_CULL_DISTANCE;
+}
+
+function markVisibilityCullingDirty() {
+  visibilityCullDirty = true;
+}
+
+function updateVisibilityCulling(now = performance.now()) {
+  const moved = camera.position.distanceToSquared(visibilityCullPosition) > VISIBILITY_CULL_MOVE_EPSILON_SQ;
+  const rotated = 1 - Math.abs(camera.quaternion.dot(visibilityCullQuaternion)) > VISIBILITY_CULL_ROTATE_EPSILON;
+  const due = now - lastVisibilityCullAt >= VISIBILITY_CULL_INTERVAL_MS;
+  if (!visibilityCullDirty && (!due || (!moved && !rotated))) return;
+
+  camera.updateMatrixWorld();
+  cullingProjectionMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  cullingFrustum.setFromProjectionMatrix(cullingProjectionMatrix);
+
+  for (const chunk of terrainChunks.values()) {
+    const chunkVisible = isCullingSphereVisible(chunk.cullingSphere, TERRAIN_CULL_DISTANCE);
+    chunk.group.visible = chunkVisible;
+    if (!chunkVisible) continue;
+
+    for (const object of chunk.cullables) {
+      const culling = object.userData.culling;
+      const visible = !culling || isCullingSphereVisible(culling.sphere, culling.maxDistance);
+      object.visible = visible;
+      if (visible && culling?.lodMeshes) updateCullableLod(culling);
+    }
+  }
+
+  visibilityCullPosition.copy(camera.position);
+  visibilityCullQuaternion.copy(camera.quaternion);
+  visibilityCullDirty = false;
+  lastVisibilityCullAt = now;
+}
+
+function updateCullableLod(culling) {
+  const activeLod = chooseCullableLod(culling);
+  for (let i = 0; i < culling.lodMeshes.length; i++) {
+    culling.lodMeshes[i].visible = i === activeLod;
+  }
+}
+
+function chooseCullableLod(culling) {
+  if (!culling.sphere) return 0;
+  const center = culling.sphere.center;
+  const dx = camera.position.x - center.x;
+  const dy = camera.position.y - center.y;
+  const dz = camera.position.z - center.z;
+  const distanceSq = dx * dx + dy * dy + dz * dz;
+  const lodDistanceSq = culling.lodDistanceSq;
+  for (let i = 0; i < culling.lodLevels.length; i++) {
+    if (!lodDistanceSq || distanceSq <= lodDistanceSq[i]) return i;
+  }
+  return culling.lodLevels.length - 1;
+}
+
+function isCullingSphereVisible(sphere, maxDistance = Infinity) {
+  if (!sphere) return true;
+  if (Number.isFinite(maxDistance)) {
+    const maxVisibleDistance = maxDistance + sphere.radius;
+    const dx = camera.position.x - sphere.center.x;
+    const dy = camera.position.y - sphere.center.y;
+    const dz = camera.position.z - sphere.center.z;
+    if (dx * dx + dy * dy + dz * dz > maxVisibleDistance * maxVisibleDistance) {
+      return false;
+    }
+  }
+  return cullingFrustum.intersectsSphere(sphere);
+}
+
+function getScatterGeometry(stageKey, config, bucket, variantOpts, proportions) {
+  const cacheKey = scatterGeometryCacheKey(stageKey, bucket, proportions);
+  const cached = scatterGeometryCache.get(cacheKey);
+  if (cached) {
+    scatterGeometryCache.delete(cacheKey);
+    scatterGeometryCache.set(cacheKey, cached);
+    return { geometry: cached, cacheHit: true, generateMs: 0 };
+  }
+
+  const generateStart = performance.now();
+  const geometry = config.generator(mulberry32(bucket.variantSeed), variantOpts);
+  const generateMs = performance.now() - generateStart;
+  scatterGeometryCache.set(cacheKey, geometry);
+  cachedScatterGeometries.add(geometry);
+  return { geometry, cacheHit: false, generateMs };
+}
+
+function retainScatterGeometry(geometry) {
+  scatterGeometryRefs.set(geometry, (scatterGeometryRefs.get(geometry) ?? 0) + 1);
+}
+
+function releaseScatterGeometry(geometry) {
+  const refs = scatterGeometryRefs.get(geometry) ?? 0;
+  if (refs <= 1) {
+    scatterGeometryRefs.delete(geometry);
+    return;
+  }
+  scatterGeometryRefs.set(geometry, refs - 1);
+}
+
+function scatterGeometryCacheKey(stageKey, bucket, proportions) {
+  return JSON.stringify({
+    stageKey,
+    seed: bucket.variantSeed,
+    lod: bucket.lodName,
+    root: proportions.rootMeasurement,
+    opts: bucket.variantOpts,
+  });
+}
+
+function pruneScatterGeometryCache() {
+  let scanned = 0;
+  while (scatterGeometryCache.size > SCATTER_GEOMETRY_CACHE_LIMIT && scanned < scatterGeometryCache.size) {
+    const oldestKey = scatterGeometryCache.keys().next().value;
+    const oldestGeometry = scatterGeometryCache.get(oldestKey);
+    scatterGeometryCache.delete(oldestKey);
+    if ((scatterGeometryRefs.get(oldestGeometry) ?? 0) > 0) {
+      scatterGeometryCache.set(oldestKey, oldestGeometry);
+      scanned++;
+      continue;
+    }
+    cachedScatterGeometries.delete(oldestGeometry);
+    oldestGeometry.dispose();
+  }
+}
+
+function scatterRenderConfig(key, proportions) {
+  switch (key) {
+    case 'paloVerde':
+      return { generator: generatePaloVerde, material: treeMaterial };
+    case 'mesquite':
+      return { generator: generateMesquite, material: treeMaterial };
+    case 'saguaro':
+      return { generator: generateSaguaro, material: cactusMaterial };
+    case 'barrel':
+      return { generator: generateBarrelCactus, material: cactusMaterial };
+    case 'pricklyPear':
+      return { generator: generatePricklyPear, material: cactusMaterial };
+    case 'ocotillo':
+      return { generator: generateOcotillo, material: ocotilloMaterial };
+    case 'creosote':
+      return { generator: generateCreosote, material: creosoteMaterial, castShadow: false };
+    case 'pebbles':
+      return {
+        generator: (rng, opts = {}) => generateRock(rng, {
+          size: rngRange(rng, proportions.rocks.pebbleSize[0], proportions.rocks.pebbleSize[1]),
+          detailScale: opts.detailScale ?? 0.55,
+        }),
+        material: rockMaterial,
+        castShadow: false,
+      };
+    case 'boulders':
+      return {
+        generator: (rng, opts = {}) => generateRock(rng, {
+          size: rngRange(rng, proportions.rocks.boulderSize[0], proportions.rocks.boulderSize[1]),
+          detailScale: opts.detailScale ?? 0.9,
+        }),
+        material: rockMaterial,
+      };
+    default:
+      return null;
+  }
 }
 
 // ---------- Sun update ----------
 function updateSun() {
   const dir = skyCtl.update({ azimuth: params.sunAzimuth, elevation: params.sunElevation });
-  // Place the directional light far along the sun direction.
-  sun.position.copy(dir).multiplyScalar(80);
-  sun.target.position.set(0, 0, 0);
+  updateLightAnchors(dir);
+  markShadowMapDirty();
   // Warm color near horizon, cooler higher up, then dim after sunset.
   const elev01 = THREE.MathUtils.clamp(params.sunElevation / 60, 0, 1);
   const daylight01 = THREE.MathUtils.smoothstep(params.sunElevation, -4, 8);
@@ -820,27 +1264,18 @@ function updateSun() {
   const sunset01 =
     (1 - THREE.MathUtils.smoothstep(params.sunElevation, 12, 45)) *
     (1 - night01);
-  const warm = new THREE.Color(0xff9a56);
-  const cool = new THREE.Color(0xfff2d6);
-  const nightLight = new THREE.Color(0x2c3f7a);
-  const lightCol = warm.clone().lerp(cool, elev01 * 0.85).lerp(nightLight, night01);
-  sun.color.copy(lightCol);
+  sunColor.copy(sunWarmColor).lerp(sunCoolColor, elev01 * 0.85).lerp(sunNightColor, night01);
+  sun.color.copy(sunColor);
   const daylightIntensity = THREE.MathUtils.lerp(0.65, 2.65, elev01) + sunset01 * 0.28;
   sun.intensity = THREE.MathUtils.lerp(0.0, daylightIntensity, daylight01);
 
-  moonLight.position.copy(skyCtl.moon).multiplyScalar(80);
-  moonLight.target.position.set(0, 0, 0);
   moonLight.intensity = THREE.MathUtils.lerp(0.0, 0.58, night01);
 
   // Match fog to the sky's hazy ground band.
-  const fogWarm = new THREE.Color(0xe9a171);
-  const fogViolet = new THREE.Color(0xb199b6);
-  const fogCool = new THREE.Color(0xc8d4dd);
-  const fogNight = new THREE.Color(0x11182d);
-  const fogColor = fogWarm.clone()
-    .lerp(fogViolet, sunset01 * 0.35)
-    .lerp(fogCool, elev01 * 0.42)
-    .lerp(fogNight, night01);
+  fogColor.copy(fogWarmColor)
+    .lerp(fogVioletColor, sunset01 * 0.35)
+    .lerp(fogCoolColor, elev01 * 0.42)
+    .lerp(fogNightColor, night01);
   scene.fog.color.copy(fogColor);
   const dayFogDensity = THREE.MathUtils.lerp(1.28, 0.84, elev01);
   scene.fog.density = params.fogDensity * THREE.MathUtils.lerp(dayFogDensity, 0.62, night01);
@@ -850,12 +1285,29 @@ function updateSun() {
     night01,
   );
   hemi.color.set(0xb8d8ff)
-    .lerp(new THREE.Color(0x7b8ac4), sunset01 * 0.35)
-    .lerp(new THREE.Color(0x10183b), night01);
+    .lerp(hemiSunsetColor, sunset01 * 0.35)
+    .lerp(hemiNightColor, night01);
   hemi.groundColor.set(0xb98260)
-    .lerp(new THREE.Color(0xd07658), sunset01 * 0.45)
-    .lerp(new THREE.Color(0x080814), night01);
+    .lerp(hemiGroundSunsetColor, sunset01 * 0.45)
+    .lerp(hemiGroundNightColor, night01);
   updateLensFlare();
+}
+
+function updateLightAnchors(sunDirection = skyCtl.sun) {
+  sun.target.position.copy(controls.target);
+  sun.position.copy(sunDirection).multiplyScalar(80).add(controls.target);
+  moonLight.target.position.copy(controls.target);
+  moonLight.position.copy(skyCtl.moon).multiplyScalar(80).add(controls.target);
+}
+
+function markShadowMapDirty() {
+  renderer.shadowMap.needsUpdate = true;
+}
+
+function updateShadowMapInvalidation() {
+  if (controls.target.distanceToSquared(shadowTargetPosition) <= SHADOW_UPDATE_TARGET_EPSILON_SQ) return;
+  shadowTargetPosition.copy(controls.target);
+  markShadowMapDirty();
 }
 
 function updateLensFlare() {
@@ -868,76 +1320,92 @@ function updateLensFlare() {
 }
 
 // ---------- GUI ----------
+function trackGuiController(controller) {
+  guiControllers.push(controller);
+  return controller;
+}
+
+function addGuiControl(folder, property, ...args) {
+  return trackGuiController(folder.add(params, property, ...args));
+}
+
+function refreshGui() {
+  for (const controller of guiControllers) {
+    controller.updateDisplay();
+  }
+}
+
 const gui = new GUI({ title: 'Desert generator' });
 
 const fGen = gui.addFolder('General');
-fGen.add(params, 'seed').name('seed').onFinishChange(regenerate);
-fGen.add(params, 'randomSeed').name('🎲 random seed');
-fGen.add(params, 'regenerate').name('↻ regenerate');
+addGuiControl(fGen, 'seed').name('seed').onFinishChange(regenerate);
+addGuiControl(fGen, 'randomSeed').name('random seed');
+addGuiControl(fGen, 'regenerate').name('regenerate');
 
 const fTer = gui.addFolder('Terrain');
-fTer.add(params, 'terrainSize', 60, 240, 10).onChange(scheduleRegenerate);
-fTer.add(params, 'terrainSegments', 120, 480, 1).onChange(scheduleRegenerate).name('render resolution');
-fTer.add(params, 'hydrologySegments', 24, 160, 1).onChange(scheduleRegenerate).name('water resolution');
-fTer.add(params, 'heightScale', 0.5, 12, 0.1).onChange(scheduleRegenerate).name('height');
-fTer.add(params, 'macroScale', 0.003, 0.04, 0.001).onChange(scheduleRegenerate).name('hill scale');
-fTer.add(params, 'ridgeScale', 0.01, 0.2, 0.005).onChange(scheduleRegenerate).name('ridge scale');
-fTer.add(params, 'rippleScale', 0.05, 1.0, 0.05).onChange(scheduleRegenerate).name('ripple scale');
-fTer.add(params, 'washStrength', 0, 1.5, 0.05).onChange(scheduleRegenerate).name('wash depth');
-fTer.add(params, 'fanStrength', 0, 1.8, 0.05).onChange(scheduleRegenerate).name('alluvial fans');
-fTer.add(params, 'erosionStrength', 0, 1.5, 0.05).onChange(scheduleRegenerate).name('erosion');
-fTer.add(params, 'rockySlopeStrength', 0, 1.4, 0.05).onChange(scheduleRegenerate).name('rock faces');
+addGuiControl(fTer, 'terrainSize', 60, 240, 10).onChange(scheduleRegenerate);
+addGuiControl(fTer, 'terrainSegments', 120, 480, 1).onChange(scheduleRegenerate).name('render resolution');
+addGuiControl(fTer, 'hydrologySegments', 24, 160, 1).onChange(scheduleRegenerate).name('water resolution');
+addGuiControl(fTer, 'heightScale', 0.5, 12, 0.1).onChange(scheduleRegenerate).name('height');
+addGuiControl(fTer, 'macroScale', 0.003, 0.04, 0.001).onChange(scheduleRegenerate).name('hill scale');
+addGuiControl(fTer, 'ridgeScale', 0.01, 0.2, 0.005).onChange(scheduleRegenerate).name('ridge scale');
+addGuiControl(fTer, 'rippleScale', 0.05, 1.0, 0.05).onChange(scheduleRegenerate).name('ripple scale');
+addGuiControl(fTer, 'washStrength', 0, 1.5, 0.05).onChange(scheduleRegenerate).name('wash depth');
+addGuiControl(fTer, 'fanStrength', 0, 1.8, 0.05).onChange(scheduleRegenerate).name('alluvial fans');
+addGuiControl(fTer, 'erosionStrength', 0, 1.5, 0.05).onChange(scheduleRegenerate).name('erosion');
+addGuiControl(fTer, 'rockySlopeStrength', 0, 1.4, 0.05).onChange(scheduleRegenerate).name('rock faces');
 fTer.close();
 
 const fSag = gui.addFolder('Saguaros');
-fSag.add(params, 'saguaroEnabled').onChange(scheduleRegenerate).name('enabled');
-fSag.add(params, 'saguaroDensity', 0, 0.05, 0.001).onChange(scheduleRegenerate).name('density');
-fSag.add(params, 'saguaroMaxHeight', 3, 12, 0.1).onChange(scheduleRegenerate).name('max height');
-fSag.add(params, 'saguaroArmProbability', 0, 1, 0.05).onChange(scheduleRegenerate).name('arm chance');
+addGuiControl(fSag, 'saguaroEnabled').onChange(scheduleRegenerate).name('enabled');
+addGuiControl(fSag, 'saguaroDensity', 0, 0.05, 0.001).onChange(scheduleRegenerate).name('density');
+addGuiControl(fSag, 'saguaroMaxHeight', 3, 12, 0.1).onChange(scheduleRegenerate).name('max height');
+addGuiControl(fSag, 'saguaroArmProbability', 0, 1, 0.05).onChange(scheduleRegenerate).name('arm chance');
 
 const fBar = gui.addFolder('Barrel cacti');
-fBar.add(params, 'barrelEnabled').onChange(scheduleRegenerate).name('enabled');
-fBar.add(params, 'barrelDensity', 0, 0.1, 0.002).onChange(scheduleRegenerate).name('density');
+addGuiControl(fBar, 'barrelEnabled').onChange(scheduleRegenerate).name('enabled');
+addGuiControl(fBar, 'barrelDensity', 0, 0.1, 0.002).onChange(scheduleRegenerate).name('density');
 
 const fPV = gui.addFolder('Palo verde');
-fPV.add(params, 'paloVerdeEnabled').onChange(scheduleRegenerate).name('enabled');
-fPV.add(params, 'paloVerdeDensity', 0, 0.04, 0.001).onChange(scheduleRegenerate).name('density');
-fPV.add(params, 'paloVerdeFlowering').onChange(scheduleRegenerate).name('flowering (spring)');
+addGuiControl(fPV, 'paloVerdeEnabled').onChange(scheduleRegenerate).name('enabled');
+addGuiControl(fPV, 'paloVerdeDensity', 0, 0.04, 0.001).onChange(scheduleRegenerate).name('density');
+addGuiControl(fPV, 'paloVerdeFlowering').onChange(scheduleRegenerate).name('flowering (spring)');
 
 const fMesquite = gui.addFolder('Mesquite');
-fMesquite.add(params, 'mesquiteEnabled').onChange(scheduleRegenerate).name('enabled');
-fMesquite.add(params, 'mesquiteDensity', 0, 0.025, 0.001).onChange(scheduleRegenerate).name('density');
-fMesquite.add(params, 'mesquiteSeedPods').onChange(scheduleRegenerate).name('seed pods');
+addGuiControl(fMesquite, 'mesquiteEnabled').onChange(scheduleRegenerate).name('enabled');
+addGuiControl(fMesquite, 'mesquiteDensity', 0, 0.025, 0.001).onChange(scheduleRegenerate).name('density');
+addGuiControl(fMesquite, 'mesquiteSeedPods').onChange(scheduleRegenerate).name('seed pods');
 
 const fPP = gui.addFolder('Prickly pear');
-fPP.add(params, 'pricklyPearEnabled').onChange(scheduleRegenerate).name('enabled');
-fPP.add(params, 'pricklyPearDensity', 0, 0.08, 0.002).onChange(scheduleRegenerate).name('density');
+addGuiControl(fPP, 'pricklyPearEnabled').onChange(scheduleRegenerate).name('enabled');
+addGuiControl(fPP, 'pricklyPearDensity', 0, 0.08, 0.002).onChange(scheduleRegenerate).name('density');
 
 const fOco = gui.addFolder('Ocotillo');
-fOco.add(params, 'ocotilloEnabled').onChange(scheduleRegenerate).name('enabled');
-fOco.add(params, 'ocotilloDensity', 0, 0.03, 0.001).onChange(scheduleRegenerate).name('density');
-fOco.add(params, 'ocotilloFlowering').onChange(scheduleRegenerate).name('blooming');
+addGuiControl(fOco, 'ocotilloEnabled').onChange(scheduleRegenerate).name('enabled');
+addGuiControl(fOco, 'ocotilloDensity', 0, 0.03, 0.001).onChange(scheduleRegenerate).name('density');
+addGuiControl(fOco, 'ocotilloFlowering').onChange(scheduleRegenerate).name('blooming');
 
 const fCre = gui.addFolder('Creosote');
-fCre.add(params, 'creosoteEnabled').onChange(scheduleRegenerate).name('enabled');
-fCre.add(params, 'creosoteDensity', 0, 0.2, 0.005).onChange(scheduleRegenerate).name('density');
+addGuiControl(fCre, 'creosoteEnabled').onChange(scheduleRegenerate).name('enabled');
+addGuiControl(fCre, 'creosoteDensity', 0, 0.2, 0.005).onChange(scheduleRegenerate).name('density');
 
 const fRock = gui.addFolder('Rocks');
-fRock.add(params, 'smallRockDensity', 0, 0.6, 0.01).onChange(scheduleRegenerate).name('pebbles');
-fRock.add(params, 'largeRockDensity', 0, 0.05, 0.002).onChange(scheduleRegenerate).name('boulders');
+addGuiControl(fRock, 'smallRockDensity', 0, 0.6, 0.01).onChange(scheduleRegenerate).name('pebbles');
+addGuiControl(fRock, 'largeRockDensity', 0, 0.05, 0.002).onChange(scheduleRegenerate).name('boulders');
 
 const fSun = gui.addFolder('Sun & atmosphere');
-fSun.add(params, 'sunAzimuth', 0, 360, 1).onChange(updateSun).name('azimuth');
-fSun.add(params, 'sunElevation', -18, 80, 0.5).onChange(updateSun).name('elevation');
-fSun.add(params, 'fogDensity', 0, 0.02, 0.0005).onChange(updateSun).name('fog');
-fSun.add(params, 'exposure', 0.4, 1.6, 0.05).onChange(v => { renderer.toneMappingExposure = v; }).name('exposure');
-fSun.add(params, 'lensFlare').onChange(updateLensFlare).name('lens flare');
-fSun.add(params, 'cloudRate', 0, 5, 0.05).name('cloud rate');
+addGuiControl(fSun, 'sunAzimuth', 0, 360, 1).onChange(updateSun).name('azimuth');
+addGuiControl(fSun, 'sunElevation', -18, 80, 0.5).onChange(updateSun).name('elevation');
+addGuiControl(fSun, 'fogDensity', 0, 0.02, 0.0005).onChange(updateSun).name('fog');
+addGuiControl(fSun, 'exposure', 0.4, 1.6, 0.05).onChange(value => { renderer.toneMappingExposure = value; }).name('exposure');
+addGuiControl(fSun, 'lensFlare').onChange(updateLensFlare).name('lens flare');
+addGuiControl(fSun, 'cloudRate', 0, 5, 0.05).name('cloud rate');
+
+// ---------- UI overlay ----------
+desertUi = mountDesertUi(uiRoot);
 
 // ---------- First build + animation loop ----------
 updateSun();
-buildWorld();
-document.getElementById('loading').classList.add('hidden');
 let lastTick = performance.now();
 let cloudTime = 0;
 
@@ -945,6 +1413,7 @@ function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  markVisibilityCullingDirty();
 }
 window.addEventListener('resize', onResize);
 
@@ -955,9 +1424,15 @@ function tick() {
   cloudTime += deltaSeconds * params.cloudRate;
   skyCtl.updateTime(cloudTime);
   updateFlight(deltaSeconds);
+  updateTerrainChunks();
   controls.update();
+  updateLightAnchors();
+  updateShadowMapInvalidation();
+  constrainCameraToWorld();
+  updateVisibilityCulling(now);
   updateLensFlare();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
 tick();
+regenerate();

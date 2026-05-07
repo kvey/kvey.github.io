@@ -173,6 +173,79 @@ export function makeLeafletSpray(rng, {
   return geom;
 }
 
+export function makeLeafletRibbonSpray(rng, {
+  center,
+  axis,
+  color,
+  sprigs = 5,
+  pairs = 8,
+  spread = 0.36,
+  sprigLength = 0.42,
+  leafletWidth = 0.018,
+  droop = 0,
+  density = 1,
+}) {
+  const positions = [];
+  const colors = [];
+  const indices = [];
+  const detail = [];
+  const main = axis.clone();
+  if (main.lengthSq() < 1e-5) main.copy(UP);
+  main.normalize();
+
+  const side = safeSideVector(main);
+  const forward = new THREE.Vector3().crossVectors(side, main).normalize();
+  const sprigCount = Math.max(1, Math.floor(sprigs * density));
+
+  for (let s = 0; s < sprigCount; s++) {
+    const angle = rng() * Math.PI * 2;
+    const radial = side.clone().multiplyScalar(Math.cos(angle)).addScaledVector(forward, Math.sin(angle));
+    const base = center.clone()
+      .addScaledVector(radial, rngRange(rng, 0, spread * 0.38))
+      .addScaledVector(UP, rngRange(rng, -spread * 0.10, spread * 0.16));
+    const sprigDir = main.clone().multiplyScalar(rngRange(rng, 0.18, 0.58))
+      .addScaledVector(radial, rngRange(rng, 0.65, 1.05))
+      .addScaledVector(UP, rngRange(rng, -droop, 0.26))
+      .normalize();
+    const sprigSide = safeSideVector(sprigDir);
+    const len = sprigLength * rngRange(rng, 0.65, 1.18);
+    const pairCount = Math.max(3, rngInt(rng, Math.max(3, pairs - 2), pairs + 2));
+    const vertexBase = positions.length / 3;
+    const ribbonId = rng();
+    const tint = color.clone().multiplyScalar(rngRange(rng, 0.80, 1.16));
+
+    for (let p = 0; p <= pairCount; p++) {
+      const t = p / pairCount;
+      const centerline = base.clone()
+        .addScaledVector(sprigDir, len * (t - 0.15))
+        .addScaledVector(UP, -droop * len * t * t * 0.28);
+      const taper = Math.sin(Math.PI * t);
+      const halfWidth = leafletWidth * rngRange(rng, 2.2, 3.8) * (0.22 + taper * 0.78);
+      const left = centerline.clone().addScaledVector(sprigSide, -halfWidth);
+      const right = centerline.clone().addScaledVector(sprigSide, halfWidth);
+      positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
+      colors.push(tint.r, tint.g, tint.b, tint.r, tint.g, tint.b);
+      detail.push(
+        TREE_PART_LEAF, t, -1.0, ribbonId,
+        TREE_PART_LEAF, t, 1.0, ribbonId,
+      );
+    }
+
+    for (let p = 0; p < pairCount; p++) {
+      const a = vertexBase + p * 2;
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geom.setAttribute('treeDetail', new THREE.Float32BufferAttribute(detail, 4));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+  return geom;
+}
+
 export function makeThornCluster(rng, {
   center,
   axis,

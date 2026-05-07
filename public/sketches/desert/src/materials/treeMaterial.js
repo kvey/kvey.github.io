@@ -51,10 +51,12 @@ vec3 treeApplyLeafShader(vec3 baseColor) {
   float edge = smoothstep(0.72, 1.0, lateral);
   float tip = smoothstep(0.82, 1.0, along) + smoothstep(0.18, 0.0, along);
   float fineVeins = smoothstep(0.78, 1.0, sin((along * 9.0 + id * 5.0) * 6.2831853) * 0.5 + 0.5);
+  float leafletBands = smoothstep(0.22, 0.50, abs(fract(along * 18.0 + id * 0.37) - 0.5));
   float freckle = treeHash(floor((along + id) * 17.0) + floor((lateral + id) * 11.0));
 
   vec3 shaded = baseColor;
   shaded *= 0.78 + 0.18 * (1.0 - edge) + 0.08 * freckle;
+  shaded *= 0.82 + 0.18 * leafletBands;
   shaded = mix(shaded, baseColor * vec3(1.18, 1.12, 0.82), midrib * 0.34);
   shaded = mix(shaded, baseColor * vec3(0.62, 0.76, 0.58), edge * 0.28);
   shaded = mix(shaded, baseColor * vec3(0.82, 0.90, 0.68), fineVeins * (1.0 - edge) * 0.11);
@@ -93,6 +95,6 @@ diffuseColor.rgb = treeApplyDetail(diffuseColor.rgb);`,
       );
   };
 
-  material.customProgramCacheKey = () => 'tree-material-v1';
+  material.customProgramCacheKey = () => 'tree-material-v2';
   return material;
 }

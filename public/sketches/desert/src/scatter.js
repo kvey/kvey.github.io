@@ -2,6 +2,11 @@ import * as THREE from 'three';
 import { mulberry32, rngRange } from './random.js';
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const DEFAULT_PLANT_LOD_LEVELS = [
+  { name: 'near', distance: 45, detailScale: 1, castShadow: true },
+  { name: 'mid', distance: 95, detailScale: 0.72, castShadow: false },
+  { name: 'far', distance: Infinity, detailScale: 0.48, castShadow: false },
+];
 
 // Pre-build N variant geometries from a generator, then scatter them as
 // InstancedMeshes across the terrain.
@@ -16,7 +21,6 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // onPlace(mat, rng, i) optional hook to tweak the per-instance matrix
 // variantCount        how many unique geometries to bake (more = more variety)
 // lodLevels           optional [{ name, distance, detailScale, castShadow }]
-// lodOrigin           optional Vector3-like camera position for distance LOD
 export function scatterPlants({
   generator,
   generatorOpts = {},
@@ -30,16 +34,17 @@ export function scatterPlants({
   yawRandom = true,
   variantCount = 6,
   seed = 1,
+  geometrySeed = seed,
   parent,
   castShadow = true,
   receiveShadow = true,
   lodLevels = null,
-  lodOrigin = null,
   attemptMultiplier = 6,
   candidateFilter = null,
   onPlace = null,
 }) {
   const rng = mulberry32(seed);
+  const geometryRng = mulberry32(geometrySeed);
   const half = terrain.size / 2;
   const area = terrain.size * terrain.size;
   const count = Math.max(0, Math.floor(area * densityPerArea));
@@ -47,20 +52,16 @@ export function scatterPlants({
 
   const levels = (lodLevels && lodLevels.length > 0)
     ? lodLevels
-    : [{ name: 'full', distance: Infinity, detailScale: 1 }];
-  const lodDistanceSq = levels.map(level => {
-    const distance = level.distance ?? Infinity;
-    return distance * distance;
-  });
+    : DEFAULT_PLANT_LOD_LEVELS;
 
   // Prepare variant specs. Geometry is generated lazily after placement, only
   // for LOD/variant buckets that actually receive instances.
   const variants = [];
   for (let i = 0; i < variantCount; i++) {
     const baseOpts = typeof generatorOpts === 'function'
-      ? generatorOpts(rng, i)
+      ? generatorOpts(geometryRng, i)
       : generatorOpts;
-    const variantSeed = Math.floor(rng() * 0xffffffff);
+    const variantSeed = Math.floor(geometryRng() * 0xffffffff);
     variants.push({
       seed: variantSeed,
       optsByLod: levels.map((level, lodIndex) => ({
@@ -73,7 +74,7 @@ export function scatterPlants({
 
   // Bucket placement matrices per variant. Store raw elements to avoid
   // allocating one Matrix4 per accepted candidate.
-  const buckets = levels.map(() => variants.map(() => []));
+  const buckets = variants.map(() => []);
   const tmpMat = new THREE.Matrix4();
   const pos = new THREE.Vector3();
   const quat = new THREE.Quaternion();
@@ -92,7 +93,7 @@ export function scatterPlants({
     const s = terrainInfo?.slope ?? terrain.slope(x, z, 0.6);
     if (s > maxSlope) continue;
     const variantIdx = Math.floor(rng() * variantCount);
-    const lodIdx = chooseLod(x, h, z);
+    const lodIdx = 0;
     const variantOpts = variants[variantIdx].optsByLod[lodIdx];
     const sc = rngRange(rng, scaleRange[0], scaleRange[1]);
     if (candidateFilter) {
@@ -135,45 +136,63 @@ export function scatterPlants({
       });
     }
 
-    const bucket = buckets[lodIdx][variantIdx];
+    const bucket = buckets[variantIdx];
     const elements = tmpMat.elements;
     for (let e = 0; e < 16; e++) bucket.push(elements[e]);
     placed++;
   }
 
-  // Build InstancedMesh per non-empty variant.
-  const meshes = [];
-  for (let lodIdx = 0; lodIdx < levels.length; lodIdx++) {
-    const level = levels[lodIdx];
-    for (let i = 0; i < variants.length; i++) {
-      if (buckets[lodIdx][i].length === 0) continue;
-      const instanceCount = buckets[lodIdx][i].length / 16;
+  // Build a Three.js LOD object per non-empty variant. Each LOD level renders
+  // the same instance matrices with a different geometry detail scale.
+  const objects = [];
+  const center = new THREE.Vector3();
+  for (let i = 0; i < variants.length; i++) {
+    const bucket = buckets[i];
+    if (bucket.length === 0) continue;
+    const instanceCount = bucket.length / 16;
+    center.set(0, 0, 0);
+    for (let k = 0; k < instanceCount; k++) {
+      const offset = k * 16;
+      center.x += bucket[offset + 12];
+      center.y += bucket[offset + 13];
+      center.z += bucket[offset + 14];
+    }
+    center.multiplyScalar(1 / instanceCount);
+
+    const lod = new THREE.LOD();
+    lod.position.copy(center);
+    lod.name = 'plant-lod';
+    lod.userData.lodLevels = levels.map((level, lodIndex) => ({
+      name: level.name ?? `lod-${lodIndex}`,
+      distance: level.distance ?? Infinity,
+    }));
+
+    for (let lodIdx = 0; lodIdx < levels.length; lodIdx++) {
+      const level = levels[lodIdx];
       const geometry = generator(mulberry32(variants[i].seed), variants[i].optsByLod[lodIdx]);
       const inst = new THREE.InstancedMesh(geometry, material, instanceCount);
       inst.castShadow = level.castShadow ?? castShadow;
       inst.receiveShadow = level.receiveShadow ?? receiveShadow;
       inst.userData.lod = level.name ?? `lod-${lodIdx}`;
+      inst.userData.lodDistance = level.distance ?? Infinity;
       for (let k = 0; k < instanceCount; k++) {
-        tmpMat.fromArray(buckets[lodIdx][i], k * 16);
+        tmpMat.fromArray(bucket, k * 16);
+        tmpMat.elements[12] -= center.x;
+        tmpMat.elements[13] -= center.y;
+        tmpMat.elements[14] -= center.z;
         inst.setMatrixAt(k, tmpMat);
       }
       inst.instanceMatrix.needsUpdate = true;
       inst.computeBoundingSphere();
-      parent.add(inst);
-      meshes.push(inst);
+      lod.addLevel(inst, lodStartDistance(lodIdx));
     }
+    parent.add(lod);
+    objects.push(lod);
   }
-  return meshes;
+  return objects;
 
-  function chooseLod(x, y, z) {
-    if (!lodOrigin || levels.length === 1) return 0;
-    const dx = x - lodOrigin.x;
-    const dy = y - (lodOrigin.y ?? 0);
-    const dz = z - lodOrigin.z;
-    const d2 = dx * dx + dy * dy + dz * dz;
-    for (let i = 0; i < lodDistanceSq.length; i++) {
-      if (d2 <= lodDistanceSq[i]) return i;
-    }
-    return levels.length - 1;
+  function lodStartDistance(lodIdx) {
+    if (lodIdx === 0) return 0;
+    return levels[lodIdx - 1].distance ?? 0;
   }
 }

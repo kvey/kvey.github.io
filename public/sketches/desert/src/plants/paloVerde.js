@@ -10,6 +10,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 // angular twigs, tiny bipinnate leaves, and a very open canopy.
 export function generatePaloVerde(rng, opts = {}) {
   const detailScale = resolveDetailScale(opts);
+  const structureScale = THREE.MathUtils.clamp(detailScale, 0.42, 1);
   const proportions = resolveProportionOracle(opts);
   // Lifecycle scalar: young palo verdes are small green multi-stem shrubs;
   // mature trees widen into airy canopies, thicken trunks, and flower heavily.
@@ -27,11 +28,12 @@ export function generatePaloVerde(rng, opts = {}) {
   );
   const trunkRadius = THREE.MathUtils.lerp(proportions.paloVerde.trunkRadius[0] * 0.45, proportions.paloVerde.trunkRadius[1], Math.pow(age, 0.74))
     * rngRange(rng, 0.84, 1.12);
-  const maxDepth = rngInt(
+  const rawMaxDepth = rngInt(
     rng,
     Math.round(THREE.MathUtils.lerp(2, 5, maturity)),
     Math.round(THREE.MathUtils.lerp(3, 7, maturity + oldGrowth * 0.20)),
   );
+  const maxDepth = Math.max(2, Math.round(rawMaxDepth * THREE.MathUtils.lerp(0.58, 1.0, structureScale)));
   const flowering = (opts.flowering ?? rngChance(rng, THREE.MathUtils.lerp(0.05, 0.42, maturity))) && age > 0.34;
 
   const barkBase = new THREE.Color(0x4f865f);
@@ -113,10 +115,10 @@ export function generatePaloVerde(rng, opts = {}) {
       leafletLength: rngRange(rng, proportions.paloVerde.leafletLength[0], proportions.paloVerde.leafletLength[1]) * scale,
       leafletWidth: rngRange(rng, proportions.paloVerde.leafletWidth[0], proportions.paloVerde.leafletWidth[1]) * scale,
       droop: 0.10,
-      density: 0.52 * THREE.MathUtils.lerp(0.55, 1.0, maturity) * THREE.MathUtils.lerp(0.72, 1.0, detailScale),
+      density: 0.52 * THREE.MathUtils.lerp(0.55, 1.0, maturity) * THREE.MathUtils.lerp(0.42, 1.0, structureScale),
     }));
 
-    if (flowering && rngChance(rng, THREE.MathUtils.lerp(0.28, 0.78, maturity))) {
+    if (flowering && structureScale > 0.62 && rngChance(rng, THREE.MathUtils.lerp(0.28, 0.78, maturity) * structureScale)) {
       parts.push(makeBlossomCluster(at.clone().addScaledVector(UP, 0.025), axis, scale));
     }
   }
@@ -146,16 +148,18 @@ export function generatePaloVerde(rng, opts = {}) {
 
     if (depth <= 1 || length < 0.22 || radius < 0.018) {
       addLeafSprays(end, dir, length / spread + 0.55);
-      const thorns = makeThornCluster(rng, {
-        center: end.clone().lerp(start, 0.3),
-        axis: dir,
-        count: rngInt(rng, 1, 4),
-        spread: length * 0.32,
-        length: proportions.paloVerde.thornLength,
-        color: thorn,
-        detailScale,
-      });
-      if (thorns) parts.push(thorns);
+      if (structureScale > 0.6) {
+        const thorns = makeThornCluster(rng, {
+          center: end.clone().lerp(start, 0.3),
+          axis: dir,
+          count: rngInt(rng, 1, Math.max(1, Math.round(4 * structureScale))),
+          spread: length * 0.32,
+          length: proportions.paloVerde.thornLength,
+          color: thorn,
+          detailScale,
+        });
+        if (thorns) parts.push(thorns);
+      }
       return;
     }
 
@@ -163,7 +167,8 @@ export function generatePaloVerde(rng, opts = {}) {
       addLeafSprays(end.clone().lerp(start, 0.18), dir, length / spread + 0.35);
     }
 
-    const childCount = rngInt(rng, depth >= maxDepth - 1 ? 1 : 1, depth <= 3 ? Math.round(THREE.MathUtils.lerp(2, 4, maturity)) : 3);
+    const maxChildren = Math.max(1, Math.round((depth <= 3 ? THREE.MathUtils.lerp(2, 4, maturity) : 3) * THREE.MathUtils.lerp(0.46, 1.0, structureScale)));
+    const childCount = rngInt(rng, 1, maxChildren);
     const side = safeSideVector(dir);
     const fwd = new THREE.Vector3().crossVectors(side, dir).normalize();
 
@@ -184,11 +189,9 @@ export function generatePaloVerde(rng, opts = {}) {
     }
   }
 
-  const trunkCount = rngInt(
-    rng,
-    Math.round(THREE.MathUtils.lerp(1, 3, maturity)),
-    Math.round(THREE.MathUtils.lerp(2, 7, maturity + oldGrowth * 0.15)),
-  );
+  const trunkMin = Math.max(1, Math.round(THREE.MathUtils.lerp(1, 3, maturity) * THREE.MathUtils.lerp(0.60, 1.0, structureScale)));
+  const trunkMax = Math.max(trunkMin, Math.round(THREE.MathUtils.lerp(2, 7, maturity + oldGrowth * 0.15) * THREE.MathUtils.lerp(0.52, 1.0, structureScale)));
+  const trunkCount = rngInt(rng, trunkMin, trunkMax);
   for (let i = 0; i < trunkCount; i++) {
     const angle = (i / trunkCount) * Math.PI * 2 + rngRange(rng, -0.45, 0.45);
     const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));

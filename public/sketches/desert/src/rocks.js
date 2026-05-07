@@ -7,8 +7,9 @@ import { rngRange, rngPick } from './random.js';
 export function generateRock(rng, opts = {}) {
   const size = opts.size ?? rngRange(rng, 0.18, 0.9);
   const isBoulder = size > 0.5;
-  const widthSegments = isBoulder ? 28 : 16;
-  const heightSegments = isBoulder ? 16 : 10;
+  const detailScale = opts.detailScale ?? 1;
+  const widthSegments = Math.max(isBoulder ? 14 : 8, Math.round((isBoulder ? 28 : 16) * detailScale));
+  const heightSegments = Math.max(isBoulder ? 8 : 5, Math.round((isBoulder ? 16 : 10) * detailScale));
   const geom = new THREE.SphereGeometry(1, widthSegments, heightSegments);
   const shapeNoise = createNoise3D(rng);
   const grainNoise = createNoise3D(rng);

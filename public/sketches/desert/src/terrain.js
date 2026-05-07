@@ -61,12 +61,12 @@ export function buildTerrain(params, seed) {
     hydrologySegments = 88,
     heightScale = 5.5,
     macroScale = 0.012,
-    ridgeScale = 0.06,
-    rippleScale = 0.35,
+    ridgeScale = 0.035,
+    rippleScale = 0.16,
     washStrength = 0.6,
-    fanStrength = 0.9,
+    fanStrength = 0.72,
     erosionStrength = 0.75,
-    rockySlopeStrength = 0.65,
+    rockySlopeStrength = 0.38,
   } = params;
   const half = size / 2;
   const invSize = 1 / size;
@@ -152,9 +152,9 @@ export function buildTerrain(params, seed) {
     const basin = smoothstep(0.16, 0.78, south);
 
     const macro = fbm(macroNoise, wx * macroScale, wz * macroScale, 5, 2.0, 0.52);
-    const ridge = ridgedFbm(ridgeNoise, wx * ridgeScale, wz * ridgeScale * 1.55, 4);
-    const fanLobes = ridgedFbm(macroNoise, wx * 0.024, (wz + size * 0.45) * 0.044, 3);
-    const slopeFaces = ridgedFbm(ridgeNoise, wx * ridgeScale * 1.7, wz * ridgeScale * 0.95, 3);
+    const ridge = ridgedFbm(ridgeNoise, wx * ridgeScale, wz * ridgeScale * 1.35, 3);
+    const fanLobes = ridgedFbm(macroNoise, wx * 0.014, (wz + size * 0.45) * 0.024, 2);
+    const slopeFaces = ridgedFbm(ridgeNoise, wx * ridgeScale * 1.15, wz * ridgeScale * 0.75, 2);
     const wash = washNetwork(wx, wz);
     const flowAccumulation = clamp01(
       wash.proximity * 0.58 +
@@ -176,16 +176,16 @@ export function buildTerrain(params, seed) {
       runoff * 0.24
     );
 
-    const mountainFront = shoulder * (1.2 + macro * 0.7 + ridge * rockySlopeStrength);
-    const bajada = basin * (fanLobes - 0.35) * fanStrength * (0.3 + north * 0.7);
+    const mountainFront = shoulder * (1.2 + macro * 0.7 + ridge * rockySlopeStrength * 0.82);
+    const bajada = basin * (fanLobes - 0.35) * fanStrength * 0.74 * (0.3 + north * 0.7);
     const basinTilt = (north - 0.42) * 0.9;
-    const bedrock = slopeFaces * shoulder * 0.45;
+    const bedrock = slopeFaces * shoulder * 0.22;
     const ripple =
       detailNoise(wx * rippleScale, wz * rippleScale * 1.7) *
-      (0.045 + 0.07 * basin) *
+      (0.014 + 0.022 * basin) *
       (1 - wash.gravel * 0.55);
-    const desertPavement = fbm(detailNoise, wx * 0.72, wz * 0.72, 3, 2.15, 0.45) * 0.045;
-    const strata = Math.sin((mountainFront + basinTilt) * 13.0 + macro * 2.0) * shoulder * 0.035;
+    const desertPavement = fbm(detailNoise, wx * 0.42, wz * 0.42, 2, 2.0, 0.42) * 0.012;
+    const strata = Math.sin((mountainFront + basinTilt) * 8.0 + macro * 2.0) * shoulder * 0.018;
 
     const erodedCut = wash.cut * washStrength * erosionStrength;
     const depositionalBank = wash.bank * fanStrength;
