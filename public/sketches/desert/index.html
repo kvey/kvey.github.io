@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generative Tucson Desert</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #c9b598; font-family: ui-sans-serif, system-ui, sans-serif; color: #2b2118; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+    #hint {
+      position: fixed; left: 12px; bottom: 12px; padding: 8px 10px;
+      background: rgba(255,255,255,0.6); backdrop-filter: blur(6px);
+      border-radius: 8px; font-size: 12px; line-height: 1.45;
+      pointer-events: none; max-width: 300px;
+    }
+    #hint b { color: #6e3a1f; }
+    #loading {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #c9b598; color: #6e3a1f; font-size: 14px; letter-spacing: 0.08em;
+      text-transform: uppercase; z-index: 10; pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+    #loading.hidden { opacity: 0; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="hint">
+    <b>WASD</b> to fly · <b>Shift+W/S</b> vertical · <b>Drag</b> to look · <b>Scroll</b> to zoom<br>
+    Tweak the panel on the right, hit <b>Regenerate</b> to reseed.
+  </div>
+  <div id="loading">Generating desert…</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+      "lil-gui": "https://unpkg.com/lil-gui@0.19.2/dist/lil-gui.esm.js",
+      "simplex-noise": "https://esm.sh/simplex-noise@4.0.1"
+    }
+  }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

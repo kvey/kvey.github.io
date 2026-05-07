@@ -1,0 +1,63 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Saguaro inspector</title>
+<style>html,body{margin:0;height:100%;background:#c9b598;}canvas{display:block;}</style>
+</head><body>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mulberry32 } from './src/random.js';
+import { generateSaguaro } from './src/plants/saguaro.js';
+import { createCactusSpineMaterial } from './src/materials/cactusSpineMaterial.js';
+
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setPixelRatio(Math.min(2, devicePixelRatio));
+r.setSize(innerWidth, innerHeight);
+r.outputColorSpace = THREE.SRGBColorSpace;
+r.toneMapping = THREE.ACESFilmicToneMapping;
+r.toneMappingExposure = 1.0;
+document.body.appendChild(r.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xc9b598);
+const cam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 200);
+cam.position.set(7, 4.5, 7);
+const ctl = new OrbitControls(cam, r.domElement);
+ctl.target.set(0, 3, 0);
+
+scene.add(new THREE.HemisphereLight(0xb8d8ff, 0xb98260, 0.7));
+const sun = new THREE.DirectionalLight(0xfff2c0, 2.6);
+sun.position.set(8, 10, 6);
+scene.add(sun);
+
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(20, 64),
+  new THREE.MeshStandardMaterial({ color: 0xc9a877, roughness: 1 }),
+);
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+
+// Lay out a row showing the age progression.
+const mat = createCactusSpineMaterial();
+const seeds = [11, 23, 47, 91, 137];
+for (let i = 0; i < seeds.length; i++) {
+  const rng = mulberry32(seeds[i]);
+  const age = i / (seeds.length - 1);
+  const g = generateSaguaro(rng, { age, armProbability: 1.0, maxHeight: 7 });
+  const m = new THREE.Mesh(g, mat);
+  m.position.x = (i - (seeds.length - 1) / 2) * 4;
+  scene.add(m);
+}
+
+addEventListener('resize', () => {
+  cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix();
+  r.setSize(innerWidth, innerHeight);
+});
+function tick() { ctl.update(); r.render(scene, cam); requestAnimationFrame(tick); }
+tick();
+</script></body></html>
