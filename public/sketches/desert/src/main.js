@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 
-import { mountDesertUi } from './uiOverlay.js';
+import { mountDesertUi, timeOfDayFromSunElevation, tucsonSolarPosition } from './uiOverlay.js';
 import { mulberry32, rngRange } from './random.js';
 import { buildSky } from './sky.js';
 import { generateRock } from './rocks.js';
@@ -31,6 +31,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
+if ('useLegacyLights' in renderer) renderer.useLegacyLights = false;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false;
@@ -110,7 +111,7 @@ const visibilityCullPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
 const visibilityCullQuaternion = new THREE.Quaternion();
 let visibilityCullDirty = true;
 let lastVisibilityCullAt = -Infinity;
-const SHADOW_UPDATE_TARGET_EPSILON_SQ = 6 * 6;
+const SHADOW_UPDATE_TARGET_EPSILON_SQ = 3.5 * 3.5;
 const shadowTargetPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
 
 // ---------- Keyboard flight controls ----------
@@ -135,6 +136,7 @@ function setFlightKey(event, isPressed) {
     case 'KeyS':
     case 'KeyA':
     case 'KeyD':
+    case 'Space':
     case 'ShiftLeft':
     case 'ShiftRight':
       if (isPressed) {
@@ -156,6 +158,7 @@ function updateFlight(deltaSeconds) {
   flightDirection.set(0, 0, 0);
   if (flightKeys.has('KeyW')) flightDirection[isShiftPressed ? 'y' : 'z'] += 1;
   if (flightKeys.has('KeyS')) flightDirection[isShiftPressed ? 'y' : 'z'] -= 1;
+  if (flightKeys.has('Space')) flightDirection.y += isShiftPressed ? -1 : 1;
   if (flightKeys.has('KeyD')) flightDirection.x += 1;
   if (flightKeys.has('KeyA')) flightDirection.x -= 1;
   if (flightDirection.lengthSq() === 0) return;
@@ -189,14 +192,16 @@ freezeStaticTransform(skyCtl.mountains);
 
 const sun = new THREE.DirectionalLight(0xfff0d6, 2.4);
 sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.near = 0.5;
-sun.shadow.camera.far = 200;
-sun.shadow.camera.left = -60;
-sun.shadow.camera.right = 60;
-sun.shadow.camera.top = 60;
-sun.shadow.camera.bottom = -60;
-sun.shadow.bias = -0.0005;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 8;
+sun.shadow.camera.far = 170;
+sun.shadow.camera.left = -42;
+sun.shadow.camera.right = 42;
+sun.shadow.camera.top = 42;
+sun.shadow.camera.bottom = -42;
+sun.shadow.bias = -0.00022;
+sun.shadow.normalBias = 0.035;
+sun.shadow.radius = 2.2;
 scene.add(sun);
 scene.add(sun.target);
 
@@ -206,9 +211,17 @@ scene.add(moonLight);
 scene.add(moonLight.target);
 const sunLensFlare = createSunLensFlare(scene);
 
-// Sky-bounce ambient — warm orange ground, hazy blue sky
-const hemi = new THREE.HemisphereLight(0xb8d8ff, 0xb98260, 0.6);
+// Sky-bounce ambient: soft blue from above, warm desert albedo from below.
+const hemi = new THREE.HemisphereLight(0xb8d8ff, 0xb98260, 0.42);
 scene.add(hemi);
+const skyFill = new THREE.DirectionalLight(0xb9d6ff, 0.0);
+skyFill.castShadow = false;
+scene.add(skyFill);
+scene.add(skyFill.target);
+const sandBounce = new THREE.DirectionalLight(0xd9a66e, 0.0);
+sandBounce.castShadow = false;
+scene.add(sandBounce);
+scene.add(sandBounce.target);
 
 const sunWarmColor = new THREE.Color(0xff9a56);
 const sunCoolColor = new THREE.Color(0xfff2d6);
@@ -223,6 +236,15 @@ const hemiSunsetColor = new THREE.Color(0x7b8ac4);
 const hemiNightColor = new THREE.Color(0x10183b);
 const hemiGroundSunsetColor = new THREE.Color(0xd07658);
 const hemiGroundNightColor = new THREE.Color(0x080814);
+const skyFillDayColor = new THREE.Color(0xb9d6ff);
+const skyFillTwilightColor = new THREE.Color(0xb7a0d4);
+const skyFillNightColor = new THREE.Color(0x273c82);
+const sandBounceDayColor = new THREE.Color(0xd7a36b);
+const sandBounceSunsetColor = new THREE.Color(0xea8959);
+const sandBounceNightColor = new THREE.Color(0x15101c);
+const environmentTexture = createAtmosphereEnvironmentTexture();
+scene.environment = environmentTexture;
+let currentEnvironmentIntensity = 0.16;
 
 // ---------- Shared materials ----------
 const ocotilloMaterial = createOcotilloMaterial();
@@ -231,6 +253,12 @@ const cactusMaterial = createCactusSpineMaterial();
 const creosoteMaterial = createCreosoteMaterial();
 const rockMaterial = createRockMaterial();
 const sharedMaterials = new Set([ocotilloMaterial, treeMaterial, cactusMaterial, creosoteMaterial, rockMaterial]);
+const environmentMaterials = new Set();
+registerEnvironmentMaterial(ocotilloMaterial, 0.22);
+registerEnvironmentMaterial(treeMaterial, 0.30);
+registerEnvironmentMaterial(cactusMaterial, 0.18);
+registerEnvironmentMaterial(creosoteMaterial, 0.26);
+registerEnvironmentMaterial(rockMaterial, 0.62);
 const SCATTER_GEOMETRY_CACHE_LIMIT = 192;
 const PERF_LOG_PREFIX = '[desert-perf]';
 const scatterGeometryCache = new Map();
@@ -240,6 +268,13 @@ const scatterGeometryRefs = new Map();
 // ---------- Generation parameters ----------
 let desertUi = null;
 const guiControllers = [];
+const DEFAULT_SIMPLE_TIME_OF_DAY = (() => {
+  const now = new Date();
+  return now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+})();
+const DEFAULT_SIMPLE_TIME_OF_YEAR = 80;
+const DEFAULT_SOLAR_POSITION = tucsonSolarPosition(DEFAULT_SIMPLE_TIME_OF_DAY, DEFAULT_SIMPLE_TIME_OF_YEAR);
+const DEFAULT_SEASONAL_PLANTS = deriveSeasonalPlantState(DEFAULT_SIMPLE_TIME_OF_YEAR);
 // NPS 2020 Saguaro Census: 21,517 saguaros across 45 200 m x 200 m plots.
 // https://www.nps.gov/sagu/learn/nature/2020-saguaro-census-final-report.htm
 const SAGUARO_CENSUS_DENSITY = 21517 / (45 * 200 * 200);
@@ -265,19 +300,21 @@ const params = {
   saguaroDensity: SAGUARO_CENSUS_DENSITY,
   saguaroMaxHeight: 7.0,
   saguaroArmProbability: 0.7,
+  saguaroFlowering: DEFAULT_SEASONAL_PLANTS.saguaroFlowering,
+  saguaroFruiting: DEFAULT_SEASONAL_PLANTS.saguaroFruiting,
   barrelEnabled: true,
   barrelDensity: 0.030,
   paloVerdeEnabled: true,
   paloVerdeDensity: 0.008,
-  paloVerdeFlowering: false,
+  paloVerdeFlowering: DEFAULT_SEASONAL_PLANTS.paloVerdeFlowering,
   mesquiteEnabled: true,
   mesquiteDensity: 0.003,
-  mesquiteSeedPods: true,
+  mesquiteSeedPods: DEFAULT_SEASONAL_PLANTS.mesquiteSeedPods,
   pricklyPearEnabled: true,
   pricklyPearDensity: 0.020,
   ocotilloEnabled: true,
   ocotilloDensity: 0.006,
-  ocotilloFlowering: false,
+  ocotilloFlowering: DEFAULT_SEASONAL_PLANTS.ocotilloFlowering,
   creosoteEnabled: true,
   creosoteDensity: 0.060,
 
@@ -286,8 +323,10 @@ const params = {
   largeRockDensity: 0.012,
 
   // Sun
-  sunAzimuth: 145,
-  sunElevation: 7,
+  sunAzimuth: DEFAULT_SOLAR_POSITION.sunAzimuth,
+  sunElevation: DEFAULT_SOLAR_POSITION.sunElevation,
+  timeOfDay: DEFAULT_SIMPLE_TIME_OF_DAY,
+  timeOfYear: DEFAULT_SIMPLE_TIME_OF_YEAR,
 
   // Atmosphere
   fogDensity: 0.008,
@@ -302,6 +341,43 @@ const params = {
     regenerate();
   },
 };
+
+function deriveSeasonalPlantState(timeOfYear) {
+  const day = Math.max(1, Math.min(365, Math.round(timeOfYear)));
+  return {
+    saguaroFlowering: day >= 110 && day <= 172,
+    saguaroFruiting: day >= 158 && day <= 212,
+    paloVerdeFlowering: day >= 74 && day <= 140,
+    ocotilloFlowering: day >= 60 && day <= 161,
+    mesquiteSeedPods: day >= 135 && day <= 243,
+  };
+}
+
+function applySeasonalPlantState(timeOfYear) {
+  const seasonalState = deriveSeasonalPlantState(timeOfYear);
+  let changed = false;
+  for (const [property, value] of Object.entries(seasonalState)) {
+    if (params[property] === value) continue;
+    params[property] = value;
+    changed = true;
+  }
+  if (changed) updateSeasonalPlantVisibility();
+  return changed;
+}
+
+function updateSeasonalPlantVisibility() {
+  cactusMaterial.userData.setSeasonalVisibility?.({
+    saguaroFlowering: params.saguaroFlowering,
+    saguaroFruiting: params.saguaroFruiting,
+  });
+  treeMaterial.userData.setSeasonalVisibility?.({
+    paloVerdeFlowering: params.paloVerdeFlowering,
+    mesquiteSeedPods: params.mesquiteSeedPods,
+  });
+  ocotilloMaterial.userData.setSeasonalVisibility?.({
+    ocotilloFlowering: params.ocotilloFlowering,
+  });
+}
 
 // ---------- Scene root for procedural content ----------
 let world = new THREE.Group();
@@ -333,7 +409,10 @@ function clearWorld() {
       }
       const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
       for (const material of materials) {
-        if (material && !sharedMaterials.has(material)) material.dispose();
+        if (material && !sharedMaterials.has(material)) {
+          environmentMaterials.delete(material);
+          material.dispose();
+        }
       }
     }
   });
@@ -537,15 +616,15 @@ function generationParams() {
     barrelDensity: params.barrelDensity,
     paloVerdeEnabled: params.paloVerdeEnabled,
     paloVerdeDensity: params.paloVerdeDensity,
-    paloVerdeFlowering: params.paloVerdeFlowering,
+    paloVerdeFlowering: true,
     mesquiteEnabled: params.mesquiteEnabled,
     mesquiteDensity: params.mesquiteDensity,
-    mesquiteSeedPods: params.mesquiteSeedPods,
+    mesquiteSeedPods: true,
     pricklyPearEnabled: params.pricklyPearEnabled,
     pricklyPearDensity: params.pricklyPearDensity,
     ocotilloEnabled: params.ocotilloEnabled,
     ocotilloDensity: params.ocotilloDensity,
-    ocotilloFlowering: params.ocotilloFlowering,
+    ocotilloFlowering: true,
     creosoteEnabled: params.creosoteEnabled,
     creosoteDensity: params.creosoteDensity,
     smallRockDensity: params.smallRockDensity,
@@ -648,7 +727,10 @@ function unloadTerrainChunk(key) {
       }
       const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
       for (const material of materials) {
-        if (material && !sharedMaterials.has(material)) material.dispose();
+        if (material && !sharedMaterials.has(material)) {
+          environmentMaterials.delete(material);
+          material.dispose();
+        }
       }
     }
   });
@@ -868,7 +950,8 @@ function applyTerrainData(chunkKeyForTerrain, data) {
   geometry.setIndex(new THREE.BufferAttribute(data.indices, 1));
   geometry.computeBoundingSphere();
 
-  const mesh = new THREE.Mesh(geometry, createTerrainMaterial());
+  const terrainMaterial = registerEnvironmentMaterial(createTerrainMaterial(), 0.46);
+  const mesh = new THREE.Mesh(geometry, terrainMaterial);
   mesh.castShadow = false;
   mesh.receiveShadow = true;
   mesh.userData.culling = {
@@ -1257,6 +1340,11 @@ function updateSun() {
   const dir = skyCtl.update({ azimuth: params.sunAzimuth, elevation: params.sunElevation });
   updateLightAnchors(dir);
   markShadowMapDirty();
+  desertUi?.setSunControls({
+    timeOfDay: params.timeOfDay,
+    timeOfYear: params.timeOfYear,
+    sunAzimuth: params.sunAzimuth,
+  });
   // Warm color near horizon, cooler higher up, then dim after sunset.
   const elev01 = THREE.MathUtils.clamp(params.sunElevation / 60, 0, 1);
   const daylight01 = THREE.MathUtils.smoothstep(params.sunElevation, -4, 8);
@@ -1266,10 +1354,29 @@ function updateSun() {
     (1 - night01);
   sunColor.copy(sunWarmColor).lerp(sunCoolColor, elev01 * 0.85).lerp(sunNightColor, night01);
   sun.color.copy(sunColor);
-  const daylightIntensity = THREE.MathUtils.lerp(0.65, 2.65, elev01) + sunset01 * 0.28;
+  const daylightIntensity = THREE.MathUtils.lerp(0.85, 3.35, Math.pow(elev01, 0.72)) + sunset01 * 0.24;
   sun.intensity = THREE.MathUtils.lerp(0.0, daylightIntensity, daylight01);
 
-  moonLight.intensity = THREE.MathUtils.lerp(0.0, 0.58, night01);
+  moonLight.intensity = THREE.MathUtils.lerp(0.0, 0.34, night01);
+  skyFill.intensity = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.055, 0.18, daylight01),
+    0.04,
+    night01,
+  );
+  skyFill.color.copy(skyFillDayColor)
+    .lerp(skyFillTwilightColor, sunset01 * 0.62)
+    .lerp(skyFillNightColor, night01);
+  skyFill.position.copy(skyCtl.sun).multiplyScalar(-44).addScaledVector(camera.up, 24).add(controls.target);
+  skyFill.target.position.copy(controls.target);
+  sandBounce.intensity = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.035, 0.18, daylight01) * THREE.MathUtils.lerp(1.18, 0.78, elev01),
+    0.0,
+    night01,
+  );
+  sandBounce.color.copy(sandBounceDayColor)
+    .lerp(sandBounceSunsetColor, sunset01 * 0.72)
+    .lerp(sandBounceNightColor, night01);
+  updateSandBounceAnchor(dir);
 
   // Match fog to the sky's hazy ground band.
   fogColor.copy(fogWarmColor)
@@ -1280,8 +1387,8 @@ function updateSun() {
   const dayFogDensity = THREE.MathUtils.lerp(1.28, 0.84, elev01);
   scene.fog.density = params.fogDensity * THREE.MathUtils.lerp(dayFogDensity, 0.62, night01);
   hemi.intensity = THREE.MathUtils.lerp(
-    THREE.MathUtils.lerp(0.20, 0.68, daylight01),
-    0.10,
+    THREE.MathUtils.lerp(0.10, 0.42, daylight01),
+    0.055,
     night01,
   );
   hemi.color.set(0xb8d8ff)
@@ -1290,6 +1397,8 @@ function updateSun() {
   hemi.groundColor.set(0xb98260)
     .lerp(hemiGroundSunsetColor, sunset01 * 0.45)
     .lerp(hemiGroundNightColor, night01);
+  updateAtmosphereEnvironment({ elev01, daylight01, sunset01, night01 });
+  setEnvironmentIntensity(THREE.MathUtils.lerp(0.06, 0.22, daylight01) * (1 - night01 * 0.45));
   updateLensFlare();
 }
 
@@ -1298,6 +1407,32 @@ function updateLightAnchors(sunDirection = skyCtl.sun) {
   sun.position.copy(sunDirection).multiplyScalar(80).add(controls.target);
   moonLight.target.position.copy(controls.target);
   moonLight.position.copy(skyCtl.moon).multiplyScalar(80).add(controls.target);
+  skyFill.target.position.copy(controls.target);
+  skyFill.position.copy(sunDirection).multiplyScalar(-44).addScaledVector(camera.up, 24).add(controls.target);
+  updateSandBounceAnchor(sunDirection);
+  updateShadowCameraFootprint();
+}
+
+function updateSandBounceAnchor(sunDirection = skyCtl.sun) {
+  const horizontalSun = new THREE.Vector3(sunDirection.x, 0, sunDirection.z);
+  if (horizontalSun.lengthSq() < 0.0001) horizontalSun.set(0, 0, 1);
+  horizontalSun.normalize();
+  sandBounce.position.copy(controls.target)
+    .addScaledVector(horizontalSun, -30)
+    .addScaledVector(camera.up, -16);
+  sandBounce.target.position.copy(controls.target).addScaledVector(camera.up, 12);
+}
+
+function updateShadowCameraFootprint() {
+  const lowSun = 1 - THREE.MathUtils.smoothstep(params.sunElevation, 8, 34);
+  const span = THREE.MathUtils.lerp(34, 52, lowSun);
+  const shadowCamera = sun.shadow.camera;
+  if (shadowCamera.left === -span) return;
+  shadowCamera.left = -span;
+  shadowCamera.right = span;
+  shadowCamera.top = span;
+  shadowCamera.bottom = -span;
+  shadowCamera.updateProjectionMatrix();
 }
 
 function markShadowMapDirty() {
@@ -1319,6 +1454,65 @@ function updateLensFlare() {
   });
 }
 
+function registerEnvironmentMaterial(material, scale = 1) {
+  material.userData.environmentScale = scale;
+  environmentMaterials.add(material);
+  material.envMapIntensity = currentEnvironmentIntensity * scale;
+  return material;
+}
+
+function setEnvironmentIntensity(intensity) {
+  currentEnvironmentIntensity = intensity;
+  for (const material of environmentMaterials) {
+    material.envMapIntensity = intensity * (material.userData.environmentScale ?? 1);
+  }
+}
+
+function createAtmosphereEnvironmentTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 32;
+  const context = canvas.getContext('2d', { alpha: false });
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  texture.userData.context = context;
+  return texture;
+}
+
+function updateAtmosphereEnvironment({ elev01, daylight01, sunset01, night01 }) {
+  const context = environmentTexture.userData.context;
+  if (!context) return;
+
+  const zenith = new THREE.Color(0x6f9ed4)
+    .lerp(new THREE.Color(0x355586), sunset01 * 0.28)
+    .lerp(new THREE.Color(0x080c20), night01);
+  const horizon = new THREE.Color(0xf4bd83)
+    .lerp(new THREE.Color(0xf08d5b), sunset01 * 0.48)
+    .lerp(new THREE.Color(0x171a35), night01);
+  const ground = new THREE.Color(0xb98557)
+    .lerp(new THREE.Color(0x9a5d4f), sunset01 * 0.34)
+    .lerp(new THREE.Color(0x090812), night01);
+  const upperLift = THREE.MathUtils.lerp(0.74, 1.18, daylight01) * THREE.MathUtils.lerp(1.0, 0.34, night01);
+  const groundLift = THREE.MathUtils.lerp(0.50, 0.86, elev01) * THREE.MathUtils.lerp(1.0, 0.24, night01);
+
+  const gradient = context.createLinearGradient(0, 0, 0, context.canvas.height);
+  gradient.addColorStop(0.00, canvasColor(zenith, upperLift));
+  gradient.addColorStop(0.42, canvasColor(horizon, 1.0 + sunset01 * 0.18));
+  gradient.addColorStop(0.55, canvasColor(horizon, 0.78));
+  gradient.addColorStop(1.00, canvasColor(ground, groundLift));
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, context.canvas.width, context.canvas.height);
+  environmentTexture.needsUpdate = true;
+}
+
+function canvasColor(color, intensity = 1) {
+  const r = Math.round(THREE.MathUtils.clamp(color.r * intensity, 0, 1) * 255);
+  const g = Math.round(THREE.MathUtils.clamp(color.g * intensity, 0, 1) * 255);
+  const b = Math.round(THREE.MathUtils.clamp(color.b * intensity, 0, 1) * 255);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 // ---------- GUI ----------
 function trackGuiController(controller) {
   guiControllers.push(controller);
@@ -1336,6 +1530,8 @@ function refreshGui() {
 }
 
 const gui = new GUI({ title: 'Desert generator' });
+gui.domElement.style.display = 'none';
+gui.domElement.style.top = '74px';
 
 const fGen = gui.addFolder('General');
 addGuiControl(fGen, 'seed').name('seed').onFinishChange(regenerate);
@@ -1361,6 +1557,8 @@ addGuiControl(fSag, 'saguaroEnabled').onChange(scheduleRegenerate).name('enabled
 addGuiControl(fSag, 'saguaroDensity', 0, 0.05, 0.001).onChange(scheduleRegenerate).name('density');
 addGuiControl(fSag, 'saguaroMaxHeight', 3, 12, 0.1).onChange(scheduleRegenerate).name('max height');
 addGuiControl(fSag, 'saguaroArmProbability', 0, 1, 0.05).onChange(scheduleRegenerate).name('arm chance');
+addGuiControl(fSag, 'saguaroFlowering').onChange(updateSeasonalPlantVisibility).name('flowering');
+addGuiControl(fSag, 'saguaroFruiting').onChange(updateSeasonalPlantVisibility).name('red fruit');
 
 const fBar = gui.addFolder('Barrel cacti');
 addGuiControl(fBar, 'barrelEnabled').onChange(scheduleRegenerate).name('enabled');
@@ -1369,12 +1567,12 @@ addGuiControl(fBar, 'barrelDensity', 0, 0.1, 0.002).onChange(scheduleRegenerate)
 const fPV = gui.addFolder('Palo verde');
 addGuiControl(fPV, 'paloVerdeEnabled').onChange(scheduleRegenerate).name('enabled');
 addGuiControl(fPV, 'paloVerdeDensity', 0, 0.04, 0.001).onChange(scheduleRegenerate).name('density');
-addGuiControl(fPV, 'paloVerdeFlowering').onChange(scheduleRegenerate).name('flowering (spring)');
+addGuiControl(fPV, 'paloVerdeFlowering').onChange(updateSeasonalPlantVisibility).name('flowering (spring)');
 
 const fMesquite = gui.addFolder('Mesquite');
 addGuiControl(fMesquite, 'mesquiteEnabled').onChange(scheduleRegenerate).name('enabled');
 addGuiControl(fMesquite, 'mesquiteDensity', 0, 0.025, 0.001).onChange(scheduleRegenerate).name('density');
-addGuiControl(fMesquite, 'mesquiteSeedPods').onChange(scheduleRegenerate).name('seed pods');
+addGuiControl(fMesquite, 'mesquiteSeedPods').onChange(updateSeasonalPlantVisibility).name('seed pods');
 
 const fPP = gui.addFolder('Prickly pear');
 addGuiControl(fPP, 'pricklyPearEnabled').onChange(scheduleRegenerate).name('enabled');
@@ -1383,7 +1581,7 @@ addGuiControl(fPP, 'pricklyPearDensity', 0, 0.08, 0.002).onChange(scheduleRegene
 const fOco = gui.addFolder('Ocotillo');
 addGuiControl(fOco, 'ocotilloEnabled').onChange(scheduleRegenerate).name('enabled');
 addGuiControl(fOco, 'ocotilloDensity', 0, 0.03, 0.001).onChange(scheduleRegenerate).name('density');
-addGuiControl(fOco, 'ocotilloFlowering').onChange(scheduleRegenerate).name('blooming');
+addGuiControl(fOco, 'ocotilloFlowering').onChange(updateSeasonalPlantVisibility).name('blooming');
 
 const fCre = gui.addFolder('Creosote');
 addGuiControl(fCre, 'creosoteEnabled').onChange(scheduleRegenerate).name('enabled');
@@ -1395,16 +1593,51 @@ addGuiControl(fRock, 'largeRockDensity', 0, 0.05, 0.002).onChange(scheduleRegene
 
 const fSun = gui.addFolder('Sun & atmosphere');
 addGuiControl(fSun, 'sunAzimuth', 0, 360, 1).onChange(updateSun).name('azimuth');
-addGuiControl(fSun, 'sunElevation', -18, 80, 0.5).onChange(updateSun).name('elevation');
+addGuiControl(fSun, 'sunElevation', -18, 80, 0.5).onChange(value => {
+  params.timeOfDay = timeOfDayFromSunElevation(value, params.timeOfDay);
+  updateSun();
+}).name('elevation');
 addGuiControl(fSun, 'fogDensity', 0, 0.02, 0.0005).onChange(updateSun).name('fog');
 addGuiControl(fSun, 'exposure', 0.4, 1.6, 0.05).onChange(value => { renderer.toneMappingExposure = value; }).name('exposure');
 addGuiControl(fSun, 'lensFlare').onChange(updateLensFlare).name('lens flare');
 addGuiControl(fSun, 'cloudRate', 0, 5, 0.05).name('cloud rate');
 
 // ---------- UI overlay ----------
-desertUi = mountDesertUi(uiRoot);
+let simpleControlsActive = true;
+
+function setFullControlsVisible(isVisible) {
+  simpleControlsActive = !isVisible;
+  gui.domElement.style.display = isVisible ? '' : 'none';
+  if (simpleControlsActive) {
+    applySeasonalPlantState(params.timeOfYear);
+  } else {
+    updateSeasonalPlantVisibility();
+  }
+  refreshGui();
+}
+
+desertUi = mountDesertUi(uiRoot, {
+  initialTimeOfDay: params.timeOfDay,
+  initialTimeOfYear: params.timeOfYear,
+  initialSunAzimuth: params.sunAzimuth,
+  onControlModeChange: setFullControlsVisible,
+  onSunControlsChange: ({ timeOfDay, timeOfYear, sunAzimuth, sunElevation }) => {
+    params.timeOfDay = timeOfDay;
+    params.timeOfYear = timeOfYear;
+    params.sunAzimuth = sunAzimuth;
+    params.sunElevation = sunElevation;
+    if (simpleControlsActive) {
+      applySeasonalPlantState(timeOfYear);
+    } else {
+      updateSeasonalPlantVisibility();
+    }
+    updateSun();
+    refreshGui();
+  },
+});
 
 // ---------- First build + animation loop ----------
+updateSeasonalPlantVisibility();
 updateSun();
 let lastTick = performance.now();
 let cloudTime = 0;

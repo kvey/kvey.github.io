@@ -168,6 +168,20 @@ vec3 applyTerrainSurface(vec3 baseColor) {
   c += terrainDustColor * ripple * 0.035;
   c *= 0.92 + stoneField * 0.08 - fracturedRock * 0.08;
   return c;
+}
+
+float terrainSurfaceRoughness() {
+  vec2 p = vTerrainWorldPosition.xz;
+  float wash = clamp(vTerrainDetail.x, 0.0, 1.0);
+  float shoulder = clamp(vTerrainDetail.y, 0.0, 1.0);
+  float basin = clamp(vTerrainDetail.z, 0.0, 1.0);
+  float slope = clamp(vTerrainDetail.w, 0.0, 1.0);
+  float gravel = terrainRockMask(wash, shoulder, slope);
+  float mica = smoothstep(0.88, 0.995, terrainHash(floor(p * 19.0) + floor(p.yx * 3.0)));
+  float polishedWash = smoothstep(0.46, 0.92, wash) * (0.55 + terrainFbm(p * 0.48) * 0.45);
+  float exposedStone = smoothstep(0.24, 0.82, slope) * shoulder;
+  float fineDust = (1.0 - gravel) * basin;
+  return clamp(0.985 - polishedWash * 0.12 - exposedStone * 0.10 - mica * 0.08 + fineDust * 0.035, 0.74, 1.0);
 }`,
       )
       .replace(
@@ -176,12 +190,17 @@ vec3 applyTerrainSurface(vec3 baseColor) {
 diffuseColor.rgb = applyTerrainSurface(diffuseColor.rgb);`,
       )
       .replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+roughnessFactor = clamp(roughnessFactor * terrainSurfaceRoughness(), 0.72, 1.0);`,
+      )
+      .replace(
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
 normal = applyTerrainNormalAndBump(normal);`,
       );
   };
 
-  material.customProgramCacheKey = () => 'terrain-material-v2';
+  material.customProgramCacheKey = () => 'terrain-material-v3';
   return material;
 }

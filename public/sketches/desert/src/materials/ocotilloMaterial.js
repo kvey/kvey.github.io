@@ -8,23 +8,43 @@ import * as THREE from 'three';
 export function createOcotilloMaterial() {
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.82,
+    roughness: 0.90,
     metalness: 0.0,
     side: THREE.DoubleSide,
   });
+  const seasonalUniforms = {
+    ocotilloFlowerVisibility: { value: 1 },
+  };
+  material.userData.setSeasonalVisibility = ({
+    ocotilloFlowering = true,
+  } = {}) => {
+    seasonalUniforms.ocotilloFlowerVisibility.value = ocotilloFlowering ? 1 : 0;
+  };
 
   material.onBeforeCompile = (shader) => {
+    shader.uniforms.ocotilloFlowerVisibility = seasonalUniforms.ocotilloFlowerVisibility;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
         `#include <common>
 attribute vec4 ocotilloDetail;
-varying vec4 vOcotilloDetail;`,
+varying vec4 vOcotilloDetail;
+
+float ocotilloFlowerLobe(float around) {
+  return 0.5 + 0.5 * sin(around * 31.415927);
+}`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-vOcotilloDetail = ocotilloDetail;`,
+vOcotilloDetail = ocotilloDetail;
+if (ocotilloDetail.x > 0.5) {
+  float flowerAlong = clamp(ocotilloDetail.y, 0.0, 1.0);
+  float lip = smoothstep(0.54, 1.0, flowerAlong);
+  float throat = 1.0 - smoothstep(0.0, 0.42, flowerAlong);
+  float lobe = ocotilloFlowerLobe(fract(ocotilloDetail.z));
+  transformed += normal * (lip * (0.010 + lobe * 0.014) - throat * 0.004);
+}`,
       );
 
     shader.fragmentShader = shader.fragmentShader
@@ -32,6 +52,11 @@ vOcotilloDetail = ocotilloDetail;`,
         '#include <common>',
         `#include <common>
 varying vec4 vOcotilloDetail;
+uniform float ocotilloFlowerVisibility;
+
+float ocotilloFlowerLobe(float around) {
+  return 0.5 + 0.5 * sin(around * 31.415927);
+}
 
 float ocotilloHash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -64,14 +89,19 @@ vec3 ocotilloStemShader(vec3 baseColor) {
 vec3 ocotilloFlowerShader(vec3 baseColor) {
   float along = clamp(vOcotilloDetail.y, 0.0, 1.0);
   float around = fract(vOcotilloDetail.z);
-  float rib = 0.5 + 0.5 * sin(around * 37.699112);
-  float throat = smoothstep(0.0, 0.30, along);
-  float hotTip = smoothstep(0.58, 1.0, along);
+  float rib = 0.5 + 0.5 * sin(around * 31.415927);
+  float fineRib = 0.5 + 0.5 * sin((around * 10.0 + along * 0.45) * 6.2831853);
+  float throat = smoothstep(0.0, 0.34, along);
+  float tube = smoothstep(0.18, 0.72, along) * (1.0 - smoothstep(0.92, 1.0, along));
+  float lip = smoothstep(0.58, 1.0, along);
+  float lobe = ocotilloFlowerLobe(around);
+  float hotTip = smoothstep(0.62, 1.0, along) * (0.62 + lobe * 0.38);
 
   vec3 shaded = baseColor;
-  shaded *= 0.76 + rib * 0.16 + hotTip * 0.18;
-  shaded = mix(shaded, vec3(0.96, 0.42, 0.16), hotTip * 0.28);
-  shaded = mix(shaded, vec3(0.56, 0.12, 0.08), (1.0 - throat) * 0.24);
+  shaded *= 0.66 + rib * 0.12 + fineRib * 0.10 + tube * 0.08 + hotTip * 0.22;
+  shaded = mix(shaded, vec3(1.0, 0.34, 0.10), hotTip * 0.36);
+  shaded = mix(shaded, vec3(0.72, 0.08, 0.05), (1.0 - throat) * 0.32);
+  shaded = mix(shaded, vec3(0.98, 0.56, 0.18), lip * lobe * 0.20);
   return shaded;
 }
 
@@ -83,10 +113,11 @@ vec3 ocotilloApplyDetail(vec3 baseColor) {
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
+if (vOcotilloDetail.x > 0.5 && ocotilloFlowerVisibility < 0.5) discard;
 diffuseColor.rgb = ocotilloApplyDetail(diffuseColor.rgb);`,
       );
   };
 
-  material.customProgramCacheKey = () => 'ocotillo-material-v1';
+  material.customProgramCacheKey = () => 'ocotillo-material-v3-tubular-flowers';
   return material;
 }

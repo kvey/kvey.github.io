@@ -1,174 +1,259 @@
-import Head from 'next/head'
-import { LineBreak, LineBreakDouble } from '@/components/linebreak';
-import { Logo } from '@/components/logo';
 import Nav from '@/components/nav';
 
-function formatDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+type Work = {
+  company: string;
+  href: string;
+  role: string;
+  period: string;
+  headline: string;
+  body: string;
+};
 
+const work: Work[] = [
+  {
+    company: 'Curative',
+    href: 'https://curative.com',
+    role: 'VP of Engineering',
+    period: '2020 — 2023',
+    headline: '36M COVID tests · over $1B revenue in year one · 7,000 people',
+    body: 'Led engineering through the pandemic-era buildout. From a standing start to nationwide testing infrastructure, fast.',
+  },
+  {
+    company: 'Figma',
+    href: 'https://www.figma.com/about',
+    role: 'Software Engineer',
+    period: '2018 — 2019',
+    headline: 'Multiplayer collaboration · editor and viewer performance',
+    body: 'Worked on the systems that made Figma feel instant — the reason it became the tool every designer reaches for. Now FIG on the public markets.',
+  },
+  {
+    company: 'Assembly',
+    href: 'https://asm.co',
+    role: 'Co-Founder & CTO',
+    period: '2014 — 2018 · YC S15',
+    headline: 'Quality control software for modern manufacturing',
+    body: 'Co-founded out of YC to rebuild how factories catch defects in real time. Built consoles, networks, and ingestion across factories in the US and China.',
+  },
+];
+
+const writing = [
+  {
+    date: '2026-04-13',
+    href: '/blog/2026-04-13',
+    title: 'Design Patterns in the Age of AI',
+    lede: 'Which engineering patterns should change now that AI can read, write, and refactor code for us.',
+  },
+  {
+    date: '2024-08-27',
+    href: '/blog/2024-08-27',
+    title: 'What is an AI Agent?',
+    lede: 'Unraveling the hype and reclaiming the concept.',
+  },
+];
 
 const Home = () => {
   return (
-      <div>
-        <div className='flex flex-col items-center pb-24'>
-          <div
-              className='mx-4 mb-0 md:px-4 px-8 md:pt-8 pt-8 pb-2 mt-8 max-w-4xl flex flex-col md:gap-x-26 gap-8 w-full'>
-            <div className={"pb-40"}>
-              <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
-                <h1 className='text-4xl'> COLTON PIERSON </h1>
-                <p className='text-xl pt-2'>
-                  Founder @ THOUSAND BIRDS INC
-                </p>
-                <p className='text pt-4'>
-                  Building infrastructure for AI Agents.
-                </p>
-                <LineBreakDouble/>
-                <Nav />
-              </div>
-              <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
-                <h2 className={"text-2xl"}>Background</h2>
+    <>
+      <Nav />
 
-                <table className="w-full my-4 lg:table block border-collapse">
-                <thead className="lg:table-header-group hidden">
-                <tr className="border-b border-gray-300 dark:border-neutral-600">
-                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Workplace</th>
-                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Role</th>
-                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400">About</th>
-                </tr>
-                </thead>
-                <tbody className="lg:table-row-group block">
-                {/* Thousand Birds */}
-                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0 border-b border-gray-200 dark:border-neutral-700">
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Workplace</span>
-                    <a href="https://thousandbirds.ai" target="_blank" className="underline text-blue-600 dark:text-blue-400">Thousand Birds</a>
-                  </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Role</span>
-                    Founder
-                  </td>
-                  <td className="lg:table-cell align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">About</span>
-                    Infrastructure for AI agents. Backed by HF0.
-                  </td>
-                </tr>
-                {/* Curative */}
-                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0 border-b border-gray-200 dark:border-neutral-700">
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Workplace</span>
-                    <a href="https://curative.com" target="_blank" className="underline text-blue-600 dark:text-blue-400">Curative</a>
-                  </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Role</span>
-                    VP of Engineering
-                  </td>
-                  <td className="lg:table-cell align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">About</span>
-                    36m+ COVID tests, {">"}$1B revenue, and 7000 employees in first year
-                  </td>
-                </tr>
-                {/* Figma */}
-                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0 border-b border-gray-200 dark:border-neutral-700">
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Workplace</span>
-                    <a href="https://www.figma.com/about" target="_blank" className="underline text-blue-600 dark:text-blue-400">Figma</a>
-                  </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Role</span>
-                    Software Engineer
-                  </td>
-                  <td className="lg:table-cell align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">About</span>
-                    <a href="https://finance.yahoo.com/quote/FIG/" target="_blank" className="underline text-blue-600 dark:text-blue-400">FIG</a>, worked on collaboration and editor/viewer performance.
-                  </td>
-                </tr>
-                {/* Assembly */}
-                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0">
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Workplace</span>
-                    <a href="https://asm.co" target="_blank" className="underline text-blue-600 dark:text-blue-400">Assembly</a>
-                  </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Role</span>
-                    Co-Founder, CTO
-                  </td>
-                  <td className="lg:table-cell align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">About</span>
-                    YC S2015. Quality control platform for manufacturing.
-                  </td>
-                </tr>
-                </tbody>
-              </table>
-              </div>
-              <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
-                <h2 className={"text-2xl"}>Articles</h2>
+      <main className="relative">
+        <div className="mx-auto max-w-3xl px-6 sm:px-10 pt-24 sm:pt-36 pb-32">
 
-                <table className="w-full my-4 lg:table block border-collapse">
-                <thead className="lg:table-header-group hidden">
-                <tr className="border-b border-gray-300 dark:border-neutral-600">
-                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Date</th>
-                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Title</th>
-                  <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400">Description</th>
-                </tr>
-                </thead>
-                <tbody className="lg:table-row-group block">
-                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0 border-b border-gray-200 dark:border-neutral-700">
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Date</span>
-                    <a href="/blog/2026-04-13" className="underline text-blue-600 dark:text-blue-400">2026-04-13</a>
-                  </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Title</span>
-                    Design Patterns in the Age of AI
-                  </td>
-                  <td className="lg:table-cell align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Description</span>
-                    Which engineering patterns should change now that AI can read, write, and refactor code for us.
-                  </td>
-                </tr>
-                <tr className="lg:table-row flex flex-col mb-4 lg:mb-0">
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Date</span>
-                    <a href="/blog/2024-07-09" className="underline text-blue-600 dark:text-blue-400">2024-07-09</a>
-                  </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Title</span>
-                    Opinions
-                  </td>
-                  <td className="lg:table-cell align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Description</span>
-                    Strong opinions weakly held.
-                  </td>
-                </tr>
-                </tbody>
-              </table>
-              </div>
-              <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
+          {/* Hero */}
+          <section className="mb-32 sm:mb-40">
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted mb-8">
+              Founder ·{' '}
+              <a
+                href="https://thousandbirds.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mono-link"
+              >
+                Thousand Birds Inc
+              </a>
+              {' '}· San Francisco
+            </p>
+
+            <h1 className="font-serif text-[18vw] sm:text-[112px] leading-[0.92] tracking-tightest text-ink">
+              Colton<br />
+              <span className="text-accent">Pierson</span>
+            </h1>
+
+            <p className="font-serif text-2xl sm:text-3xl leading-snug mt-10 text-ink max-w-xl">
+              Building the runtime layer for production AI agents.
+            </p>
+
+            <p className="font-mono text-sm leading-relaxed mt-8 text-muted max-w-lg">
+              Fourteen years shipping infrastructure people rely on — at{' '}
+              <a href="https://www.figma.com/about" target="_blank" rel="noopener noreferrer" className="accent-link">Figma</a>,{' '}
+              <a href="https://curative.com" target="_blank" rel="noopener noreferrer" className="accent-link">Curative</a>, and{' '}
+              <a href="https://asm.co" target="_blank" rel="noopener noreferrer" className="accent-link">Assembly</a>{' '}
+              (YC S15). Now full-time on{' '}
+              <a href="https://thousandbirds.ai" target="_blank" rel="noopener noreferrer" className="accent-link">Thousand Birds</a>, backed by{' '}
+              <a href="https://www.hf0.com/" target="_blank" rel="noopener noreferrer" className="accent-link">HF0</a>.
+            </p>
+          </section>
+
+          {/* Now — Thousand Birds */}
+          <section className="mb-32 sm:mb-40">
+            <SectionLabel>Now — 2026</SectionLabel>
+
+            <h2 className="font-serif text-5xl sm:text-6xl leading-[0.95] tracking-tight mt-6 mb-8">
+              Thousand Birds.
+            </h2>
+
+            <div className="font-mono text-base leading-relaxed text-ink/85 space-y-5 max-w-2xl">
               <p>
-                {"I started by co-founding "}
-                <a href="https://asm.co" target="_blank" className="underline text-blue-600 dark:text-blue-400">Assembly Inc</a>
-                {" through YC to rethink manufacturing quality control. At "}
-                <a href="https://www.figma.com/about" target="_blank" className="underline text-blue-600 dark:text-blue-400">Figma</a>
-                {", I worked on the collaboration and performance that helped it become the tool every designer reaches for. At "}
-                <a href="https://curative.com" target="_blank" className="underline text-blue-600 dark:text-blue-400">Curative</a>
-                {", I led engineering as we scaled to 7000 people and 36M+ COVID tests at the height of the pandemic. Now I'm building "}
-                <a href="https://thousandbirds.ai" target="_blank" className="underline text-blue-600 dark:text-blue-400">Thousand Birds</a>
-                {" \u2014 infrastructure for AI agents."}
-                <br/>
-                <br/>
-                <i>{"\u201CSometimes magic is just someone spending more time on something than anyone else might reasonably expect\u201D"}</i> {" \u2014 Teller"}
+                AI agents are going into production faster than the infrastructure to run them safely. Most teams are gluing together their own scaffolding — sandboxing, observability, retries, evals — instead of building the actual agent.
               </p>
-              </div>
+              <p>
+                Thousand Birds is the runtime that makes that scaffolding disappear. We give engineering teams the substrate to ship agents they can <span className="text-accent">actually trust in production</span> — and the visibility to know when they shouldn&apos;t.
+              </p>
             </div>
-          </div>
+
+            <div className="mt-10 flex items-center gap-x-6">
+              <a
+                href="https://thousandbirds.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="nav-link group font-mono text-xs uppercase tracking-[0.18em]"
+              >
+                Visit thousandbirds.ai
+                <span className="inline-block ml-2 transition-transform group-hover:translate-x-1">→</span>
+              </a>
+              <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+                Backed by{' '}
+                <a href="https://www.hf0.com/" target="_blank" rel="noopener noreferrer" className="mono-link">HF0</a>
+              </span>
+            </div>
+          </section>
+
+          {/* Selected work */}
+          <section className="mb-32 sm:mb-40 pt-16 sm:pt-20">
+            <SectionLabel>Selected work</SectionLabel>
+
+            <ol className="mt-2 divide-y divide-rule/60">
+              {work.map((entry) => (
+                <li key={entry.company} className="grid grid-cols-1 sm:grid-cols-[1fr_2.2fr] gap-y-3 sm:gap-x-10 py-10 sm:py-12">
+                  <div>
+                    <a
+                      href={entry.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="heading-link font-serif text-3xl sm:text-4xl leading-none"
+                    >
+                      {entry.company}
+                    </a>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted mt-3">
+                      {entry.role}
+                    </p>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted mt-1">
+                      {entry.period}
+                    </p>
+                  </div>
+
+                  <div className="sm:pt-1">
+                    <p className="font-mono text-sm sm:text-base leading-relaxed text-ink">
+                      {entry.headline}
+                    </p>
+                    <p className="font-mono text-sm leading-relaxed text-muted mt-4 max-w-xl">
+                      {entry.body}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+
+            <div className="mt-12">
+              <a
+                href="/work-history"
+                className="nav-link inline-block font-serif text-base sm:text-lg"
+              >
+                Full work history, 2012 — present →
+              </a>
+            </div>
+          </section>
+
+          {/* Writing */}
+          <section className="mb-32 sm:mb-40 pt-16 sm:pt-20">
+            <SectionLabel>Writing</SectionLabel>
+
+            <ul className="mt-2 divide-y divide-rule/60">
+              {writing.map((post) => (
+                <li key={post.href}>
+                  <a href={post.href} className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-y-2 sm:gap-x-8 py-8 group">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted sm:pt-2">
+                      {post.date}
+                    </p>
+                    <div>
+                      <h3 className="font-serif text-2xl sm:text-3xl leading-tight text-ink">
+                        <span className="heading-link-target">
+                          {post.title}
+                        </span>
+                      </h3>
+                      <p className="font-mono text-sm leading-relaxed text-muted mt-3 max-w-xl">
+                        {post.lede}
+                      </p>
+                    </div>
+                  </a>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-8">
+              <a
+                href="/blog"
+                className="nav-link inline-block font-serif text-base sm:text-lg"
+              >
+                All writing →
+              </a>
+            </div>
+          </section>
+
+          {/* Contact / sign-off */}
+          <section className="pt-16 border-t border-rule/60">
+            <SectionLabel>Elsewhere</SectionLabel>
+
+            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-y-6 sm:gap-x-10 font-mono text-sm">
+              <ContactRow label="Email" href="mailto:colton@thousandbirds.ai" value="colton@thousandbirds.ai" />
+              <ContactRow label="X" href="https://x.com/kveykva" value="@kveykva" />
+              <ContactRow label="LinkedIn" href="https://www.linkedin.com/in/colton-pierson-00aab248/" value="in/colton-pierson" />
+            </div>
+
+            <p className="font-serif italic text-lg sm:text-xl leading-snug text-muted mt-20 max-w-xl">
+              &ldquo;Sometimes magic is just someone spending more time on something than anyone else might reasonably expect.&rdquo;
+              <span className="font-mono not-italic text-[11px] uppercase tracking-[0.18em] text-muted block mt-3">— Teller</span>
+            </p>
+          </section>
+
         </div>
-      </div>
+      </main>
+    </>
+  );
+};
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+      {children}
+    </p>
   );
 }
 
-export default Home
+function ContactRow({ label, href, value }: { label: string; href: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-[0.18em] text-muted mb-2">{label}</p>
+      <a
+        href={href}
+        target={href.startsWith('http') ? '_blank' : undefined}
+        rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+        className="accent-link"
+      >
+        {value}
+      </a>
+    </div>
+  );
+}
 
+export default Home;

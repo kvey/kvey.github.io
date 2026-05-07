@@ -5,7 +5,7 @@ import * as THREE from 'three';
 export function createCreosoteMaterial() {
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.82,
+    roughness: 0.88,
     metalness: 0.0,
     side: THREE.DoubleSide,
     alphaTest: 0.34,

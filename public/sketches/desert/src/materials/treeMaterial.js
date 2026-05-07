@@ -7,12 +7,25 @@ import * as THREE from 'three';
 export function createTreeMaterial() {
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.78,
+    roughness: 0.90,
     metalness: 0.0,
     side: THREE.DoubleSide,
   });
+  const seasonalUniforms = {
+    paloVerdeFlowerVisibility: { value: 1 },
+    mesquitePodVisibility: { value: 1 },
+  };
+  material.userData.setSeasonalVisibility = ({
+    paloVerdeFlowering = true,
+    mesquiteSeedPods = true,
+  } = {}) => {
+    seasonalUniforms.paloVerdeFlowerVisibility.value = paloVerdeFlowering ? 1 : 0;
+    seasonalUniforms.mesquitePodVisibility.value = mesquiteSeedPods ? 1 : 0;
+  };
 
   material.onBeforeCompile = (shader) => {
+    shader.uniforms.paloVerdeFlowerVisibility = seasonalUniforms.paloVerdeFlowerVisibility;
+    shader.uniforms.mesquitePodVisibility = seasonalUniforms.mesquitePodVisibility;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -38,9 +51,19 @@ transformed += normal * treePodMask * podSeeds * podRound * 0.010;`,
         '#include <common>',
         `#include <common>
 varying vec4 vTreeDetail;
+uniform float paloVerdeFlowerVisibility;
+uniform float mesquitePodVisibility;
 
 float treeHash(float p) {
   return fract(sin(p * 127.13) * 43758.5453123);
+}
+
+bool treeIsPaloVerdeFlower(vec3 baseColor) {
+  return vTreeDetail.x > 0.5 && vTreeDetail.x < 1.5 &&
+    baseColor.r > 0.64 &&
+    baseColor.g > 0.48 &&
+    baseColor.b < 0.40 &&
+    baseColor.r > baseColor.b * 1.8;
 }
 
 vec3 treeApplyLeafShader(vec3 baseColor) {
@@ -91,10 +114,12 @@ vec3 treeApplyDetail(vec3 baseColor) {
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
+if (vTreeDetail.x > 1.5 && vTreeDetail.x < 2.5 && mesquitePodVisibility < 0.5) discard;
+if (treeIsPaloVerdeFlower(diffuseColor.rgb) && paloVerdeFlowerVisibility < 0.5) discard;
 diffuseColor.rgb = treeApplyDetail(diffuseColor.rgb);`,
       );
   };
 
-  material.customProgramCacheKey = () => 'tree-material-v2';
+  material.customProgramCacheKey = () => 'tree-material-v3-seasonal-visibility';
   return material;
 }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { sweepRibbedTube, mergeGeometries, colorRamp, resolveDetailScale, scaledSegments } from './common.js';
-import { rngRange, rngChance } from '../random.js';
+import { sweepRibbedTube, mergeGeometries, colorRamp, paintCactusSpines, paintGeometry, resolveDetailScale, scaledSegments } from './common.js';
+import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
 
 // Saguaro (Carnegiea gigantea).
@@ -97,6 +97,9 @@ export function generateSaguaro(rng, opts = {}) {
   const YOUNG_GREEN = new THREE.Color(0x6d8a4b);
   const OLD_DUST = new THREE.Color(0x6b704d);
   const WOODY_BARK = new THREE.Color(0x8a6035);
+  const flowerColor = new THREE.Color(0xf8f1df);
+  const flowerCenterColor = new THREE.Color(0xd8aa4c);
+  const fruitColor = new THREE.Color(0xa82018);
   const woodyBaseT = proportions.saguaro.woodyBaseFraction(age) * rngRange(rng, 0.72, 1.12);
   const spineRowsPerMeter = rngRange(rng, 7.5, 10.5);
   const spinePhase = rng();
@@ -198,6 +201,56 @@ export function generateSaguaro(rng, opts = {}) {
     closeEnd: true,
   });
   const parts = [trunkGeom];
+  const seasonalParts = [];
+
+  function addSeasonalCrown({ curve, count, phase = 0 }) {
+    if (age < 0.56 || count <= 0) return;
+    const heightScale = maxTrunkHeight;
+    const peak = curve.getPointAt(1);
+    const belowPeak = curve.getPointAt(0.965);
+    const peakNormal = peak.clone().sub(belowPeak).normalize();
+    if (peakNormal.lengthSq() < 1e-6) peakNormal.set(0, 1, 0);
+    const sideA = new THREE.Vector3().crossVectors(peakNormal, new THREE.Vector3(0, 1, 0));
+    if (sideA.lengthSq() < 1e-6) sideA.crossVectors(peakNormal, new THREE.Vector3(1, 0, 0));
+    sideA.normalize();
+    const sideB = new THREE.Vector3().crossVectors(peakNormal, sideA).normalize();
+    const clusterRadius = heightScale * THREE.MathUtils.lerp(0.0045, 0.010, maturity);
+    for (let i = 0; i < count; i++) {
+      const a = phase + (i / count) * Math.PI * 2 + rngRange(rng, -0.18, 0.18);
+      const ringOffset = sideA.clone()
+        .multiplyScalar(Math.cos(a))
+        .addScaledVector(sideB, Math.sin(a))
+        .multiplyScalar(clusterRadius * rngRange(rng, 0.28, 1.05));
+      const normal = peakNormal.clone()
+        .addScaledVector(ringOffset, rngRange(rng, 3.0, 7.0))
+        .normalize();
+      const flowerRadius = heightScale * rngRange(rng, 0.0105, 0.0165);
+      const flowerDepth = flowerRadius * rngRange(rng, 0.62, 0.86);
+      const flowerCenter = peak.clone()
+        .addScaledVector(peakNormal, -flowerDepth * rngRange(rng, 0.06, 0.35))
+        .add(ringOffset.clone().multiplyScalar(rngRange(rng, 0.80, 1.16)))
+        .addScaledVector(normal, flowerDepth * 0.38);
+      addSaguaroFlower(seasonalParts, flowerCenter, normal, flowerRadius, flowerDepth, flowerColor, flowerCenterColor, detailScale);
+
+      const fruitLength = heightScale * rngRange(rng, 0.0080, 0.0135);
+      const fruitRadius = fruitLength * rngRange(rng, 0.30, 0.42);
+      const fruitCenter = peak.clone()
+        .add(ringOffset.clone().multiplyScalar(rngRange(rng, 0.36, 0.86)))
+        .addScaledVector(normal, fruitLength * 0.32);
+      addSaguaroFruit(seasonalParts, fruitCenter, normal, fruitRadius, fruitLength, fruitColor, detailScale);
+    }
+  }
+
+  const trunkCrownCount = rngInt(
+    rng,
+    Math.round(THREE.MathUtils.lerp(2, 4, maturity)),
+    Math.round(THREE.MathUtils.lerp(4, 9, oldGrowth)),
+  );
+  addSeasonalCrown({
+    curve: trunkCurve,
+    count: trunkCrownCount,
+    phase: rng() * Math.PI * 2,
+  });
 
   // ----- Arms -----
   // Saguaros only sprout arms once they're old enough (commonly 50+ years,
@@ -358,9 +411,83 @@ export function generateSaguaro(rng, opts = {}) {
       closeEnd: true,
     });
     parts.push(armGeom);
+
+    if (age > 0.62 && rngChance(rng, THREE.MathUtils.lerp(0.32, 0.88, armMaturity))) {
+      addSeasonalCrown({
+        curve: armCurve,
+        count: rngInt(rng, 2, Math.round(THREE.MathUtils.lerp(3, 6, oldGrowth))),
+        phase: rng() * Math.PI * 2,
+      });
+    }
   }
+
+  parts.push(...seasonalParts);
 
   const geom = mergeGeometries(parts);
   geom.userData.age = age;
   return geom;
+}
+
+function markSeasonalCactusPart(geom, color, mode) {
+  paintGeometry(geom, color);
+  paintCactusSpines(geom, [0, 0, 0, mode]);
+}
+
+function orientSeasonalPart(geom, position, direction) {
+  const dir = direction.clone().normalize();
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  geom.applyQuaternion(q);
+  geom.translate(position.x, position.y, position.z);
+}
+
+function addSaguaroFlower(parts, center, normal, radius, depth, petalColor, centerColor, detailScale) {
+  const cup = new THREE.CylinderGeometry(
+    radius * 0.82,
+    radius * 0.42,
+    depth * 0.58,
+    scaledSegments(7, detailScale, 5),
+    1,
+    true,
+  );
+  markSeasonalCactusPart(cup, petalColor, 3);
+  orientSeasonalPart(cup, center.clone().addScaledVector(normal, -depth * 0.08), normal);
+  parts.push(cup);
+
+  const petalCount = 6;
+  for (let i = 0; i < petalCount; i++) {
+    const a = (i / petalCount) * Math.PI * 2;
+    const petal = new THREE.SphereGeometry(
+      1,
+      scaledSegments(6, detailScale, 4),
+      scaledSegments(4, detailScale, 3),
+    );
+    petal.scale(radius * 0.42, depth * 0.18, radius * 0.72);
+    petal.rotateY(a);
+    petal.translate(Math.cos(a) * radius * 0.48, depth * 0.16, Math.sin(a) * radius * 0.48);
+    markSeasonalCactusPart(petal, petalColor.clone().lerp(new THREE.Color(0xfffbf0), 0.35), 3);
+    orientSeasonalPart(petal, center.clone().addScaledVector(normal, depth * 0.08), normal);
+    parts.push(petal);
+  }
+
+  const disk = new THREE.SphereGeometry(
+    radius * 0.24,
+    scaledSegments(6, detailScale, 4),
+    scaledSegments(4, detailScale, 3),
+  );
+  disk.scale(1.0, 0.34, 1.0);
+  markSeasonalCactusPart(disk, centerColor, 3);
+  orientSeasonalPart(disk, center.clone().addScaledVector(normal, depth * 0.32), normal);
+  parts.push(disk);
+}
+
+function addSaguaroFruit(parts, center, normal, radius, length, color, detailScale) {
+  const fruit = new THREE.SphereGeometry(
+    1,
+    scaledSegments(7, detailScale, 5),
+    scaledSegments(5, detailScale, 4),
+  );
+  fruit.scale(radius, length * 0.50, radius * 0.82);
+  markSeasonalCactusPart(fruit, color, 4);
+  orientSeasonalPart(fruit, center, normal);
+  parts.push(fruit);
 }

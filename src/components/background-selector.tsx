@@ -32,7 +32,11 @@ export default function BackgroundSelector() {
   }, []);
 
   return (
-    <div ref={ref} className="fixed top-4 right-4 z-50 flex items-center gap-1.5" style={{ zIndex: 100 }}>
+    <div
+      ref={ref}
+      className="group fixed bottom-5 right-5 z-50 flex items-center gap-1.5 opacity-30 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200"
+      style={{ zIndex: 100 }}
+    >
       <button
         onClick={toggleTheme}
         className="flex items-center justify-center w-7 h-7 text-xs rounded-md border border-gray-200 dark:border-neutral-700 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm text-gray-600 dark:text-gray-300 shadow-sm hover:bg-white dark:hover:bg-neutral-900 hover:border-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600"
@@ -83,7 +87,7 @@ export default function BackgroundSelector() {
       </button>
 
       {open && (
-        <div className="absolute top-full right-0 mt-1 min-w-[120px] rounded-md border border-gray-200 dark:border-neutral-700 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-sm shadow-lg overflow-hidden">
+        <div className="absolute bottom-full right-0 mb-1 min-w-[120px] rounded-md border border-gray-200 dark:border-neutral-700 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-sm shadow-lg overflow-hidden">
           {options.map((opt) => (
             <button
               key={opt.value}

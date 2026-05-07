@@ -1,81 +1,76 @@
 "use client";
 
-import { useState } from 'react'
-import { Dialog } from '@headlessui/react'
-import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline'
-import Image from 'next/image';
-import Link from 'next/link';
-import localFont from 'next/font/local';
-import {berkeleyMono} from "@/components/font";
+import { type SVGProps } from 'react'
+import { Linkedin } from 'lucide-react';
 
 const navigation = [
   { name: 'Home', href: '/' },
-  { name: 'Blog', href: '/blog' },
+  { name: 'Writing', href: '/blog' },
   { name: 'Sketches', href: '/sketches' },
 ]
 
-export default function Nav() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
+function XComIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <header className="w-full">
-      <nav className="mx-auto flex max-w-7xl items-start py-2 lg:px-2" aria-label="Global">
-        <div className="flex lg:hidden">
-          <button
-            type="button"
-            className="-m-2.5 inline-flex items-center justify-center rounded-md p-2.5 text-gray-700 dark:text-gray-300"
-            onClick={() => setMobileMenuOpen(true)}
-          >
-            <span className="sr-only">Open main menu</span>
-            <Bars3Icon className="h-6 w-6" aria-hidden="true" />
-          </button>
-        </div>
-        <div className="hidden lg:flex lg:gap-x-4">
-          {navigation.map((item) => (
-            <a key={item.name} href={item.href} className="text-sm font-semibold leading-6 text-black dark:text-gray-100 underline hover:text-gray-600 dark:hover:text-gray-300">
-              {item.name}
-            </a>
-          ))}
+    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" />
+    </svg>
+  )
+}
+
+const socialLinks = [
+  { name: 'X.com', href: 'https://x.com/kveykva', icon: XComIcon },
+  { name: 'LinkedIn', href: 'https://www.linkedin.com/in/colton-pierson-00aab248/', icon: Linkedin },
+]
+
+export default function Nav() {
+  return (
+    <header className="sticky top-0 z-30 w-full backdrop-blur-md bg-paper/70 dark:bg-paper/60 border-b border-rule/60">
+      <nav
+        className="mx-auto flex max-w-6xl items-center justify-between px-6 sm:px-10 h-12"
+        aria-label="Global"
+      >
+        <a
+          href="/"
+          className="nav-link font-mono text-[11px] uppercase tracking-[0.18em]"
+        >
+          Colton Pierson
+        </a>
+
+        <div className="flex items-center gap-x-6 sm:gap-x-8">
+          <ul className="flex items-center gap-x-5 sm:gap-x-7">
+            {navigation.map((item) => (
+              <li key={item.name}>
+                <a
+                  href={item.href}
+                  className="nav-link font-mono text-[11px] uppercase tracking-[0.18em]"
+                >
+                  {item.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+
+          <span className="hidden sm:block h-3 w-px bg-rule" aria-hidden="true" />
+
+          <div className="flex items-center gap-x-3.5">
+            {socialLinks.map((item) => {
+              const Icon = item.icon
+              return (
+                <a
+                  key={item.name}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={item.name}
+                  className="text-muted hover:text-accent transition-colors"
+                >
+                  <Icon className="h-[14px] w-[14px]" strokeWidth={1.75} strokeLinecap="round" aria-hidden="true" />
+                </a>
+              )
+            })}
+          </div>
         </div>
       </nav>
-      <Dialog as="div" className="lg:hidden" open={mobileMenuOpen} onClose={setMobileMenuOpen}>
-        <div className="fixed inset-0 z-10" />
-        <Dialog.Panel className={`fixed inset-y-0 right-0 z-10 w-full overflow-y-auto bg-white dark:bg-neutral-950 px-6 py-6 sm:max-w-sm sm:ring-1 sm:ring-gray-900/10 ${berkeleyMono.className}`}>
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              className="-m-2.5 rounded-md p-2.5 text-black dark:text-gray-100"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <span className="sr-only">Close menu</span>
-              <XMarkIcon className="h-6 w-6" aria-hidden="true" />
-            </button>
-          </div>
-          <div className="mt-6 flow-root">
-            <div className="-my-6 divide-y divide-gray-500/10">
-              <div className="space-y-2 py-6">
-                {navigation.map((item) => (
-                  <a
-                    key={item.name}
-                    href={item.href}
-                    className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-black dark:text-gray-100 underline hover:text-gray-600 dark:hover:text-gray-300"
-                  >
-                    {item.name}
-                  </a>
-                ))}
-              </div>
-              <div className="py-6">
-                <a
-                  href="#"
-                  className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-black dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-neutral-900"
-                >
-                  Log in
-                </a>
-              </div>
-            </div>
-          </div>
-        </Dialog.Panel>
-      </Dialog>
     </header>
   )
 }

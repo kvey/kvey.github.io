@@ -3,13 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-rgb: 255, 255, 255;
+  --foreground-rgb: 18, 18, 18;
+  --background-rgb: 250, 248, 244;
+  --muted-rgb: 110, 110, 110;
+  --rule-rgb: 220, 218, 212;
+  --accent-rgb: 198, 122, 56;
 }
 
 .dark {
-  --foreground-rgb: 212, 212, 212;
-  --background-rgb: 10, 10, 10;
+  --foreground-rgb: 232, 228, 220;
+  --background-rgb: 14, 13, 12;
+  --muted-rgb: 130, 128, 122;
+  --rule-rgb: 48, 46, 42;
+  --accent-rgb: 234, 168, 110;
 }
 
 body {
@@ -18,18 +24,222 @@ body {
   font-weight: 300;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-weight: 300;
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
-th {
+.font-serif {
+  font-family: var(--font-serif), 'Cambria', 'Georgia', serif;
   font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.font-mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* Universal link style — applies to .accent-link, .heading-link, .mono-link (works on a, button, span) and prose links.
+   Note: no font-family override here — let consumers' utility classes (font-serif, font-mono) take effect.
+   For buttons, browser defaults to a system font; pair with Tailwind's font-serif/font-mono as needed. */
+.accent-link,
+.heading-link,
+.mono-link,
+.prose-editorial a {
+  color: rgb(var(--foreground-rgb));
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration-line: underline;
+  text-decoration-color: rgb(var(--foreground-rgb));
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  transition: color 140ms ease, text-decoration-color 140ms ease, text-decoration-thickness 180ms ease;
+}
+
+.accent-link:hover,
+.heading-link:hover,
+.mono-link:hover,
+.accent-link:focus-visible,
+.heading-link:focus-visible,
+.mono-link:focus-visible,
+.prose-editorial a:hover,
+.prose-editorial a:focus-visible {
+  color: rgb(var(--accent-rgb));
+  text-decoration-color: rgb(var(--accent-rgb));
+  text-decoration-thickness: 2px;
+  outline: none;
+}
+
+/* Top-bar nav links + CTAs: no underline at rest, animate it in from the left on hover */
+.nav-link {
+  position: relative;
+  color: rgb(var(--foreground-rgb));
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: rgb(var(--accent-rgb));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nav-link:hover,
+.nav-link:focus-visible {
+  color: rgb(var(--accent-rgb));
+  outline: none;
+}
+
+.nav-link:hover::after,
+.nav-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/* When a link is the parent .group of a row-level card, its inner heading-link-target should react to the parent hover */
+.heading-link-target {
+  text-decoration-line: underline;
+  text-decoration-color: rgb(var(--foreground-rgb));
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  transition: color 140ms ease, text-decoration-color 140ms ease, text-decoration-thickness 180ms ease;
+}
+.group:hover .heading-link-target {
+  color: rgb(var(--accent-rgb));
+  text-decoration-color: rgb(var(--accent-rgb));
+  text-decoration-thickness: 2px;
+}
+
+.rule {
+  border-color: rgb(var(--rule-rgb));
+}
+
+::selection {
+  background: rgba(var(--accent-rgb), 0.35);
+  color: rgb(var(--foreground-rgb));
 }
 
 .dark *,
 .dark ::before,
 .dark ::after {
-  border-color: rgb(64, 64, 64);
+  border-color: rgb(var(--rule-rgb));
+}
+
+/* Editorial long-form prose */
+.prose-editorial {
+  color: rgb(var(--foreground-rgb));
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.prose-editorial > * + * {
+  margin-top: 1.4em;
+}
+
+.prose-editorial h2 {
+  font-family: var(--font-serif), 'Cambria', 'Georgia', serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.4rem);
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  margin-top: 3.2em;
+  margin-bottom: 0.6em;
+  font-weight: 400;
+}
+
+.prose-editorial h3 {
+  font-family: var(--font-serif), 'Cambria', 'Georgia', serif;
+  font-size: 1.45rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin-top: 2.4em;
+  margin-bottom: 0.4em;
+  font-weight: 400;
+}
+
+.prose-editorial h4 {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: rgb(var(--accent-rgb));
+  margin-top: 2em;
+  margin-bottom: 0.4em;
+}
+
+.prose-editorial p {
+  max-width: 38em;
+}
+
+.prose-editorial code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+  background: rgba(var(--accent-rgb), 0.07);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  border-radius: 3px;
+  color: rgb(var(--foreground-rgb));
+}
+
+.prose-editorial ul,
+.prose-editorial ol {
+  padding-left: 1.4em;
+  max-width: 38em;
+}
+
+.prose-editorial ul { list-style: none; }
+.prose-editorial ul > li { position: relative; }
+.prose-editorial ul > li::before {
+  content: "—";
+  position: absolute;
+  left: -1.4em;
+  color: rgb(var(--accent-rgb));
+}
+
+.prose-editorial ol { list-style: decimal; }
+.prose-editorial ol > li::marker {
+  color: rgb(var(--muted-rgb));
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.85em;
+}
+
+.prose-editorial li + li {
+  margin-top: 0.5em;
+}
+
+.prose-editorial strong {
+  font-weight: 700;
+  color: rgb(var(--foreground-rgb));
+}
+
+.prose-editorial em {
+  font-style: italic;
+  font-family: var(--font-serif), 'Cambria', 'Georgia', serif;
+}
+
+.prose-editorial figure,
+.prose-editorial svg {
+  max-width: 100%;
+}
+
+.prose-editorial figcaption {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: rgb(var(--muted-rgb));
+  text-align: center;
+  margin-top: 0.6em;
 }

@@ -1,14 +1,17 @@
 "use client";
 
-import { LineBreakDouble } from '@/components/linebreak';
 import Nav from '@/components/nav';
 import { useBackground, BackgroundType } from '@/components/background-provider';
+
+type SketchKind = 'standalone' | 'background';
 
 interface Sketch {
   id: BackgroundType | 'desert';
   title: string;
   description: string;
   tech: string;
+  year: string;
+  kind: SketchKind;
   href?: string;
 }
 
@@ -16,41 +19,56 @@ const sketches: Sketch[] = [
   {
     id: 'desert',
     title: 'Desert',
-    description: 'Procedurally generated Tucson desert — terrain, rocks, plants, sky. Fly with WASD, drag to look.',
+    description: 'Procedurally generated Tucson desert. Layered terrain, scattered rocks, plants, and a hand-shaded sky. Fly the camera with WASD, drag to look around.',
     tech: 'Three.js · simplex-noise · lil-gui',
+    year: '2026',
+    kind: 'standalone',
     href: '/sketches/desert/index.html',
   },
   {
     id: 'flocking',
     title: 'Flocking',
-    description: 'Reynolds boids — separation, alignment, cohesion. Cursor scatters the flock.',
+    description: "Reynolds boids — separation, alignment, cohesion. The cursor scatters the flock. Rendered as a field of ASCII arrows oriented to each boid's heading.",
     tech: 'WebGL2 compute · ASCII arrows',
+    year: '2026',
+    kind: 'background',
   },
   {
     id: 'fluid',
     title: 'Fluid',
-    description: 'Navier–Stokes on the GPU with vorticity confinement. Ambient emitters, splat on click.',
+    description: 'Navier–Stokes on the GPU with vorticity confinement. Ambient emitters keep things moving; click to splat new density into the field.',
     tech: 'WebGL2 · ASCII density ramp',
+    year: '2026',
+    kind: 'background',
   },
   {
     id: 'simplex-noise',
     title: 'Simplex Noise',
-    description: 'Seeded 2D simplex field, sampled to characters. Drifts continuously.',
+    description: 'A seeded 2D simplex field, sampled to characters and quietly drifting in time. The classic procedural primitive, made visible.',
     tech: 'CPU · Stefan Gustavson',
+    year: '2025',
+    kind: 'background',
   },
   {
     id: 'prism',
     title: 'Prism',
-    description: 'Light rays refracting through floating glass prisms — dispersion by wavelength.',
+    description: 'Light rays refracting through floating glass prisms — dispersion by wavelength splits white light into a spectrum.',
     tech: 'CPU · 2D ray tracing',
+    year: '2025',
+    kind: 'background',
   },
   {
     id: 'solids',
     title: 'Solids',
-    description: 'Tori, cones, and cubes rendered as luminance-shaded ASCII, slowly tumbling.',
+    description: 'Tori, cones, and cubes rendered as luminance-shaded ASCII, slowly tumbling. Old-school 3D rasterization for the terminal era.',
     tech: 'CPU · 3D rasterization',
+    year: '2025',
+    kind: 'background',
   },
 ];
+
+const standaloneSketches = sketches.filter((s) => s.kind === 'standalone');
+const backgroundSketches = sketches.filter((s) => s.kind === 'background');
 
 export default function SketchesPage() {
   const { setBackground, setContentHidden } = useBackground();
@@ -65,58 +83,102 @@ export default function SketchesPage() {
   };
 
   return (
-    <div>
-      <div className='flex flex-col items-center pb-24'>
-        <div className='mx-4 mb-0 md:px-4 px-8 md:pt-8 pt-8 pb-2 mt-8 max-w-4xl flex flex-col md:gap-x-26 gap-8 w-full'>
-          <div className={"pb-40"}>
-            <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
-              <h1 className='text-4xl'> COLTON PIERSON </h1>
-              <p className='text-xl pt-2'>
-                Founder @ THOUSAND BIRDS INC
+    <>
+      <Nav />
+      <main className="relative">
+        <div className="mx-auto max-w-3xl px-6 sm:px-10 pt-24 sm:pt-36 pb-32">
+
+          <header className="mb-24">
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent mb-6">
+              Sketches · {sketches.length} pieces
+            </p>
+            <h1 className="font-serif text-6xl sm:text-7xl leading-[0.95] tracking-tight text-ink">
+              Generative pieces.
+            </h1>
+            <p className="font-mono text-sm leading-relaxed mt-8 text-muted max-w-lg">
+              Two kinds: <span className="text-ink">standalone pages</span> with their own controls, and <span className="text-ink">site backgrounds</span> that take over this page in place. The eye toggle in the bottom right brings the chrome back when you&apos;re done.
+            </p>
+          </header>
+
+          {/* Standalone pages */}
+          <section className="mb-32 sm:mb-40">
+            <div className="flex items-baseline gap-x-3 mb-12">
+              <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                Standalone pages
               </p>
-              <LineBreakDouble/>
-              <Nav />
+              <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+                · {standaloneSketches.length} · navigate away
+              </span>
             </div>
 
-            <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
-              <h2 className={"text-2xl"}>Sketches</h2>
-              <p className="pt-2 text-gray-700 dark:text-gray-300">
-                Generative pieces. Click one to view it fullscreen — the eye toggle in the top right brings the page back.
-              </p>
+            {standaloneSketches.map((s, i) => (
+              <SketchEntry key={s.id} sketch={s} onView={view} index={i} />
+            ))}
+          </section>
 
-              <table className="w-full my-4 lg:table block border-collapse">
-                <thead className="lg:table-header-group hidden">
-                  <tr className="border-b border-gray-300 dark:border-neutral-600">
-                    <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Title</th>
-                    <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Stack</th>
-                    <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400">Description</th>
-                  </tr>
-                </thead>
-                <tbody className="lg:table-row-group block">
-                  {sketches.map((s, i) => (
-                    <tr
-                      key={s.id}
-                      onClick={() => view(s)}
-                      className={`lg:table-row flex flex-col mb-4 lg:mb-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-900/60 transition-colors ${i < sketches.length - 1 ? 'border-b border-gray-200 dark:border-neutral-700' : ''}`}
-                    >
-                      <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                        <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Title</span>
-                        <span className="underline text-blue-600 dark:text-blue-400">{s.title}</span>
-                      </td>
-                      <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3 text-gray-500 dark:text-neutral-400 text-sm">
-                        <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Stack</span>
-                        {s.tech}
-                      </td>
-                      <td className="lg:table-cell align-top block px-4 py-3">
-                        <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Description</span>
-                        {s.description}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Backgrounds */}
+          <section>
+            <div className="flex items-baseline gap-x-3 mb-12">
+              <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                Site backgrounds
+              </p>
+              <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+                · {backgroundSketches.length} · take over this page
+              </span>
             </div>
-          </div>
+
+            {backgroundSketches.map((s, i) => (
+              <SketchEntry key={s.id} sketch={s} onView={view} index={i} />
+            ))}
+          </section>
+
+        </div>
+      </main>
+    </>
+  );
+}
+
+function SketchEntry({
+  sketch: s,
+  onView,
+  index,
+}: {
+  sketch: Sketch;
+  onView: (s: Sketch) => void;
+  index: number;
+}) {
+  const isStandalone = s.kind === 'standalone';
+  const cta = isStandalone ? 'Open page ↗' : 'Set as background →';
+
+  return (
+    <div className={`relative ${index > 0 ? 'mt-24 sm:mt-28' : ''}`}>
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_2.2fr] gap-y-3 sm:gap-x-10 pb-10 border-b border-rule/60">
+        <div>
+          <button
+            type="button"
+            onClick={() => onView(s)}
+            className="heading-link font-serif text-3xl sm:text-4xl leading-[1.05] text-left"
+          >
+            {s.title}
+          </button>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted mt-3">
+            {s.tech}
+          </p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted mt-1">
+            {s.year}
+          </p>
+        </div>
+        <div className="sm:pt-1">
+          <p className="font-mono text-sm sm:text-base leading-relaxed text-ink max-w-xl">
+            {s.description}
+          </p>
+          <button
+            type="button"
+            onClick={() => onView(s)}
+            className="nav-link mt-5 inline-block font-mono text-[11px] uppercase tracking-[0.18em]"
+          >
+            {cta}
+          </button>
         </div>
       </div>
     </div>

@@ -65,6 +65,17 @@ vec3 applyRockSurface(vec3 baseColor) {
   c = mix(c, rockDarkCrevice, crack * 0.58);
   c = mix(c, rockQuartzColor, quartz * 0.46);
   return c;
+}
+
+float rockSurfaceRoughness() {
+  float height01 = clamp(vRockDetail.x, 0.0, 1.0);
+  float strata = clamp(vRockDetail.y, 0.0, 1.0);
+  float crack = clamp(vRockDetail.z, 0.0, 1.0);
+  float grain = clamp(vRockDetail.w, 0.0, 1.0);
+  float top = smoothstep(0.12, 0.88, vRockObjectNormal.y) * smoothstep(0.34, 0.95, height01);
+  float varnish = smoothstep(0.38, 0.92, strata) * (1.0 - crack * 0.75);
+  float quartz = smoothstep(0.972, 1.0, rockHash(floor(vRockObjectPosition * 92.0))) * (0.55 + top * 0.45);
+  return clamp(0.97 - varnish * 0.16 - quartz * 0.20 + grain * 0.025 + crack * 0.035, 0.62, 1.0);
 }`,
       )
       .replace(
@@ -72,8 +83,13 @@ vec3 applyRockSurface(vec3 baseColor) {
         `#include <color_fragment>
 diffuseColor.rgb = applyRockSurface(diffuseColor.rgb);`,
       );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <roughnessmap_fragment>',
+      `#include <roughnessmap_fragment>
+roughnessFactor = clamp(roughnessFactor * rockSurfaceRoughness(), 0.60, 1.0);`,
+    );
   };
 
-  material.customProgramCacheKey = () => 'rock-material-v1';
+  material.customProgramCacheKey = () => 'rock-material-v2';
   return material;
 }

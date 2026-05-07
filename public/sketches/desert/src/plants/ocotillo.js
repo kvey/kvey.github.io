@@ -101,13 +101,15 @@ export function generateOcotillo(rng, opts = {}) {
         const side = new THREE.Vector3(Math.cos(clusterAngle), 0, Math.sin(clusterAngle)).multiplyScalar(
           rngRange(rng, proportions.ocotillo.flowerRadius[0] * 0.32, proportions.ocotillo.flowerRadius[1] * 0.62),
         );
-        const flowerLength = rngRange(rng, proportions.ocotillo.flowerHeight[0] * 0.58, proportions.ocotillo.flowerHeight[1] * 0.86);
-        const flowerRadius = rngRange(rng, proportions.ocotillo.flowerRadius[0] * 0.42, proportions.ocotillo.flowerRadius[1] * 0.68);
-        const tipGeom = new THREE.ConeGeometry(
-          flowerRadius,
+        const flowerLength = rngRange(rng, proportions.ocotillo.flowerHeight[0] * 0.72, proportions.ocotillo.flowerHeight[1] * 1.05);
+        const flowerRadius = rngRange(rng, proportions.ocotillo.flowerRadius[0] * 0.44, proportions.ocotillo.flowerRadius[1] * 0.70);
+        const radialSegments = scaledSegments(5, detailScale, 5);
+        const tipGeom = new THREE.CylinderGeometry(
+          flowerRadius * rngRange(rng, 1.06, 1.34),
+          flowerRadius * rngRange(rng, 0.30, 0.48),
           flowerLength,
-          scaledSegments(7, detailScale, 5),
-          1,
+          radialSegments,
+          2,
           true,
         );
         const flowerTint = bloomBase.clone().lerp(bloomHot, rngRange(rng, 0.05, 0.72));

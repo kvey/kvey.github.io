@@ -1,68 +1,84 @@
-import { LineBreak, LineBreakDouble } from '@/components/linebreak';
 import Nav from '@/components/nav';
 
 const posts = [
   {
     date: '2026-04-13',
+    href: '/blog/2026-04-13',
     title: 'Design Patterns in the Age of AI',
-
-    description: 'Which engineering patterns should change now that AI can read, write, and refactor code for us.',
+    kind: 'Essay',
+    readTime: '12 min read',
+    lede: 'Which engineering patterns should change now that AI can read, write, and refactor code for us.',
+  },
+  {
+    date: '2024-08-27',
+    href: '/blog/2024-08-27',
+    title: 'What is an AI Agent?',
+    kind: 'Essay',
+    readTime: '8 min read',
+    lede: 'Unraveling the hype and reclaiming the concept. A definition of agency rooted in the capacity for failure and initiative.',
   },
   {
     date: '2024-07-09',
+    href: '/blog/2024-07-09',
     title: 'Opinions',
-    description: 'Strong opinions weakly held.',
+    kind: 'Note',
+    readTime: '3 min read',
+    lede: 'A distillation of accumulated takes on engineering, leadership, and AI. Strong opinions, weakly held.',
   },
 ];
 
 export default function BlogPage() {
   return (
-    <div>
-      <div className='flex flex-col items-center pb-24'>
-        <div className='mx-4 mb-0 md:px-4 px-8 md:pt-8 pt-8 pb-2 mt-8 max-w-4xl flex flex-col md:gap-x-26 gap-8 w-full'>
-          <div className={"pb-40"}>
-            <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
-              <h1 className='text-4xl'> COLTON PIERSON </h1>
-              <p className='text-xl pt-2'>
-                Founder @ THOUSAND BIRDS INC
-              </p>
-              <LineBreakDouble/>
-              <Nav />
-            </div>
-            <div className="bg-white/80 dark:bg-black/80 border border-gray-200 dark:border-neutral-700 px-8 py-10 mb-4">
-              <h2 className={"text-2xl"}>Articles</h2>
+    <>
+      <Nav />
+      <main className="relative">
+        <div className="mx-auto max-w-3xl px-6 sm:px-10 pt-24 sm:pt-36 pb-32">
 
-              <table className="w-full my-4 lg:table block border-collapse">
-              <thead className="lg:table-header-group hidden">
-              <tr className="border-b border-gray-300 dark:border-neutral-600">
-                <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Date</th>
-                <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 w-[1%] whitespace-nowrap">Title</th>
-                <th className="py-3 px-4 text-left text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400">Description</th>
-              </tr>
-              </thead>
-              <tbody className="lg:table-row-group block">
-              {posts.map((post, i) => (
-                <tr key={post.date} className={`lg:table-row flex flex-col mb-4 lg:mb-0 ${i < posts.length - 1 ? 'border-b border-gray-200 dark:border-neutral-700' : ''}`}>
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Date</span>
-                    <a href={`/blog/${post.date}`} className="underline text-blue-600 dark:text-blue-400">{post.date}</a>
-                  </td>
-                  <td className="lg:table-cell whitespace-nowrap align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Title</span>
-                    {post.title}
-                  </td>
-                  <td className="lg:table-cell align-top block px-4 py-3">
-                    <span className="text-xs uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:hidden block mb-1">Description</span>
-                    {post.description}
-                  </td>
-                </tr>
-              ))}
-              </tbody>
-            </table>
-            </div>
-          </div>
+          <header className="mb-24">
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent mb-6">
+              Writing · {posts.length} pieces
+            </p>
+            <h1 className="font-serif text-6xl sm:text-7xl leading-[0.95] tracking-tight text-ink">
+              Notes &amp; essays.
+            </h1>
+            <p className="font-mono text-sm leading-relaxed mt-8 text-muted max-w-lg">
+              Long-form thinking on the systems we build — mostly around AI agents, engineering practice, and the patterns that change when the cost of writing code drops.
+            </p>
+          </header>
+
+          <ul className="divide-y divide-rule/60 border-t border-rule/60">
+            {posts.map((post) => (
+              <li key={post.href}>
+                <article className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-y-3 sm:gap-x-10 py-12 sm:py-14">
+                  <div>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+                      {post.date}
+                    </p>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted mt-1">
+                      {post.kind} · {post.readTime}
+                    </p>
+                  </div>
+
+                  <div>
+                    <h2>
+                      <a
+                        href={post.href}
+                        className="heading-link font-serif text-3xl sm:text-4xl leading-[1.1]"
+                      >
+                        {post.title}
+                      </a>
+                    </h2>
+                    <p className="font-mono text-sm leading-relaxed text-muted mt-4 max-w-xl">
+                      {post.lede}
+                    </p>
+                  </div>
+                </article>
+              </li>
+            ))}
+          </ul>
+
         </div>
-      </div>
-    </div>
+      </main>
+    </>
   );
 }

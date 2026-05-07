@@ -1,6 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
-import {berkeleyMono} from "@/components/font";
+import {berkeleyMono, instrumentSerif} from "@/components/font";
 import { Analytics } from "@vercel/analytics/react"
 import { BackgroundProvider } from '@/components/background-provider';
 import FlockingBackground from '@/components/flocking-background';
@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={`dark ${berkeleyMono.variable} ${instrumentSerif.variable}`}>
       <body className={berkeleyMono.className}>
       <Analytics/>
       <ThemeProvider>
