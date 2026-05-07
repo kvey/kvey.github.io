@@ -96,7 +96,7 @@ const Home = () => {
 
           {/* Now — Thousand Birds */}
           <section className="mb-32 sm:mb-40">
-            <SectionLabel>Now — 2026</SectionLabel>
+            <SectionLabel>2023 - Now</SectionLabel>
 
             <h2 className="font-serif text-5xl sm:text-6xl leading-[0.95] tracking-tight mt-6 mb-8">
               Thousand Birds.

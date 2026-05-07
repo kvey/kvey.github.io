@@ -24,7 +24,7 @@ const roles: Role[] = [
     company: 'Thousand Birds',
     href: 'https://thousandbirds.ai',
     role: 'Founder',
-    period: '2025 — present',
+    period: '2023 - present',
     summary: 'Building the runtime layer for production AI agents. Backed by HF0.',
   },
   {
