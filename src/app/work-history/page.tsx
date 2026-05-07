@@ -246,7 +246,7 @@ const Page = () => {
               The long version.
             </h1>
             <p className="font-mono text-sm leading-relaxed mt-8 text-muted max-w-lg">
-              Fourteen years of shipping. Most of it preserved from older notes — abridged where the original was repetitive, but otherwise as I wrote it at the time.
+              Fourteen years of shipping. 
             </p>
           </header>
 
