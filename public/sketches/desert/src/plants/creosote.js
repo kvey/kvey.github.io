@@ -1,66 +1,209 @@
 import * as THREE from 'three';
-import { sweepRibbedTube, mergeGeometries, resolveDetailScale, scaledSegments } from './common.js';
-import { rngRange, rngInt } from '../random.js';
+import { sweepRibbedTube, mergeGeometries, resolveDetailScale, resolvePlantAge, scaledSegments } from './common.js';
+import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
 
-// Creosote bush: messy mound of thin branches, dark green tiny leaves.
-// Most common low shrub on the Sonoran desert floor.
+const UP = new THREE.Vector3(0, 1, 0);
+const CREOSOTE_PART_STEM = 0;
+const CREOSOTE_PART_LEAF_CARD = 1;
+
+function sideVector(dir) {
+  const side = new THREE.Vector3().crossVectors(dir, UP);
+  if (side.lengthSq() < 1e-5) side.set(1, 0, 0);
+  return side.normalize();
+}
+
+function paintCreosoteDetail(geom, value = [CREOSOTE_PART_STEM, 0, 0, 0]) {
+  const count = geom.attributes.position.count;
+  const arr = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    arr[i * 4] = value[0];
+    arr[i * 4 + 1] = value[1];
+    arr[i * 4 + 2] = value[2];
+    arr[i * 4 + 3] = value[3];
+  }
+  geom.setAttribute('creosoteDetail', new THREE.BufferAttribute(arr, 4));
+}
+
+function makeFoliageCard(rng, {
+  center,
+  axis,
+  color,
+  length,
+  width,
+  id,
+}) {
+  const main = axis.clone();
+  if (main.lengthSq() < 1e-5) main.copy(UP);
+  main.normalize();
+  const lateral = sideVector(main);
+  const faceLift = new THREE.Vector3().crossVectors(lateral, main).normalize().multiplyScalar(width * rngRange(rng, -0.12, 0.12));
+  const base = positionsForCard(center, main, lateral, faceLift, length, width);
+  const geom = new THREE.BufferGeometry();
+  const tint = color.clone()
+    .lerp(new THREE.Color(0xa9a244), rngRange(rng, 0.04, 0.32))
+    .multiplyScalar(rngRange(rng, 0.78, 1.12));
+
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(base.positions, 3));
+  geom.setAttribute('color', new THREE.Float32BufferAttribute([
+    tint.r, tint.g, tint.b,
+    tint.r, tint.g, tint.b,
+    tint.r, tint.g, tint.b,
+    tint.r, tint.g, tint.b,
+  ], 3));
+  geom.setAttribute('creosoteDetail', new THREE.Float32BufferAttribute([
+    CREOSOTE_PART_LEAF_CARD, 0, 0, id,
+    CREOSOTE_PART_LEAF_CARD, 1, 0, id,
+    CREOSOTE_PART_LEAF_CARD, 1, 1, id,
+    CREOSOTE_PART_LEAF_CARD, 0, 1, id,
+  ], 4));
+  geom.setIndex([0, 1, 2, 0, 2, 3]);
+  geom.computeVertexNormals();
+  return geom;
+}
+
+function positionsForCard(center, main, lateral, lift, length, width) {
+  const c0 = center.clone().addScaledVector(main, -length * 0.50).add(lift);
+  const c1 = center.clone().addScaledVector(main, length * 0.50).addScaledVector(UP, -length * 0.06).add(lift);
+  const w0 = width * rngWidthTaper(-0.5);
+  const w1 = width * rngWidthTaper(0.5);
+  const p0 = c0.clone().addScaledVector(lateral, -w0);
+  const p1 = c0.clone().addScaledVector(lateral, w0);
+  const p2 = c1.clone().addScaledVector(lateral, w1);
+  const p3 = c1.clone().addScaledVector(lateral, -w1);
+  return {
+    positions: [
+      p0.x, p0.y, p0.z,
+      p1.x, p1.y, p1.z,
+      p2.x, p2.y, p2.z,
+      p3.x, p3.y, p3.z,
+    ],
+  };
+}
+
+function rngWidthTaper(t) {
+  return 0.72 + 0.28 * (1 - Math.abs(t));
+}
+
+// Creosote bush: many grey basal stems with sparse twiggy interiors and small,
+// resinous paired leaves clustered on the outer crown.
 export function generateCreosote(rng, opts = {}) {
   const detailScale = resolveDetailScale(opts);
   const proportions = resolveProportionOracle(opts);
-  const branchCount = rngInt(rng, 8, 20);
-  const height = rngRange(rng, proportions.creosote.height[0], proportions.creosote.height[1]);
-  const spread = rngRange(rng, proportions.creosote.spread[0], proportions.creosote.spread[1]);
+  // Lifecycle scalar: creosote starts as a loose few-stem shrub, then widens
+  // into an old open ring with many gray basal stems and a leafier perimeter.
+  const age = resolvePlantAge(rng, opts, 0.56);
+  const maturity = THREE.MathUtils.smoothstep(age, 0.12, 0.70);
+  const oldGrowth = THREE.MathUtils.smoothstep(age, 0.68, 1.0);
+  const branchCount = scaledSegments(
+    rngInt(
+      rng,
+      Math.round(THREE.MathUtils.lerp(8, 28, maturity)),
+      Math.round(THREE.MathUtils.lerp(14, 56, maturity + oldGrowth * 0.22)),
+    ),
+    detailScale,
+    6,
+  );
+  const height = THREE.MathUtils.lerp(
+    proportions.creosote.height[0] * 0.42,
+    proportions.creosote.height[1],
+    Math.pow(age, 0.72),
+  ) * rngRange(rng, 0.90, 1.14);
+  const spread = THREE.MathUtils.lerp(
+    proportions.creosote.spread[0] * 0.36,
+    proportions.creosote.spread[1] * 1.18,
+    Math.pow(age, 0.66),
+  ) * rngRange(rng, 0.88, 1.16);
+  const crownHeight = height * rngRange(
+    rng,
+    THREE.MathUtils.lerp(0.62, 0.74, maturity),
+    THREE.MathUtils.lerp(0.88, 1.08, maturity),
+  );
 
-  const wood = new THREE.Color(0x4a3a26);
-  const leaf = new THREE.Color(0x4d6238);
-
+  const oldWood = new THREE.Color(0x746d61);
+  const youngWood = new THREE.Color(0x8b8254);
+  const leaf = new THREE.Color(0x68753a);
   const parts = [];
 
   for (let i = 0; i < branchCount; i++) {
     const a = rng() * Math.PI * 2;
-    const r = spread * Math.sqrt(rng());
+    const rim = rngRange(rng, THREE.MathUtils.lerp(0.10, 0.30, maturity), 1.0);
+    const r = spread * Math.sqrt(rim);
     const tipX = Math.cos(a) * r;
     const tipZ = Math.sin(a) * r;
-    const tipY = height * (0.6 + rng() * 0.4);
+    const crownT = THREE.MathUtils.clamp(r / spread, 0, 1);
+    const tipY = crownHeight * (0.40 + 0.52 * (1 - Math.abs(crownT - 0.68) * 0.82) + rngRange(rng, -0.12, 0.10));
+    const baseJitter = spread * 0.12;
 
-    const p0 = new THREE.Vector3(0, 0, 0);
-    const p1 = new THREE.Vector3(tipX * 0.3, height * 0.2, tipZ * 0.3);
-    const p2 = new THREE.Vector3(tipX * 0.7, height * 0.6, tipZ * 0.7);
+    const p0 = new THREE.Vector3(
+      rngRange(rng, -baseJitter, baseJitter),
+      rngRange(rng, 0, height * 0.04),
+      rngRange(rng, -baseJitter, baseJitter),
+    );
+    const p1 = new THREE.Vector3(
+      tipX * rngRange(rng, 0.18, 0.28),
+      height * rngRange(rng, 0.14, 0.28),
+      tipZ * rngRange(rng, 0.18, 0.28),
+    );
+    const p2 = new THREE.Vector3(
+      tipX * rngRange(rng, 0.56, 0.74) + Math.cos(a + Math.PI * 0.5) * spread * rngRange(rng, -0.08, 0.08),
+      tipY * rngRange(rng, 0.60, 0.82),
+      tipZ * rngRange(rng, 0.56, 0.74) + Math.sin(a + Math.PI * 0.5) * spread * rngRange(rng, -0.08, 0.08),
+    );
     const p3 = new THREE.Vector3(tipX, tipY, tipZ);
     const curve = new THREE.CatmullRomCurve3([p0, p1, p2, p3]);
 
+    const stemRadius = proportions.creosote.stemRadius * rngRange(
+      rng,
+      THREE.MathUtils.lerp(0.24, 0.42, maturity),
+      THREE.MathUtils.lerp(0.44, 0.82, maturity + oldGrowth * 0.25),
+    );
     const stem = sweepRibbedTube({
       curve,
-      segmentsAlong: scaledSegments(14, detailScale, 8),
-      segmentsAround: scaledSegments(6, detailScale, 4),
+      segmentsAlong: scaledSegments(16, detailScale, 8),
+      segmentsAround: scaledSegments(5, detailScale, 4),
       ribCount: 0,
       ribDepth: 0,
-      radiusFn: (t) => proportions.creosote.stemRadius * (1 - 0.8 * t),
-      colorFn: (t) => wood.clone().lerp(leaf, 0.3 + 0.5 * t),
+      radiusFn: (t) => stemRadius * (1 - 0.84 * t),
+      colorFn: (t) => oldWood.clone()
+        .lerp(youngWood, (0.34 + 0.54 * t) * THREE.MathUtils.lerp(1.18, 0.78, oldGrowth))
+        .multiplyScalar(rngRange(rng, 0.84, 1.14)),
     });
+    paintCreosoteDetail(stem, [CREOSOTE_PART_STEM, 0, 0, rng()]);
     parts.push(stem);
 
-    // Tiny leaf cluster at tip
-    const leafBlob = new THREE.IcosahedronGeometry(
-      rngRange(rng, proportions.creosote.leafClusterRadius[0], proportions.creosote.leafClusterRadius[1]),
-      detailScale > 0.7 ? 1 : 0,
-    );
-    const pos = leafBlob.attributes.position;
-    const arr = new Float32Array(pos.count * 3);
-    for (let q = 0; q < pos.count; q++) {
-      pos.setXYZ(q,
-        pos.getX(q) * (0.7 + rng() * 0.5),
-        pos.getY(q) * (0.7 + rng() * 0.5),
-        pos.getZ(q) * (0.7 + rng() * 0.5));
-      const c = leaf.clone().multiplyScalar(0.85 + rng() * 0.3);
-      arr[q * 3] = c.r; arr[q * 3 + 1] = c.g; arr[q * 3 + 2] = c.b;
+    const axis = p3.clone().sub(p2).normalize();
+    const foliageChance = (crownT > 0.42 ? 0.96 : 0.46) * THREE.MathUtils.lerp(0.38, 1.0, maturity);
+    if (rngChance(rng, foliageChance)) {
+      const cardCount = scaledSegments(
+        rngInt(rng, 1, crownT > 0.62 ? Math.round(THREE.MathUtils.lerp(2, 4, maturity)) : 2),
+        detailScale,
+        1,
+      );
+      for (let c = 0; c < cardCount; c++) {
+        const radial = new THREE.Vector3(tipX, 0, tipZ).normalize();
+        if (radial.lengthSq() < 1e-5) radial.set(Math.cos(a), 0, Math.sin(a));
+        const cardAxis = axis.clone()
+          .lerp(radial.addScaledVector(UP, rngRange(rng, -0.12, 0.44)).normalize(), rngRange(rng, 0.22, 0.58))
+          .normalize();
+        const cardCenter = p3.clone()
+          .addScaledVector(axis, -spread * rngRange(rng, 0.018, 0.070))
+          .addScaledVector(UP, rngRange(rng, -height * 0.035, height * 0.045));
+        parts.push(makeFoliageCard(rng, {
+          center: cardCenter,
+          axis: cardAxis,
+          color: leaf,
+          length: rngRange(rng, proportions.creosote.leafClusterRadius[0], proportions.creosote.leafClusterRadius[1])
+            * rngRange(rng, THREE.MathUtils.lerp(1.20, 1.8, maturity), THREE.MathUtils.lerp(2.10, 3.1, maturity)),
+          width: rngRange(rng, proportions.creosote.leafClusterRadius[0], proportions.creosote.leafClusterRadius[1])
+            * rngRange(rng, THREE.MathUtils.lerp(0.52, 0.74, maturity), THREE.MathUtils.lerp(0.86, 1.22, maturity)),
+          id: rng(),
+        }));
+      }
     }
-    leafBlob.computeVertexNormals();
-    leafBlob.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-    leafBlob.translate(tipX, tipY, tipZ);
-    parts.push(leafBlob);
   }
 
-  return mergeGeometries(parts);
+  const geom = mergeGeometries(parts);
+  geom.userData.age = age;
+  return geom;
 }

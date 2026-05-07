@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries, resolveDetailScale, scaledSegments } from './common.js';
+import { mergeGeometries, resolveDetailScale, resolvePlantAge, scaledSegments } from './common.js';
 import { makeBranchSegment, makeLeafletSpray, makeThornCluster, safeSideVector } from './treeCommon.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
@@ -11,14 +11,28 @@ const UP = new THREE.Vector3(0, 1, 0);
 export function generatePaloVerde(rng, opts = {}) {
   const detailScale = resolveDetailScale(opts);
   const proportions = resolveProportionOracle(opts);
+  // Lifecycle scalar: young palo verdes are small green multi-stem shrubs;
+  // mature trees widen into airy canopies, thicken trunks, and flower heavily.
+  const age = resolvePlantAge(rng, opts, 0.58);
+  const maturity = THREE.MathUtils.smoothstep(age, 0.18, 0.76);
+  const oldGrowth = THREE.MathUtils.smoothstep(age, 0.66, 1.0);
   const minHeight = Math.max(proportions.paloVerde.minHeight, proportions.paloVerde.height[0]);
   const maxHeight = Math.max(minHeight + proportions.paloVerde.minHeightGap, proportions.paloVerde.height[1]);
-  const height = rngRange(rng, minHeight, maxHeight);
-  const spread = height * rngRange(rng, 1.15, 1.42);
-  const trunkRadius = THREE.MathUtils.lerp(proportions.paloVerde.trunkRadius[0], proportions.paloVerde.trunkRadius[1], height / Math.max(proportions.rootMeasurement, 1))
+  const height = THREE.MathUtils.lerp(minHeight * 0.42, maxHeight, Math.pow(age, 0.82))
+    * rngRange(rng, 0.88, 1.10);
+  const spread = height * rngRange(
+    rng,
+    THREE.MathUtils.lerp(0.72, 1.15, maturity),
+    THREE.MathUtils.lerp(1.02, 1.52, maturity + oldGrowth * 0.18),
+  );
+  const trunkRadius = THREE.MathUtils.lerp(proportions.paloVerde.trunkRadius[0] * 0.45, proportions.paloVerde.trunkRadius[1], Math.pow(age, 0.74))
     * rngRange(rng, 0.84, 1.12);
-  const maxDepth = rngInt(rng, 5, 6);
-  const flowering = opts.flowering ?? rngChance(rng, 0.35);
+  const maxDepth = rngInt(
+    rng,
+    Math.round(THREE.MathUtils.lerp(2, 5, maturity)),
+    Math.round(THREE.MathUtils.lerp(3, 7, maturity + oldGrowth * 0.20)),
+  );
+  const flowering = (opts.flowering ?? rngChance(rng, THREE.MathUtils.lerp(0.05, 0.42, maturity))) && age > 0.34;
 
   const barkBase = new THREE.Color(0x4f865f);
   const barkTip = new THREE.Color(0x83aa61);
@@ -40,7 +54,11 @@ export function generatePaloVerde(rng, opts = {}) {
 
     const side = safeSideVector(main);
     const forward = new THREE.Vector3().crossVectors(side, main).normalize();
-    const count = scaledSegments(rngInt(rng, 20, 42), detailScale, 8);
+    const count = scaledSegments(
+      rngInt(rng, Math.round(THREE.MathUtils.lerp(8, 20, maturity)), Math.round(THREE.MathUtils.lerp(16, 46, maturity))),
+      detailScale,
+      6,
+    );
 
     for (let i = 0; i < count; i++) {
       const angle = rng() * Math.PI * 2;
@@ -83,22 +101,22 @@ export function generatePaloVerde(rng, opts = {}) {
   }
 
   function addLeafSprays(at, axis, vigor) {
-    const scale = THREE.MathUtils.clamp(vigor, 0.55, 1.15);
+    const scale = THREE.MathUtils.clamp(vigor * THREE.MathUtils.lerp(0.74, 1.08, maturity), 0.45, 1.20);
     parts.push(makeLeafletSpray(rng, {
       center: at,
       axis,
       color: leaf,
-      sprigs: scaledSegments(rngInt(rng, 2, 5), detailScale, 1),
-      pairs: scaledSegments(rngInt(rng, 3, 6), detailScale, 2),
+      sprigs: scaledSegments(rngInt(rng, 1, Math.round(THREE.MathUtils.lerp(3, 6, maturity))), detailScale, 1),
+      pairs: scaledSegments(rngInt(rng, 2, Math.round(THREE.MathUtils.lerp(4, 7, maturity))), detailScale, 2),
       spread: proportions.paloVerde.leafSpraySpread * scale,
       sprigLength: proportions.paloVerde.sprigLength * scale,
       leafletLength: rngRange(rng, proportions.paloVerde.leafletLength[0], proportions.paloVerde.leafletLength[1]) * scale,
       leafletWidth: rngRange(rng, proportions.paloVerde.leafletWidth[0], proportions.paloVerde.leafletWidth[1]) * scale,
       droop: 0.10,
-      density: 0.52 * THREE.MathUtils.lerp(0.72, 1.0, detailScale),
+      density: 0.52 * THREE.MathUtils.lerp(0.55, 1.0, maturity) * THREE.MathUtils.lerp(0.72, 1.0, detailScale),
     }));
 
-    if (flowering && rngChance(rng, 0.72)) {
+    if (flowering && rngChance(rng, THREE.MathUtils.lerp(0.28, 0.78, maturity))) {
       parts.push(makeBlossomCluster(at.clone().addScaledVector(UP, 0.025), axis, scale));
     }
   }
@@ -113,9 +131,11 @@ export function generatePaloVerde(rng, opts = {}) {
       r1: radius * (young ? 0.55 : 0.68),
       colorBase: barkBase,
       colorTip: young ? barkYoung : barkTip,
-      curveScale: young ? 0.20 : 0.11,
-      twistScale: young ? 0.08 : 0.035,
-      sag: depth <= 2 ? rngRange(rng, -0.055, 0.030) : rngRange(rng, -0.010, 0.070),
+      curveScale: (young ? 0.20 : 0.11) * THREE.MathUtils.lerp(1.18, 0.92, oldGrowth),
+      twistScale: (young ? 0.08 : 0.035) * THREE.MathUtils.lerp(1.20, 0.86, maturity),
+      sag: depth <= 2
+        ? rngRange(rng, THREE.MathUtils.lerp(-0.020, -0.065, oldGrowth), 0.030)
+        : rngRange(rng, -0.010, THREE.MathUtils.lerp(0.11, 0.050, oldGrowth)),
       segmentsAround: scaledSegments(radius > 0.055 ? 10 : 6, detailScale, radius > 0.055 ? 6 : 4),
       ribCount: radius > 0.065 ? 6 : 0,
       ribDepth: radius > 0.065 ? 0.045 : 0,
@@ -139,11 +159,11 @@ export function generatePaloVerde(rng, opts = {}) {
       return;
     }
 
-    if (depth <= 3 && rngChance(rng, 0.40)) {
+    if (depth <= 3 && rngChance(rng, THREE.MathUtils.lerp(0.24, 0.48, maturity))) {
       addLeafSprays(end.clone().lerp(start, 0.18), dir, length / spread + 0.35);
     }
 
-    const childCount = rngInt(rng, depth >= maxDepth - 1 ? 2 : 1, depth <= 3 ? 4 : 3);
+    const childCount = rngInt(rng, depth >= maxDepth - 1 ? 1 : 1, depth <= 3 ? Math.round(THREE.MathUtils.lerp(2, 4, maturity)) : 3);
     const side = safeSideVector(dir);
     const fwd = new THREE.Vector3().crossVectors(side, dir).normalize();
 
@@ -158,13 +178,17 @@ export function generatePaloVerde(rng, opts = {}) {
       child.y = THREE.MathUtils.clamp(child.y, flatten > 0.55 ? -0.18 : 0.04, flatten > 0.55 ? 0.22 : 0.78);
       child.normalize();
 
-      const childLen = length * rngRange(rng, 0.60, 0.90) * THREE.MathUtils.lerp(1.10, 0.76, flatten);
-      const childR = radius * rngRange(rng, 0.48, 0.64);
+      const childLen = length * rngRange(rng, 0.56, 0.90) * THREE.MathUtils.lerp(1.10, 0.76, flatten) * THREE.MathUtils.lerp(0.86, 1.05, maturity);
+      const childR = radius * rngRange(rng, THREE.MathUtils.lerp(0.40, 0.48, maturity), THREE.MathUtils.lerp(0.56, 0.66, maturity));
       grow(end, child, childLen, childR, depth - 1, Math.max(crownLevel, end.y / height), phase);
     }
   }
 
-  const trunkCount = rngInt(rng, 3, 6);
+  const trunkCount = rngInt(
+    rng,
+    Math.round(THREE.MathUtils.lerp(1, 3, maturity)),
+    Math.round(THREE.MathUtils.lerp(2, 7, maturity + oldGrowth * 0.15)),
+  );
   for (let i = 0; i < trunkCount; i++) {
     const angle = (i / trunkCount) * Math.PI * 2 + rngRange(rng, -0.45, 0.45);
     const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
@@ -173,9 +197,15 @@ export function generatePaloVerde(rng, opts = {}) {
       .multiplyScalar(rngRange(rng, 0.64, 0.92))
       .addScaledVector(radial, rngRange(rng, 0.32, 0.58))
       .normalize();
-    const len = height * rngRange(rng, 0.26, 0.40);
+    const len = height * rngRange(
+      rng,
+      THREE.MathUtils.lerp(0.22, 0.26, maturity),
+      THREE.MathUtils.lerp(0.32, 0.42, maturity),
+    );
     grow(base, dir, len, trunkRadius * rngRange(rng, 0.76, 1.10), maxDepth, 0, angle);
   }
 
-  return mergeGeometries(parts);
+  const geom = mergeGeometries(parts);
+  geom.userData.age = age;
+  return geom;
 }

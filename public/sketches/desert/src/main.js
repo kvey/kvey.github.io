@@ -15,6 +15,8 @@ import { generatePricklyPear } from './plants/pricklyPear.js';
 import { generateOcotillo } from './plants/ocotillo.js';
 import { generateCreosote } from './plants/creosote.js';
 import { createCactusSpineMaterial } from './materials/cactusSpineMaterial.js';
+import { createCreosoteMaterial } from './materials/creosoteMaterial.js';
+import { createOcotilloMaterial } from './materials/ocotilloMaterial.js';
 import { createRockMaterial } from './materials/rockMaterial.js';
 import { createTreeMaterial } from './materials/treeMaterial.js';
 import { createSunLensFlare } from './lensFlare.js';
@@ -140,6 +142,11 @@ sun.shadow.camera.bottom = -60;
 sun.shadow.bias = -0.0005;
 scene.add(sun);
 scene.add(sun.target);
+
+const moonLight = new THREE.DirectionalLight(0x9fb4ff, 0);
+moonLight.castShadow = false;
+scene.add(moonLight);
+scene.add(moonLight.target);
 const sunLensFlare = createSunLensFlare(scene);
 
 // Sky-bounce ambient — warm orange ground, hazy blue sky
@@ -147,16 +154,12 @@ const hemi = new THREE.HemisphereLight(0xb8d8ff, 0xb98260, 0.6);
 scene.add(hemi);
 
 // ---------- Shared materials ----------
-const plantMaterial = new THREE.MeshStandardMaterial({
-  vertexColors: true,
-  roughness: 0.7,
-  metalness: 0.0,
-  side: THREE.DoubleSide,
-});
+const ocotilloMaterial = createOcotilloMaterial();
 const treeMaterial = createTreeMaterial();
 const cactusMaterial = createCactusSpineMaterial();
+const creosoteMaterial = createCreosoteMaterial();
 const rockMaterial = createRockMaterial();
-const sharedMaterials = new Set([plantMaterial, treeMaterial, cactusMaterial, rockMaterial]);
+const sharedMaterials = new Set([ocotilloMaterial, treeMaterial, cactusMaterial, creosoteMaterial, rockMaterial]);
 
 // ---------- Generation parameters ----------
 const params = {
@@ -164,7 +167,8 @@ const params = {
 
   // Terrain
   terrainSize: 140,
-  terrainSegments: 220,
+  terrainSegments: 360,
+  hydrologySegments: 88,
   heightScale: 5.5,
   macroScale: 0.012,
   ridgeScale: 0.06,
@@ -175,17 +179,24 @@ const params = {
   rockySlopeStrength: 0.65,
 
   // Plant densities (instances per m^2)
+  saguaroEnabled: true,
   saguaroDensity: 0.012,
   saguaroMaxHeight: 7.0,
   saguaroArmProbability: 0.7,
+  barrelEnabled: true,
   barrelDensity: 0.030,
+  paloVerdeEnabled: true,
   paloVerdeDensity: 0.008,
   paloVerdeFlowering: false,
+  mesquiteEnabled: true,
   mesquiteDensity: 0.003,
   mesquiteSeedPods: true,
+  pricklyPearEnabled: true,
   pricklyPearDensity: 0.020,
+  ocotilloEnabled: true,
   ocotilloDensity: 0.006,
   ocotilloFlowering: false,
+  creosoteEnabled: true,
   creosoteDensity: 0.060,
 
   // Rocks
@@ -256,6 +267,7 @@ function buildWorld() {
   terrain = buildTerrain({
     size: params.terrainSize,
     segments: params.terrainSegments,
+    hydrologySegments: params.hydrologySegments,
     heightScale: params.heightScale,
     macroScale: params.macroScale,
     ridgeScale: params.ridgeScale,
@@ -301,13 +313,14 @@ function buildWorld() {
   // Palo verde — terrain/wash first, then nurse shade for young saguaros.
   scatterPlants({
     generator: generatePaloVerde,
-    generatorOpts: {
+    generatorOpts: (rng) => ({
       flowering: params.paloVerdeFlowering,
+      age: Math.pow(rng(), 0.58),
       proportions,
-    },
+    }),
     material: treeMaterial,
     terrain,
-    densityPerArea: params.paloVerdeDensity,
+    densityPerArea: params.paloVerdeEnabled ? params.paloVerdeDensity : 0,
     maxSlope: 1.0,
     scaleRange: [0.84, 1.12],
     variantCount: 8,
@@ -317,24 +330,29 @@ function buildWorld() {
     lodOrigin: camera.position,
     attemptMultiplier: 14,
     candidateFilter: (ctx) => acceptPaloVerdeCandidate(ctx, resourceZones, proportions),
-    onPlace: (mat) => registerPlantZone(mat, {
-      kind: 'paloVerde',
-      canopyRadius: proportions.paloVerde.canopyRadius,
-      rootRadius: proportions.paloVerde.rootRadius,
-      resourceUse: 0.52,
-    }),
+    onPlace: (mat, rng, i, ctx) => {
+      const age = ctx.variantOpts.age ?? 0.58;
+      const maturity = THREE.MathUtils.smoothstep(age, 0.18, 0.76);
+      registerPlantZone(mat, {
+        kind: 'paloVerde',
+        canopyRadius: proportions.paloVerde.canopyRadius * THREE.MathUtils.lerp(0.42, 1.08, maturity),
+        rootRadius: proportions.paloVerde.rootRadius * THREE.MathUtils.lerp(0.34, 1.05, maturity),
+        resourceUse: THREE.MathUtils.lerp(0.22, 0.58, maturity),
+      });
+    },
   });
 
   // Mesquite — darker wash trees with broader shade and stronger water demand.
   scatterPlants({
     generator: generateMesquite,
-    generatorOpts: {
+    generatorOpts: (rng) => ({
       seedPods: params.mesquiteSeedPods,
+      age: Math.pow(rng(), 0.54),
       proportions,
-    },
+    }),
     material: treeMaterial,
     terrain,
-    densityPerArea: params.mesquiteDensity,
+    densityPerArea: params.mesquiteEnabled ? params.mesquiteDensity : 0,
     maxSlope: 0.75,
     scaleRange: [0.74, 1.08],
     variantCount: 7,
@@ -344,12 +362,16 @@ function buildWorld() {
     lodOrigin: camera.position,
     attemptMultiplier: 12,
     candidateFilter: (ctx) => acceptMesquiteCandidate(ctx, resourceZones, proportions),
-    onPlace: (mat) => registerPlantZone(mat, {
-      kind: 'mesquite',
-      canopyRadius: proportions.mesquite.canopyRadius,
-      rootRadius: proportions.mesquite.rootRadius,
-      resourceUse: 0.78,
-    }),
+    onPlace: (mat, rng, i, ctx) => {
+      const age = ctx.variantOpts.age ?? 0.58;
+      const maturity = THREE.MathUtils.smoothstep(age, 0.16, 0.74);
+      registerPlantZone(mat, {
+        kind: 'mesquite',
+        canopyRadius: proportions.mesquite.canopyRadius * THREE.MathUtils.lerp(0.36, 1.10, maturity),
+        rootRadius: proportions.mesquite.rootRadius * THREE.MathUtils.lerp(0.32, 1.08, maturity),
+        resourceUse: THREE.MathUtils.lerp(0.30, 0.82, maturity),
+      });
+    },
   });
 
   // Saguaros — seedlings cluster under nurse plants; old plants claim root space.
@@ -362,7 +384,7 @@ function buildWorld() {
     }),
     material: cactusMaterial,
     terrain,
-    densityPerArea: params.saguaroDensity,
+    densityPerArea: params.saguaroEnabled ? params.saguaroDensity : 0,
     maxSlope: 0.9,
     scaleRange: [0.92, 1.08],
     variantCount: 12,
@@ -395,12 +417,13 @@ function buildWorld() {
   // Barrel cactus — south-facing tilt, all slopes ok
   scatterPlants({
     generator: generateBarrelCactus,
-    generatorOpts: {
+    generatorOpts: (rng) => ({
+      age: Math.pow(rng(), 0.62),
       proportions,
-    },
+    }),
     material: cactusMaterial,
     terrain,
-    densityPerArea: params.barrelDensity,
+    densityPerArea: params.barrelEnabled ? params.barrelDensity : 0,
     maxSlope: 1.4,
     scaleRange: [0.85, 1.25],
     variantCount: 6,
@@ -410,9 +433,15 @@ function buildWorld() {
     lodOrigin: camera.position,
     attemptMultiplier: 12,
     candidateFilter: (ctx) => acceptBarrelCactusCandidate(ctx, nursePlants, matureSaguaroZones, resourceZones, proportions),
-    onPlace: (mat, rng) => {
-      // Lean ~10-25 deg toward the south (positive +Z in our scene).
-      const tilt = THREE.MathUtils.degToRad(8 + rng() * 16);
+    onPlace: (mat, rng, i, ctx) => {
+      // Older barrels lean more strongly toward the south (positive +Z here).
+      const age = ctx.variantOpts.age ?? 0.5;
+      const maturity = THREE.MathUtils.smoothstep(age, 0.22, 0.82);
+      const tilt = THREE.MathUtils.degToRad(rngRange(
+        rng,
+        THREE.MathUtils.lerp(2, 8, maturity),
+        THREE.MathUtils.lerp(8, 26, maturity),
+      ));
       placementTiltQuat.setFromAxisAngle(X_AXIS, tilt);
       mat.decompose(placementPos, placementQuat, placementScale);
       placementQuat.multiply(placementTiltQuat);
@@ -423,10 +452,13 @@ function buildWorld() {
   // Prickly pear — tolerates more terrain
   scatterPlants({
     generator: generatePricklyPear,
-    generatorOpts: { proportions },
+    generatorOpts: (rng) => ({
+      age: Math.pow(rng(), 0.70),
+      proportions,
+    }),
     material: cactusMaterial,
     terrain,
-    densityPerArea: params.pricklyPearDensity,
+    densityPerArea: params.pricklyPearEnabled ? params.pricklyPearDensity : 0,
     maxSlope: 1.4,
     scaleRange: [0.85, 1.4],
     variantCount: 6,
@@ -441,10 +473,14 @@ function buildWorld() {
   // Ocotillo — likes rocky runoff slopes more than wash bottoms.
   scatterPlants({
     generator: generateOcotillo,
-    generatorOpts: { flowering: params.ocotilloFlowering, proportions },
-    material: plantMaterial,
+    generatorOpts: (rng) => ({
+      flowering: params.ocotilloFlowering,
+      age: Math.pow(rng(), 0.64),
+      proportions,
+    }),
+    material: ocotilloMaterial,
     terrain,
-    densityPerArea: params.ocotilloDensity,
+    densityPerArea: params.ocotilloEnabled ? params.ocotilloDensity : 0,
     maxSlope: 2.0,
     scaleRange: [0.8, 1.2],
     variantCount: 6,
@@ -459,10 +495,13 @@ function buildWorld() {
   // Creosote — dry open interfluves, thinned near active washes and strong roots.
   scatterPlants({
     generator: generateCreosote,
-    generatorOpts: { proportions },
-    material: plantMaterial,
+    generatorOpts: (rng) => ({
+      age: Math.pow(rng(), 0.56),
+      proportions,
+    }),
+    material: creosoteMaterial,
     terrain,
-    densityPerArea: params.creosoteDensity,
+    densityPerArea: params.creosoteEnabled ? params.creosoteDensity : 0,
     maxSlope: 1.6,
     scaleRange: [0.7, 1.3],
     variantCount: 6,
@@ -470,6 +509,7 @@ function buildWorld() {
     parent: world,
     lodLevels: plantLodLevels,
     lodOrigin: camera.position,
+    castShadow: false,
     attemptMultiplier: 10,
     candidateFilter: (ctx) => acceptCreosoteCandidate(ctx, matureSaguaroZones, resourceZones, proportions),
   });
@@ -773,25 +813,48 @@ function updateSun() {
   // Place the directional light far along the sun direction.
   sun.position.copy(dir).multiplyScalar(80);
   sun.target.position.set(0, 0, 0);
-  // Warm color near horizon, cooler higher up.
+  // Warm color near horizon, cooler higher up, then dim after sunset.
   const elev01 = THREE.MathUtils.clamp(params.sunElevation / 60, 0, 1);
-  const sunset01 = 1 - THREE.MathUtils.smoothstep(params.sunElevation, 12, 45);
+  const daylight01 = THREE.MathUtils.smoothstep(params.sunElevation, -4, 8);
+  const night01 = 1 - THREE.MathUtils.smoothstep(params.sunElevation, -18, -2);
+  const sunset01 =
+    (1 - THREE.MathUtils.smoothstep(params.sunElevation, 12, 45)) *
+    (1 - night01);
   const warm = new THREE.Color(0xff9a56);
   const cool = new THREE.Color(0xfff2d6);
-  const lightCol = warm.clone().lerp(cool, elev01 * 0.85);
+  const nightLight = new THREE.Color(0x2c3f7a);
+  const lightCol = warm.clone().lerp(cool, elev01 * 0.85).lerp(nightLight, night01);
   sun.color.copy(lightCol);
-  sun.intensity = THREE.MathUtils.lerp(1.15, 2.65, elev01) + sunset01 * 0.28;
+  const daylightIntensity = THREE.MathUtils.lerp(0.65, 2.65, elev01) + sunset01 * 0.28;
+  sun.intensity = THREE.MathUtils.lerp(0.0, daylightIntensity, daylight01);
+
+  moonLight.position.copy(skyCtl.moon).multiplyScalar(80);
+  moonLight.target.position.set(0, 0, 0);
+  moonLight.intensity = THREE.MathUtils.lerp(0.0, 0.58, night01);
 
   // Match fog to the sky's hazy ground band.
   const fogWarm = new THREE.Color(0xe9a171);
   const fogViolet = new THREE.Color(0xb199b6);
   const fogCool = new THREE.Color(0xc8d4dd);
-  const fogColor = fogWarm.clone().lerp(fogViolet, sunset01 * 0.22).lerp(fogCool, elev01 * 0.42);
+  const fogNight = new THREE.Color(0x11182d);
+  const fogColor = fogWarm.clone()
+    .lerp(fogViolet, sunset01 * 0.35)
+    .lerp(fogCool, elev01 * 0.42)
+    .lerp(fogNight, night01);
   scene.fog.color.copy(fogColor);
-  scene.fog.density = params.fogDensity * THREE.MathUtils.lerp(1.28, 0.84, elev01);
-  hemi.intensity = THREE.MathUtils.lerp(0.46, 0.68, elev01);
-  hemi.color.set(0xb8d8ff).lerp(new THREE.Color(0x7b8ac4), sunset01 * 0.35);
-  hemi.groundColor.set(0xb98260).lerp(new THREE.Color(0xd07658), sunset01 * 0.45);
+  const dayFogDensity = THREE.MathUtils.lerp(1.28, 0.84, elev01);
+  scene.fog.density = params.fogDensity * THREE.MathUtils.lerp(dayFogDensity, 0.62, night01);
+  hemi.intensity = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.20, 0.68, daylight01),
+    0.10,
+    night01,
+  );
+  hemi.color.set(0xb8d8ff)
+    .lerp(new THREE.Color(0x7b8ac4), sunset01 * 0.35)
+    .lerp(new THREE.Color(0x10183b), night01);
+  hemi.groundColor.set(0xb98260)
+    .lerp(new THREE.Color(0xd07658), sunset01 * 0.45)
+    .lerp(new THREE.Color(0x080814), night01);
   updateLensFlare();
 }
 
@@ -814,6 +877,8 @@ fGen.add(params, 'regenerate').name('↻ regenerate');
 
 const fTer = gui.addFolder('Terrain');
 fTer.add(params, 'terrainSize', 60, 240, 10).onChange(scheduleRegenerate);
+fTer.add(params, 'terrainSegments', 120, 480, 1).onChange(scheduleRegenerate).name('render resolution');
+fTer.add(params, 'hydrologySegments', 24, 160, 1).onChange(scheduleRegenerate).name('water resolution');
 fTer.add(params, 'heightScale', 0.5, 12, 0.1).onChange(scheduleRegenerate).name('height');
 fTer.add(params, 'macroScale', 0.003, 0.04, 0.001).onChange(scheduleRegenerate).name('hill scale');
 fTer.add(params, 'ridgeScale', 0.01, 0.2, 0.005).onChange(scheduleRegenerate).name('ridge scale');
@@ -825,29 +890,36 @@ fTer.add(params, 'rockySlopeStrength', 0, 1.4, 0.05).onChange(scheduleRegenerate
 fTer.close();
 
 const fSag = gui.addFolder('Saguaros');
+fSag.add(params, 'saguaroEnabled').onChange(scheduleRegenerate).name('enabled');
 fSag.add(params, 'saguaroDensity', 0, 0.05, 0.001).onChange(scheduleRegenerate).name('density');
 fSag.add(params, 'saguaroMaxHeight', 3, 12, 0.1).onChange(scheduleRegenerate).name('max height');
 fSag.add(params, 'saguaroArmProbability', 0, 1, 0.05).onChange(scheduleRegenerate).name('arm chance');
 
 const fBar = gui.addFolder('Barrel cacti');
+fBar.add(params, 'barrelEnabled').onChange(scheduleRegenerate).name('enabled');
 fBar.add(params, 'barrelDensity', 0, 0.1, 0.002).onChange(scheduleRegenerate).name('density');
 
 const fPV = gui.addFolder('Palo verde');
+fPV.add(params, 'paloVerdeEnabled').onChange(scheduleRegenerate).name('enabled');
 fPV.add(params, 'paloVerdeDensity', 0, 0.04, 0.001).onChange(scheduleRegenerate).name('density');
 fPV.add(params, 'paloVerdeFlowering').onChange(scheduleRegenerate).name('flowering (spring)');
 
 const fMesquite = gui.addFolder('Mesquite');
+fMesquite.add(params, 'mesquiteEnabled').onChange(scheduleRegenerate).name('enabled');
 fMesquite.add(params, 'mesquiteDensity', 0, 0.025, 0.001).onChange(scheduleRegenerate).name('density');
 fMesquite.add(params, 'mesquiteSeedPods').onChange(scheduleRegenerate).name('seed pods');
 
 const fPP = gui.addFolder('Prickly pear');
+fPP.add(params, 'pricklyPearEnabled').onChange(scheduleRegenerate).name('enabled');
 fPP.add(params, 'pricklyPearDensity', 0, 0.08, 0.002).onChange(scheduleRegenerate).name('density');
 
 const fOco = gui.addFolder('Ocotillo');
+fOco.add(params, 'ocotilloEnabled').onChange(scheduleRegenerate).name('enabled');
 fOco.add(params, 'ocotilloDensity', 0, 0.03, 0.001).onChange(scheduleRegenerate).name('density');
 fOco.add(params, 'ocotilloFlowering').onChange(scheduleRegenerate).name('blooming');
 
 const fCre = gui.addFolder('Creosote');
+fCre.add(params, 'creosoteEnabled').onChange(scheduleRegenerate).name('enabled');
 fCre.add(params, 'creosoteDensity', 0, 0.2, 0.005).onChange(scheduleRegenerate).name('density');
 
 const fRock = gui.addFolder('Rocks');
@@ -856,7 +928,7 @@ fRock.add(params, 'largeRockDensity', 0, 0.05, 0.002).onChange(scheduleRegenerat
 
 const fSun = gui.addFolder('Sun & atmosphere');
 fSun.add(params, 'sunAzimuth', 0, 360, 1).onChange(updateSun).name('azimuth');
-fSun.add(params, 'sunElevation', -3, 80, 0.5).onChange(updateSun).name('elevation');
+fSun.add(params, 'sunElevation', -18, 80, 0.5).onChange(updateSun).name('elevation');
 fSun.add(params, 'fogDensity', 0, 0.02, 0.0005).onChange(updateSun).name('fog');
 fSun.add(params, 'exposure', 0.4, 1.6, 0.05).onChange(v => { renderer.toneMappingExposure = v; }).name('exposure');
 fSun.add(params, 'lensFlare').onChange(updateLensFlare).name('lens flare');

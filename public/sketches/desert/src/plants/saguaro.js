@@ -360,5 +360,7 @@ export function generateSaguaro(rng, opts = {}) {
     parts.push(armGeom);
   }
 
-  return mergeGeometries(parts);
+  const geom = mergeGeometries(parts);
+  geom.userData.age = age;
+  return geom;
 }

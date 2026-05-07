@@ -4,6 +4,7 @@ import { Sky } from 'three/addons/objects/Sky.js';
 function createSunsetDome() {
   const uniforms = {
     sunDirection: { value: new THREE.Vector3(0, 1, 0) },
+    moonDirection: { value: new THREE.Vector3(0, 1, 0) },
     sunElevation: { value: 35 },
     cloudTime: { value: 0 },
   };
@@ -24,6 +25,7 @@ function createSunsetDome() {
     `,
     fragmentShader: /* glsl */`
       uniform vec3 sunDirection;
+      uniform vec3 moonDirection;
       uniform float sunElevation;
       uniform float cloudTime;
       varying vec3 vWorldDirection;
@@ -60,12 +62,26 @@ function createSunsetDome() {
         return v / max(length(v), 0.0001);
       }
 
+      float starField(vec3 dir, float scale, float threshold) {
+        vec2 p = vec2(atan(dir.z, dir.x) * 0.15915494 + 0.5, asin(clamp(dir.y, -1.0, 1.0)) * 0.31830989 + 0.5);
+        vec2 cell = floor(p * scale);
+        vec2 cellUv = fract(p * scale) - 0.5;
+        float rnd = hash(cell);
+        float core = 1.0 - smoothstep(0.018, 0.072, length(cellUv));
+        float visible = smoothstep(threshold, 1.0, rnd);
+        return core * visible * (0.62 + rnd * 0.55);
+      }
+
       void main() {
         vec3 dir = normalize(vWorldDirection);
         vec3 sunDir = normalize(sunDirection);
+        vec3 moonDir = normalize(moonDirection);
 
         float elev01 = smoothstep(0.0, 52.0, sunElevation);
-        float sunset = 1.0 - smoothstep(12.0, 42.0, sunElevation);
+        float belowHorizon = 1.0 - smoothstep(-14.0, 0.0, sunElevation);
+        float night = smoothstep(0.48, 1.0, belowHorizon);
+        float skyObjects = smoothstep(0.16, 0.86, belowHorizon);
+        float sunset = (1.0 - smoothstep(12.0, 42.0, sunElevation)) * (1.0 - night);
         float horizon = exp(-abs(dir.y) * 5.3);
         float upper = smoothstep(-0.05, 0.82, dir.y);
 
@@ -76,10 +92,17 @@ function createSunsetDome() {
         vec3 duskHorizon = vec3(1.00, 0.54, 0.25);
         vec3 redBand = vec3(0.88, 0.17, 0.22);
         vec3 violetBelt = vec3(0.30, 0.18, 0.43);
+        vec3 twilightZenith = vec3(0.035, 0.025, 0.13);
+        vec3 twilightHorizon = vec3(0.17, 0.055, 0.22);
+        vec3 nightZenith = vec3(0.004, 0.012, 0.045);
+        vec3 nightHorizon = vec3(0.012, 0.030, 0.085);
 
         vec3 dayColor = mix(dayHorizon, dayZenith, upper);
         vec3 duskColor = mix(duskHorizon, mix(duskUpper, duskZenith, upper), upper);
         vec3 color = mix(duskColor, dayColor, elev01);
+        vec3 twilightColor = mix(twilightHorizon, twilightZenith, upper);
+        vec3 nightColor = mix(nightHorizon, nightZenith, upper);
+        vec3 belowHorizonColor = mix(twilightColor, nightColor, night);
 
         float sunDot = max(dot(dir, sunDir), 0.0);
         float sunAzDot = dot(safeNormalize(dir.xz), safeNormalize(sunDir.xz));
@@ -108,8 +131,24 @@ function createSunsetDome() {
         vec3 cloudLit = mix(vec3(0.48, 0.50, 0.62), vec3(1.0, 0.47, 0.23), sunSide * sunset);
         vec3 cloudShade = mix(vec3(0.22, 0.22, 0.34), vec3(0.46, 0.22, 0.39), sunset);
         color = mix(color, mix(cloudShade, cloudLit, 0.36 + sunSide * 0.58), cloudMask);
+        color = mix(color, belowHorizonColor, belowHorizon);
 
-        float alpha = clamp(0.36 + horizon * 0.38 + sunset * 0.18 + goldGlow * 0.18, 0.0, 0.82);
+        float aboveHorizon = smoothstep(0.02, 0.22, dir.y);
+        float starMask = skyObjects * aboveHorizon * (1.0 - cloudMask * 0.74);
+        float stars = starField(dir, 92.0, 0.965) + starField(dir + vec3(0.13, 0.31, -0.07), 168.0, 0.988);
+        color += vec3(0.60, 0.68, 1.0) * stars * starMask * 0.92;
+
+        float moonDot = dot(dir, moonDir);
+        float moonDisc = smoothstep(0.99912, 0.99976, moonDot);
+        float moonInner = smoothstep(0.99970, 0.99994, moonDot);
+        float moonGlow = pow(max(moonDot, 0.0), 360.0) * 0.55 + pow(max(moonDot, 0.0), 48.0) * 0.16;
+        float moonVisible = skyObjects * smoothstep(0.01, 0.16, moonDir.y);
+        vec3 moonColor = vec3(0.78, 0.84, 1.0);
+        color += moonColor * moonGlow * moonVisible * aboveHorizon;
+        color = mix(color, moonColor, moonDisc * moonVisible);
+        color = mix(color, vec3(0.92, 0.95, 1.0), moonInner * moonVisible * 0.72);
+
+        float alpha = clamp(0.36 + horizon * 0.38 + sunset * 0.18 + goldGlow * 0.18 + belowHorizon * 0.46, 0.0, 0.98);
         gl_FragColor = vec4(color, alpha);
       }
     `,
@@ -232,7 +271,8 @@ function createDistantMountains() {
         float sunAngle = atan(sunXZ.y, sunXZ.x);
         float sunFacing = cos(angle - sunAngle) * 0.5 + 0.5;
         float elev01 = smoothstep(0.0, 42.0, sunElevation);
-        float sunset = 1.0 - smoothstep(14.0, 46.0, sunElevation);
+        float night = 1.0 - smoothstep(-16.0, -2.0, sunElevation);
+        float sunset = (1.0 - smoothstep(14.0, 46.0, sunElevation)) * (1.0 - night);
 
         vec3 farPurple = vec3(0.22, 0.20, 0.32);
         vec3 catalinaBlue = vec3(0.30, 0.36, 0.45);
@@ -245,6 +285,7 @@ function createDistantMountains() {
         vec3 color = mix(rearColor, frontColor, frontAmount);
         color = mix(color, sunsetRim, sunset * sunFacing * slopeLight * 0.34);
         color = mix(color, haze, 0.30 + y * 0.34 - frontAmount * 0.10);
+        color = mix(color, vec3(0.030, 0.035, 0.075), night);
 
         float detail = fbm(dir * 28.0 + vec2(y * 2.3, y * 8.1));
         float gullies = pow(1.0 - abs(fbm(dir * 54.0 + vec2(y * 5.0, 9.0)) * 2.0 - 1.0), 1.8);
@@ -276,6 +317,7 @@ export function buildSky(scene, renderer) {
   u.mieDirectionalG.value = 0.85;
 
   const sun = new THREE.Vector3();
+  const moon = new THREE.Vector3();
   const sunsetDome = createSunsetDome();
   const mountains = createDistantMountains();
   scene.add(sunsetDome.mesh);
@@ -285,6 +327,10 @@ export function buildSky(scene, renderer) {
     const phi = THREE.MathUtils.degToRad(90 - elevation);
     const theta = THREE.MathUtils.degToRad(azimuth);
     sun.setFromSphericalCoords(1, phi, theta);
+    const moonElevation = THREE.MathUtils.clamp(-elevation + 18, -18, 70);
+    const moonPhi = THREE.MathUtils.degToRad(90 - moonElevation);
+    const moonTheta = THREE.MathUtils.degToRad((azimuth + 178) % 360);
+    moon.setFromSphericalCoords(1, moonPhi, moonTheta);
     u.sunPosition.value.copy(sun);
     const sunsetAmount = 1 - THREE.MathUtils.smoothstep(elevation, 12, 44);
     u.turbidity.value = THREE.MathUtils.lerp(6.0, 11.5, sunsetAmount);
@@ -292,6 +338,7 @@ export function buildSky(scene, renderer) {
     u.mieCoefficient.value = THREE.MathUtils.lerp(0.0045, 0.013, sunsetAmount);
     u.mieDirectionalG.value = THREE.MathUtils.lerp(0.78, 0.91, sunsetAmount);
     sunsetDome.uniforms.sunDirection.value.copy(sun);
+    sunsetDome.uniforms.moonDirection.value.copy(moon);
     sunsetDome.uniforms.sunElevation.value = elevation;
     mountains.uniforms.sunDirection.value.copy(sun);
     mountains.uniforms.sunElevation.value = elevation;
@@ -302,5 +349,5 @@ export function buildSky(scene, renderer) {
     sunsetDome.uniforms.cloudTime.value = elapsedSeconds;
   }
 
-  return { sky, sunsetDome: sunsetDome.mesh, mountains: mountains.mesh, sun, update, updateTime };
+  return { sky, sunsetDome: sunsetDome.mesh, mountains: mountains.mesh, sun, moon, update, updateTime };
 }

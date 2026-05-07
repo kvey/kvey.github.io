@@ -58,6 +58,7 @@ export function buildTerrain(params, seed) {
   const {
     size = 140,
     segments = 220,
+    hydrologySegments = 88,
     heightScale = 5.5,
     macroScale = 0.012,
     ridgeScale = 0.06,
@@ -71,7 +72,11 @@ export function buildTerrain(params, seed) {
   const invSize = 1 / size;
   const gridStride = segments + 1;
   const gridStep = size / segments;
+  const hydroSegments = Math.max(8, Math.floor(hydrologySegments));
+  const hydroStride = hydroSegments + 1;
+  const hydroStep = size / hydroSegments;
   let heightField = null;
+  let hydrologyField = null;
 
   const washCount = 5;
   const washes = [];
@@ -234,6 +239,78 @@ export function buildTerrain(params, seed) {
     return THREE.MathUtils.lerp(h0, h1, tz);
   }
 
+  function buildHydrologyField() {
+    const count = hydroStride * hydroStride;
+    const fields = {
+      cut: new Float32Array(count),
+      bank: new Float32Array(count),
+      gravel: new Float32Array(count),
+      proximity: new Float32Array(count),
+      flowAccumulation: new Float32Array(count),
+      runoff: new Float32Array(count),
+      soilMoisture: new Float32Array(count),
+      shoulder: new Float32Array(count),
+      basin: new Float32Array(count),
+      ridge: new Float32Array(count),
+    };
+
+    for (let row = 0; row <= hydroSegments; row++) {
+      const z = -half + row * hydroStep;
+      for (let col = 0; col <= hydroSegments; col++) {
+        const x = -half + col * hydroStep;
+        const i = row * hydroStride + col;
+        const info = evaluate(x, z);
+        fields.cut[i] = info.wash.cut;
+        fields.bank[i] = info.wash.bank;
+        fields.gravel[i] = info.wash.gravel;
+        fields.proximity[i] = info.wash.proximity;
+        fields.flowAccumulation[i] = info.flowAccumulation;
+        fields.runoff[i] = info.runoff;
+        fields.soilMoisture[i] = info.soilMoisture;
+        fields.shoulder[i] = info.shoulder;
+        fields.basin[i] = info.basin;
+        fields.ridge[i] = info.ridge;
+      }
+    }
+
+    return fields;
+  }
+
+  function sampleHydrologyField(x, z) {
+    if (!hydrologyField) return evaluate(x, z);
+    const gx = THREE.MathUtils.clamp((x + half) / hydroStep, 0, hydroSegments);
+    const gz = THREE.MathUtils.clamp((z + half) / hydroStep, 0, hydroSegments);
+    const x0 = Math.floor(gx);
+    const z0 = Math.floor(gz);
+    const x1 = Math.min(hydroSegments, x0 + 1);
+    const z1 = Math.min(hydroSegments, z0 + 1);
+    const tx = gx - x0;
+    const tz = gz - z0;
+    const i00 = z0 * hydroStride + x0;
+    const i10 = z0 * hydroStride + x1;
+    const i01 = z1 * hydroStride + x0;
+    const i11 = z1 * hydroStride + x1;
+    const sampleField = (field) => {
+      const h0 = THREE.MathUtils.lerp(field[i00], field[i10], tx);
+      const h1 = THREE.MathUtils.lerp(field[i01], field[i11], tx);
+      return THREE.MathUtils.lerp(h0, h1, tz);
+    };
+    const cut = sampleField(hydrologyField.cut);
+    const bank = sampleField(hydrologyField.bank);
+    const gravel = sampleField(hydrologyField.gravel);
+    const proximity = sampleField(hydrologyField.proximity);
+
+    return {
+      wash: { cut, bank, gravel, proximity },
+      flowAccumulation: sampleField(hydrologyField.flowAccumulation),
+      runoff: sampleField(hydrologyField.runoff),
+      soilMoisture: sampleField(hydrologyField.soilMoisture),
+      shoulder: sampleField(hydrologyField.shoulder),
+      basin: sampleField(hydrologyField.basin),
+      ridge: sampleField(hydrologyField.ridge),
+    };
+  }
+
   function gradient(x, z, eps = 0.5) {
     const hx = (sample(x + eps, z) - sample(x - eps, z)) / (2 * eps);
     const hz = (sample(x, z + eps) - sample(x, z - eps)) / (2 * eps);
@@ -247,7 +324,7 @@ export function buildTerrain(params, seed) {
   }
 
   function sampleInfo(x, z, eps = 0.5) {
-    const info = evaluate(x, z);
+    const info = sampleHydrologyField(x, z);
     const surfaceHeight = sample(x, z);
     const g = gradient(x, z, eps);
     const slopeMagnitude = Math.sqrt(g.hx * g.hx + g.hz * g.hz);
@@ -267,6 +344,7 @@ export function buildTerrain(params, seed) {
 
   const geom = new THREE.PlaneGeometry(size, size, segments, segments);
   geom.rotateX(-Math.PI / 2);
+  hydrologyField = buildHydrologyField();
 
   const pos = geom.attributes.position;
   heightField = new Float32Array(pos.count);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries, paintCactusSpines, resolveDetailScale, scaledSegments } from './common.js';
+import { mergeGeometries, paintCactusSpines, resolveDetailScale, resolvePlantAge, scaledSegments } from './common.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
 
@@ -8,16 +8,40 @@ import { resolveProportionOracle } from '../proportions.js';
 export function generatePricklyPear(rng, opts = {}) {
   const detailScale = resolveDetailScale(opts);
   const proportions = resolveProportionOracle(opts);
-  const baseSize = rngRange(rng, proportions.pricklyPear.padBaseSize[0], proportions.pricklyPear.padBaseSize[1]);
-  const padHue = rngRange(rng, 0.285, 0.335);
-  const padColor = new THREE.Color().setHSL(padHue, rngRange(rng, 0.22, 0.36), rngRange(rng, 0.36, 0.44));
-  const youngPadColor = padColor.clone().offsetHSL(0.018, 0.08, 0.08);
-  const rimBlush = new THREE.Color().setHSL(rngRange(rng, 0.92, 0.98), 0.28, 0.36);
-  const fruitColor = new THREE.Color().setHSL(rngRange(rng, 0.94, 0.985), 0.55, 0.36);
+  // Lifecycle scalar: young plants are a few tender pads, while old clumps
+  // spread into branched thickets with thicker basal pads and more fruit.
+  const age = resolvePlantAge(rng, opts, 0.70);
+  const maturity = THREE.MathUtils.smoothstep(age, 0.18, 0.78);
+  const oldGrowth = THREE.MathUtils.smoothstep(age, 0.66, 1.0);
+  const baseSize = THREE.MathUtils.lerp(
+    proportions.pricklyPear.padBaseSize[0],
+    proportions.pricklyPear.padBaseSize[1],
+    Math.pow(age, 0.64),
+  ) * rngRange(rng, 0.88, 1.12);
+  const padHue = rngRange(rng, 0.265, 0.350);
+  const padColor = new THREE.Color().setHSL(padHue, rngRange(rng, 0.18, 0.38), rngRange(rng, 0.34, 0.46));
+  const youngPadColor = padColor.clone().offsetHSL(0.018, 0.09, 0.09);
+  const oldPadColor = new THREE.Color().setHSL(rngRange(rng, 0.095, 0.135), rngRange(rng, 0.14, 0.24), rngRange(rng, 0.38, 0.48));
+  const dryScarColor = new THREE.Color().setHSL(rngRange(rng, 0.065, 0.105), rngRange(rng, 0.20, 0.34), rngRange(rng, 0.25, 0.34));
+  const rimBlush = new THREE.Color().setHSL(rngRange(rng, 0.88, 0.99), 0.30, 0.38);
+  const fruitColor = new THREE.Color().setHSL(rngRange(rng, 0.88, 0.965), 0.62, 0.38);
+  const fruitBaseColor = new THREE.Color().setHSL(rngRange(rng, 0.075, 0.105), 0.52, 0.45);
   const flowerColor = new THREE.Color().setHSL(rngRange(rng, 0.10, 0.14), 0.76, 0.58);
-  const maxDepth = rngInt(rng, 3, 4);
-  const childChance = rngRange(rng, 0.58, 0.82);
-  const maxPads = opts.maxPads ?? rngInt(rng, 12, 20);
+  const maxDepth = rngInt(
+    rng,
+    Math.round(THREE.MathUtils.lerp(1, 3, maturity)),
+    Math.round(THREE.MathUtils.lerp(2, 5, maturity + oldGrowth * 0.25)),
+  );
+  const childChance = rngRange(
+    rng,
+    THREE.MathUtils.lerp(0.28, 0.60, maturity),
+    THREE.MathUtils.lerp(0.46, 0.88, maturity),
+  );
+  const maxPads = opts.maxPads ?? rngInt(
+    rng,
+    Math.round(THREE.MathUtils.lerp(4, 16, maturity)),
+    Math.round(THREE.MathUtils.lerp(7, 38, maturity + oldGrowth * 0.38)),
+  );
 
   const parts = [];
   let padCount = 0;
@@ -45,21 +69,46 @@ export function generatePricklyPear(rng, opts = {}) {
   }
 
   function createPadSpec(size, depth) {
-    const age = 1 - depth / maxDepth;
+    const depthAge = maxDepth <= 0 ? 1 : depth / maxDepth;
+    const padAge = THREE.MathUtils.clamp(
+      age * THREE.MathUtils.lerp(0.36, 1.0, depthAge) + rngRange(rng, -0.08, 0.08),
+      0,
+      1,
+    );
+    const padMaturity = THREE.MathUtils.smoothstep(padAge, 0.18, 0.74);
     return {
       size,
-      age,
-      height: size * rngRange(rng, 2.25, 2.82),
-      widthScale: rngRange(rng, 0.86, 1.08),
-      thickness: size * rngRange(rng, 0.082, 0.135),
-      bend: rngRange(rng, -0.10, 0.10) * size,
-      shoulderBias: rngRange(rng, 0.86, 1.20),
-      wobbleA: rngRange(rng, 0.018, 0.048),
-      wobbleB: rngRange(rng, 0.010, 0.032),
+      age: padAge,
+      height: size * rngRange(
+        rng,
+        THREE.MathUtils.lerp(1.84, 2.25, padMaturity),
+        THREE.MathUtils.lerp(2.18, 2.82, padMaturity),
+      ),
+      widthScale: rngRange(
+        rng,
+        THREE.MathUtils.lerp(0.72, 0.86, padMaturity),
+        THREE.MathUtils.lerp(0.90, 1.08, padMaturity),
+      ),
+      thickness: size * rngRange(
+        rng,
+        THREE.MathUtils.lerp(0.060, 0.082, padMaturity),
+        THREE.MathUtils.lerp(0.090, 0.145, padMaturity),
+      ),
+      bend: rngRange(rng, -0.10, 0.10) * size * THREE.MathUtils.lerp(1.35, 0.85, padMaturity),
+      shoulderBias: rngRange(
+        rng,
+        THREE.MathUtils.lerp(0.74, 0.86, padMaturity),
+        THREE.MathUtils.lerp(0.98, 1.20, padMaturity),
+      ),
+      wobbleA: rngRange(rng, 0.010, THREE.MathUtils.lerp(0.026, 0.054, padMaturity)),
+      wobbleB: rngRange(rng, 0.006, THREE.MathUtils.lerp(0.018, 0.036, padMaturity)),
       phase: rng() * Math.PI * 2,
       areolePhaseX: rng() * 9,
       areolePhaseY: rng() * 9,
-      blush: rngRange(rng, 0.20, 0.54),
+      blush: rngRange(rng, 0.20, 0.54) * THREE.MathUtils.lerp(1.20, 0.82, padMaturity),
+      padColor: padColor.clone().offsetHSL(rngRange(rng, -0.020, 0.026), rngRange(rng, -0.035, 0.055), rngRange(rng, -0.050, 0.050)),
+      youngPadColor: youngPadColor.clone().offsetHSL(rngRange(rng, -0.012, 0.018), rngRange(rng, -0.020, 0.045), rngRange(rng, -0.020, 0.050)),
+      cork: oldGrowth * padMaturity * smoothstep(0.54, 1.0, depthAge) * rngRange(rng, 0.35, 1.0),
     };
   }
 
@@ -98,8 +147,12 @@ export function generatePricklyPear(rng, opts = {}) {
         const tip = smoothstep(0.82, 1.0, t) + (1 - smoothstep(0.0, 0.12, t));
         const young = 1 - spec.age;
         const sunFleck = 0.88 + rng() * 0.18 + 0.08 * Math.max(0, face);
-        const c = padColor.clone().lerp(youngPadColor, young * 0.55);
+        const c = spec.padColor.clone().lerp(spec.youngPadColor, young * 0.55);
         c.offsetHSL(0, 0.02 * Math.sin(a + spec.phase), (sunFleck - 1) * 0.14);
+        const basalCork = spec.cork * smoothstep(0.02, 0.44, 1 - t) * (0.65 + 0.35 * Math.max(0, -face));
+        const scarring = basalCork * (0.58 + 0.42 * Math.sin(a * 7.0 + t * 13.0 + spec.phase));
+        c.lerp(oldPadColor, THREE.MathUtils.clamp(basalCork * 0.66, 0, 0.72));
+        c.lerp(dryScarColor, THREE.MathUtils.clamp(scarring * 0.24, 0, 0.34));
         c.lerp(rimBlush, THREE.MathUtils.clamp((rim * spec.blush + tip * 0.08) * (0.65 + young * 0.25), 0, 0.55));
         colors.push(c.r, c.g, c.b);
 
@@ -150,7 +203,7 @@ export function generatePricklyPear(rng, opts = {}) {
     g.computeVertexNormals();
     colorGeometry(g, (i, p) => {
       const y = THREE.MathUtils.clamp(p.getY(i) / height, 0, 1);
-      return fruitColor.clone().lerp(new THREE.Color(0xd18a55), (1 - y) * 0.32);
+      return fruitColor.clone().lerp(fruitBaseColor, (1 - y) * 0.38);
     });
     paintCactusSpines(g, [rng() * 4, rng() * 4, 0.18, 2]);
     return g;
@@ -182,16 +235,22 @@ export function generatePricklyPear(rng, opts = {}) {
   }
 
   function addRimGrowth(parentMat, spec, depth) {
-    if (depth > 1 || !rngChance(rng, 0.62)) return;
+    if (age < 0.42 || depth > 1 || !rngChance(rng, THREE.MathUtils.lerp(0.22, 0.82, maturity))) return;
 
-    const count = rngInt(rng, 1, depth === 0 ? 5 : 3);
+    const count = rngInt(
+      rng,
+      1,
+      depth === 0
+        ? Math.round(THREE.MathUtils.lerp(3, 8, oldGrowth))
+        : Math.round(THREE.MathUtils.lerp(2, 4, maturity)),
+    );
     for (let k = 0; k < count; k++) {
       const side = rngRange(rng, -0.86, 0.86);
       const y = spec.height * rngRange(rng, 0.82, 0.98);
       const profile = Math.pow(Math.sin(Math.PI * (y / spec.height)), 0.48);
       const x = side * spec.size * spec.widthScale * profile * rngRange(rng, 0.72, 0.96);
       const z = rngRange(rng, -0.010, 0.010);
-      const isFlower = rngChance(rng, 0.25);
+      const isFlower = rngChance(rng, THREE.MathUtils.lerp(0.04, 0.18, maturity));
       const g = isFlower
         ? buildFlower(rngRange(rng, spec.size * 0.10, spec.size * 0.16))
         : buildFruit(rngRange(rng, spec.size * 0.075, spec.size * 0.12), rngRange(rng, spec.size * 0.18, spec.size * 0.30));
@@ -214,13 +273,21 @@ export function generatePricklyPear(rng, opts = {}) {
 
     if (depth <= 0 || padCount >= maxPads) return;
 
-    const childCount = rngInt(rng, depth >= maxDepth - 1 ? 1 : 2, depth >= maxDepth - 1 ? 2 : 3);
+    const childCount = rngInt(rng, depth >= maxDepth - 1 ? 1 : 2, depth >= maxDepth - 1 ? 3 : 4);
     for (let i = 0; i < childCount; i++) {
       if (!rngChance(rng, childChance) || padCount >= maxPads) continue;
-      const childSize = size * rngRange(rng, 0.64, 0.88);
+      const childSize = size * rngRange(
+        rng,
+        THREE.MathUtils.lerp(0.52, 0.64, maturity),
+        THREE.MathUtils.lerp(0.72, 0.90, maturity),
+      );
       const spread = childCount === 1 ? 0 : (i - (childCount - 1) / 2) / ((childCount - 1) / 2);
       const lateral = THREE.MathUtils.clamp(spread * 0.72 + sideBias * 0.28 + rngRange(rng, -0.28, 0.28), -0.92, 0.92);
-      const attachY = spec.height * rngRange(rng, 0.68, 0.92);
+      const attachY = spec.height * rngRange(
+        rng,
+        THREE.MathUtils.lerp(0.54, 0.68, depth / Math.max(1, maxDepth)),
+        0.92,
+      );
       const attachProfile = Math.pow(Math.sin(Math.PI * (attachY / spec.height)), 0.48);
       const attachX = lateral * spec.size * spec.widthScale * attachProfile * rngRange(rng, 0.48, 0.78);
       const attachZ = rngRange(rng, -spec.thickness * 0.35, spec.thickness * 0.35);
@@ -228,24 +295,34 @@ export function generatePricklyPear(rng, opts = {}) {
       const m = parentMat.clone();
       m.multiply(new THREE.Matrix4().makeTranslation(attachX, attachY, attachZ));
       m.multiply(new THREE.Matrix4().makeRotationY(rngRange(rng, -0.85, 0.85)));
-      m.multiply(new THREE.Matrix4().makeRotationX(rngRange(rng, -0.34, 0.34)));
-      m.multiply(new THREE.Matrix4().makeRotationZ(lateral * rngRange(rng, 0.28, 0.68) + rngRange(rng, -0.18, 0.18)));
+      m.multiply(new THREE.Matrix4().makeRotationX(rngRange(rng, -0.46, 0.32)));
+      m.multiply(new THREE.Matrix4().makeRotationZ(lateral * rngRange(rng, 0.38, 0.82) + rngRange(rng, -0.22, 0.22)));
 
       grow(m, childSize, depth - 1, lateral);
     }
   }
 
-  const rootCount = rngInt(rng, 2, 4);
+  const rootCount = rngInt(
+    rng,
+    Math.round(THREE.MathUtils.lerp(1, 4, maturity)),
+    Math.round(THREE.MathUtils.lerp(2, 9, maturity + oldGrowth * 0.55)),
+  );
+  const colonySpread = baseSize * THREE.MathUtils.lerp(0.22, 2.25, maturity + oldGrowth * 0.45);
   for (let i = 0; i < rootCount; i++) {
     const spread = rootCount === 1 ? 0 : (i - (rootCount - 1) / 2) / ((rootCount - 1) / 2);
-    const yaw = spread * rngRange(rng, 0.55, 1.15) + rngRange(rng, -0.24, 0.24);
+    const angle = (i / Math.max(1, rootCount)) * Math.PI * 2 + rngRange(rng, -0.55, 0.55);
+    const radius = colonySpread * Math.sqrt(rng()) * rngRange(rng, 0.28, 1.0);
+    const yaw = angle + Math.PI * 0.5 + rngRange(rng, -0.70, 0.70);
     const m = new THREE.Matrix4();
-    m.multiply(new THREE.Matrix4().makeTranslation(spread * baseSize * rngRange(rng, 0.18, 0.38), 0, rngRange(rng, -0.04, 0.06)));
+    m.multiply(new THREE.Matrix4().makeTranslation(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
     m.multiply(new THREE.Matrix4().makeRotationY(yaw));
-    m.multiply(new THREE.Matrix4().makeRotationX(rngRange(rng, -0.28, 0.20)));
-    m.multiply(new THREE.Matrix4().makeRotationZ(spread * rngRange(rng, 0.22, 0.48) + rngRange(rng, -0.12, 0.12)));
-    grow(m, baseSize * rngRange(rng, 0.78, 1.08), maxDepth - rngInt(rng, 0, 1), spread);
+    m.multiply(new THREE.Matrix4().makeRotationX(rngRange(rng, -0.46, 0.18)));
+    m.multiply(new THREE.Matrix4().makeRotationZ(spread * rngRange(rng, 0.38, 0.78) + rngRange(rng, -0.22, 0.22)));
+    const rootDepth = Math.max(0, maxDepth - rngInt(rng, 0, age < 0.46 ? 2 : 1));
+    grow(m, baseSize * rngRange(rng, 0.72, 1.12), rootDepth, spread);
   }
 
-  return mergeGeometries(parts);
+  const geom = mergeGeometries(parts);
+  geom.userData.age = age;
+  return geom;
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sweepRibbedTube, mergeGeometries, colorRamp, paintCactusSpines, resolveDetailScale, scaledSegments } from './common.js';
+import { sweepRibbedTube, mergeGeometries, colorRamp, paintCactusSpines, resolveDetailScale, resolvePlantAge, scaledSegments } from './common.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
 
@@ -11,7 +11,7 @@ export function generateBarrelCactus(rng, opts = {}) {
   const proportions = resolveProportionOracle(opts);
   // Lifecycle scalar: young barrels are almost spherical; older barrels gain
   // diameter, height, ribs, woollier crowns, and seasonal flower rings.
-  const age = THREE.MathUtils.clamp(opts.age ?? Math.pow(rng(), 0.62), 0, 1);
+  const age = resolvePlantAge(rng, opts, 0.62);
   const maturity = THREE.MathUtils.smoothstep(age, 0.22, 0.82);
   const oldGrowth = THREE.MathUtils.smoothstep(age, 0.62, 1.0);
   const sizeNoise = rngRange(rng, 0.88, 1.12);
@@ -140,6 +140,7 @@ export function generateBarrelCactus(rng, opts = {}) {
 
   const geom = mergeGeometries(parts);
   geom.translate(0, -height * 0.075, 0);
+  geom.userData.age = age;
   return geom;
 }
 

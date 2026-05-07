@@ -8,6 +8,10 @@ export function scaledSegments(value, detailScale, min) {
   return Math.max(min, Math.round(value * detailScale));
 }
 
+export function resolvePlantAge(rng, opts = {}, randomPower = 0.72) {
+  return THREE.MathUtils.clamp(opts.age ?? Math.pow(rng(), randomPower), 0, 1);
+}
+
 // Sweep a circular cross-section (with optional vertical ribs) along a 3D curve.
 // Builds a closed BufferGeometry and bakes vertex colors so we can mix
 // many plant types under a single material.
