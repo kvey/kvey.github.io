@@ -104,6 +104,17 @@ const SCATTER_CULL_DISTANCE = {
   boulders: 260,
 };
 const DEFAULT_SCATTER_CULL_DISTANCE = 240;
+const PLANT_INSPECTION_STAGE_KEYS = new Set([
+  'paloVerde',
+  'mesquite',
+  'saguaro',
+  'barrel',
+  'pricklyPear',
+  'ocotillo',
+  'creosote',
+]);
+const PLANT_INSPECTION_ANIMATION_SECONDS = 0.58;
+const PLANT_INSPECTION_ROTATE_SPEED = 0.012;
 const cullingProjectionMatrix = new THREE.Matrix4();
 const cullingFrustum = new THREE.Frustum();
 const VISIBILITY_CULL_INTERVAL_MS = 90;
@@ -123,6 +134,7 @@ const flightForward = new THREE.Vector3();
 const flightRight = new THREE.Vector3();
 const flightDelta = new THREE.Vector3();
 const flightSpeed = 22;
+let inspectedPlant = null;
 
 function isTypingTarget(target) {
   if (!target) return false;
@@ -155,6 +167,8 @@ function setFlightKey(event, isPressed) {
 }
 
 function updateFlight(deltaSeconds) {
+  if (inspectedPlant) return;
+
   const isShiftPressed = flightKeys.has('ShiftLeft') || flightKeys.has('ShiftRight');
 
   flightDirection.set(0, 0, 0);
@@ -429,6 +443,7 @@ const desiredChunkKeys = new Set();
 let lastChunkCenterKey = '';
 
 function clearWorld() {
+  cancelPlantInspection({ restoreOriginal: false });
   // Dispose generated geometries and one-off materials. Plant/rock materials are
   // shared at module scope and survive regeneration.
   world.traverse(obj => {
@@ -1366,6 +1381,334 @@ function scatterRenderConfig(key, proportions) {
   }
 }
 
+// ---------- Plant inspection ----------
+const plantInspectionRaycaster = new THREE.Raycaster();
+const plantInspectionPointer = new THREE.Vector2();
+const plantInspectionTargets = [];
+const plantInspectionInstanceMatrix = new THREE.Matrix4();
+const plantInspectionWorldMatrix = new THREE.Matrix4();
+const plantInspectionHiddenMatrix = new THREE.Matrix4();
+const plantInspectionHiddenPosition = new THREE.Vector3();
+const plantInspectionHiddenQuaternion = new THREE.Quaternion();
+const plantInspectionHiddenScale = new THREE.Vector3(0.0001, 0.0001, 0.0001);
+const plantInspectionForward = new THREE.Vector3();
+const plantInspectionRight = new THREE.Vector3();
+const plantInspectionUp = new THREE.Vector3();
+const plantInspectionLocalCenter = new THREE.Vector3();
+const plantInspectionDesiredCenter = new THREE.Vector3();
+const plantInspectionOffset = new THREE.Vector3();
+const plantInspectionTargetPosition = new THREE.Vector3();
+const plantInspectionTargetScale = new THREE.Vector3();
+const plantInspectionYAxis = new THREE.Vector3(0, 1, 0);
+const plantInspectionRotationQuaternion = new THREE.Quaternion();
+let plantInspectionDragPointerId = null;
+let plantInspectionDragLastX = 0;
+
+renderer.domElement.addEventListener('contextmenu', onPlantContextMenu);
+renderer.domElement.addEventListener('pointerdown', onPlantInspectionPointerDown);
+window.addEventListener('pointermove', onPlantInspectionPointerMove);
+window.addEventListener('pointerup', onPlantInspectionPointerUp);
+window.addEventListener('pointercancel', onPlantInspectionPointerUp);
+
+function onPlantContextMenu(event) {
+  const pick = pickPlantFromEvent(event);
+  if (!pick) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  inspectPlant(pick);
+}
+
+function onPlantInspectionPointerDown(event) {
+  if (!inspectedPlant || inspectedPlant.phase === 'closing' || event.button !== 0) return;
+  event.preventDefault();
+  plantInspectionDragPointerId = event.pointerId;
+  plantInspectionDragLastX = event.clientX;
+  renderer.domElement.setPointerCapture?.(event.pointerId);
+}
+
+function onPlantInspectionPointerMove(event) {
+  if (!inspectedPlant || plantInspectionDragPointerId !== event.pointerId) return;
+  event.preventDefault();
+  const dx = event.clientX - plantInspectionDragLastX;
+  plantInspectionDragLastX = event.clientX;
+  inspectedPlant.rotationY += dx * PLANT_INSPECTION_ROTATE_SPEED;
+}
+
+function onPlantInspectionPointerUp(event) {
+  if (plantInspectionDragPointerId !== event.pointerId) return;
+  renderer.domElement.releasePointerCapture?.(event.pointerId);
+  plantInspectionDragPointerId = null;
+}
+
+function pickPlantFromEvent(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  plantInspectionPointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  plantInspectionPointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+  plantInspectionRaycaster.setFromCamera(plantInspectionPointer, camera);
+
+  plantInspectionTargets.length = 0;
+  world.traverse(object => {
+    if (
+      object.isInstancedMesh &&
+      PLANT_INSPECTION_STAGE_KEYS.has(object.userData.stageKey) &&
+      isVisibleInScene(object)
+    ) {
+      plantInspectionTargets.push(object);
+    }
+  });
+
+  const hits = plantInspectionRaycaster.intersectObjects(plantInspectionTargets, false);
+  for (const hit of hits) {
+    if (hit.instanceId === undefined || hit.instanceId === null) continue;
+    const cell = findScatterCell(hit.object);
+    const lodMeshes = cell?.userData?.culling?.lodMeshes;
+    return {
+      mesh: hit.object,
+      cell,
+      lodMeshes: lodMeshes?.length ? lodMeshes : [hit.object],
+      instanceId: hit.instanceId,
+      speciesKey: hit.object.userData.stageKey,
+    };
+  }
+
+  return null;
+}
+
+function isVisibleInScene(object) {
+  let cursor = object;
+  while (cursor) {
+    if (!cursor.visible) return false;
+    cursor = cursor.parent;
+  }
+  return true;
+}
+
+function findScatterCell(object) {
+  let cursor = object.parent;
+  while (cursor) {
+    if (cursor.userData?.culling?.lodMeshes) return cursor;
+    cursor = cursor.parent;
+  }
+  return null;
+}
+
+function inspectPlant(pick) {
+  cancelPlantInspection({ restoreOriginal: true });
+
+  const sourceMesh = pick.lodMeshes[0] ?? pick.mesh;
+  if (!sourceMesh?.geometry) return;
+  if (!sourceMesh.geometry.boundingBox) sourceMesh.geometry.computeBoundingBox();
+
+  sourceMesh.getMatrixAt(pick.instanceId, plantInspectionInstanceMatrix);
+  plantInspectionWorldMatrix.multiplyMatrices(sourceMesh.matrixWorld, plantInspectionInstanceMatrix);
+
+  const sourcePosition = new THREE.Vector3();
+  const sourceQuaternion = new THREE.Quaternion();
+  const sourceScale = new THREE.Vector3();
+  plantInspectionWorldMatrix.decompose(sourcePosition, sourceQuaternion, sourceScale);
+
+  const originalMatrices = pick.lodMeshes.map(mesh => {
+    const matrix = new THREE.Matrix4();
+    mesh.getMatrixAt(pick.instanceId, matrix);
+    return { mesh, matrix };
+  });
+  hidePlantInstance(originalMatrices, pick.instanceId);
+
+  const clone = new THREE.Mesh(sourceMesh.geometry, sourceMesh.material);
+  clone.castShadow = sourceMesh.castShadow;
+  clone.receiveShadow = sourceMesh.receiveShadow;
+  clone.frustumCulled = false;
+  clone.position.copy(sourcePosition);
+  clone.quaternion.copy(sourceQuaternion);
+  clone.scale.copy(sourceScale);
+  scene.add(clone);
+
+  inspectedPlant = {
+    speciesKey: pick.speciesKey,
+    clone,
+    instanceId: pick.instanceId,
+    originalMatrices,
+    sourcePosition,
+    sourceQuaternion,
+    sourceScale,
+    targetPosition: new THREE.Vector3(),
+    targetScale: new THREE.Vector3(),
+    targetQuaternion: sourceQuaternion.clone(),
+    baseQuaternion: sourceQuaternion.clone(),
+    rotationY: 0,
+    closeStartPosition: new THREE.Vector3(),
+    closeStartQuaternion: new THREE.Quaternion(),
+    closeStartScale: new THREE.Vector3(),
+    phase: 'opening',
+    t: 0,
+    previousControlsEnabled: controls.enabled,
+  };
+
+  controls.enabled = false;
+  flightKeys.clear();
+  desertUi?.setPlantInspection({
+    speciesKey: pick.speciesKey,
+    onClose: closePlantInspection,
+  });
+  markShadowMapDirty();
+}
+
+function hidePlantInstance(originalMatrices, instanceId) {
+  for (const { mesh, matrix } of originalMatrices) {
+    matrix.decompose(
+      plantInspectionHiddenPosition,
+      plantInspectionHiddenQuaternion,
+      plantInspectionTargetScale,
+    );
+    plantInspectionHiddenMatrix.compose(
+      plantInspectionHiddenPosition,
+      plantInspectionHiddenQuaternion,
+      plantInspectionHiddenScale,
+    );
+    mesh.setMatrixAt(instanceId, plantInspectionHiddenMatrix);
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+}
+
+function restorePlantInstance(plant) {
+  for (const { mesh, matrix } of plant.originalMatrices) {
+    if (!mesh?.instanceMatrix) continue;
+    mesh.setMatrixAt(plant.instanceId, matrix);
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+}
+
+function closePlantInspection() {
+  if (!inspectedPlant || inspectedPlant.phase === 'closing') return;
+  desertUi?.setPlantInspection(null);
+  inspectedPlant.phase = 'closing';
+  inspectedPlant.t = 0;
+  inspectedPlant.closeStartPosition.copy(inspectedPlant.clone.position);
+  inspectedPlant.closeStartQuaternion.copy(inspectedPlant.clone.quaternion);
+  inspectedPlant.closeStartScale.copy(inspectedPlant.clone.scale);
+}
+
+function cancelPlantInspection({ restoreOriginal = true } = {}) {
+  if (!inspectedPlant) return;
+  desertUi?.setPlantInspection(null);
+  if (restoreOriginal) restorePlantInstance(inspectedPlant);
+  scene.remove(inspectedPlant.clone);
+  inspectedPlant.clone = null;
+  controls.enabled = inspectedPlant.previousControlsEnabled;
+  inspectedPlant = null;
+  plantInspectionDragPointerId = null;
+  markShadowMapDirty();
+}
+
+function updatePlantInspection(deltaSeconds) {
+  if (!inspectedPlant) return;
+
+  if (inspectedPlant.phase === 'closing') {
+    inspectedPlant.t = Math.min(1, inspectedPlant.t + deltaSeconds / PLANT_INSPECTION_ANIMATION_SECONDS);
+    const eased = easeInOutCubic(inspectedPlant.t);
+    inspectedPlant.clone.position.lerpVectors(
+      inspectedPlant.closeStartPosition,
+      inspectedPlant.sourcePosition,
+      eased,
+    );
+    inspectedPlant.clone.quaternion.slerpQuaternions(
+      inspectedPlant.closeStartQuaternion,
+      inspectedPlant.sourceQuaternion,
+      eased,
+    );
+    inspectedPlant.clone.scale.lerpVectors(
+      inspectedPlant.closeStartScale,
+      inspectedPlant.sourceScale,
+      eased,
+    );
+
+    if (inspectedPlant.t >= 1) {
+      const completed = inspectedPlant;
+      restorePlantInstance(completed);
+      scene.remove(completed.clone);
+      controls.enabled = completed.previousControlsEnabled;
+      inspectedPlant = null;
+      markShadowMapDirty();
+    }
+    return;
+  }
+
+  computePlantInspectionTarget(inspectedPlant);
+  if (inspectedPlant.phase === 'opening') {
+    inspectedPlant.t = Math.min(1, inspectedPlant.t + deltaSeconds / PLANT_INSPECTION_ANIMATION_SECONDS);
+    const eased = easeOutCubic(inspectedPlant.t);
+    inspectedPlant.clone.position.lerpVectors(
+      inspectedPlant.sourcePosition,
+      inspectedPlant.targetPosition,
+      eased,
+    );
+    inspectedPlant.clone.quaternion.slerpQuaternions(
+      inspectedPlant.sourceQuaternion,
+      inspectedPlant.targetQuaternion,
+      eased,
+    );
+    inspectedPlant.clone.scale.lerpVectors(
+      inspectedPlant.sourceScale,
+      inspectedPlant.targetScale,
+      eased,
+    );
+    if (inspectedPlant.t >= 1) inspectedPlant.phase = 'open';
+    return;
+  }
+
+  inspectedPlant.clone.position.copy(inspectedPlant.targetPosition);
+  inspectedPlant.clone.quaternion.copy(inspectedPlant.targetQuaternion);
+  inspectedPlant.clone.scale.copy(inspectedPlant.targetScale);
+}
+
+function computePlantInspectionTarget(plant) {
+  const box = plant.clone.geometry.boundingBox;
+  const height = Math.max(0.5, (box.max.y - box.min.y) * plant.sourceScale.y);
+  const displayBoost = THREE.MathUtils.clamp(3.1 / height, 1, 2.35);
+  const displayHeight = height * displayBoost;
+  const fov = THREE.MathUtils.degToRad(camera.fov);
+  const distance = THREE.MathUtils.clamp(displayHeight / (2 * Math.tan(fov / 2) * 0.62), 4.2, 16);
+  const viewportHeight = 2 * distance * Math.tan(fov / 2);
+  const viewportWidth = viewportHeight * camera.aspect;
+
+  camera.getWorldDirection(plantInspectionForward).normalize();
+  plantInspectionRight.crossVectors(plantInspectionForward, camera.up).normalize();
+  plantInspectionUp.crossVectors(plantInspectionRight, plantInspectionForward).normalize();
+  box.getCenter(plantInspectionLocalCenter);
+  plantInspectionRotationQuaternion.setFromAxisAngle(plantInspectionYAxis, plant.rotationY);
+  plant.targetQuaternion.copy(plant.baseQuaternion).multiply(plantInspectionRotationQuaternion);
+
+  plantInspectionDesiredCenter
+    .copy(camera.position)
+    .addScaledVector(plantInspectionForward, distance)
+    .addScaledVector(plantInspectionRight, -Math.min(viewportWidth * 0.16, 3.0))
+    .addScaledVector(plantInspectionUp, viewportHeight * 0.02);
+
+  plantInspectionTargetScale.copy(plant.sourceScale).multiplyScalar(displayBoost);
+  plantInspectionOffset
+    .copy(plantInspectionLocalCenter)
+    .multiply(plantInspectionTargetScale)
+    .applyQuaternion(plant.targetQuaternion);
+
+  plantInspectionTargetPosition
+    .copy(plantInspectionDesiredCenter)
+    .sub(plantInspectionOffset);
+
+  plant.targetPosition.copy(plantInspectionTargetPosition);
+  plant.targetScale.copy(plantInspectionTargetScale);
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5
+    ? 4 * t * t * t
+    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
 // ---------- Sun update ----------
 function updateSun() {
   const dir = skyCtl.update({ azimuth: params.sunAzimuth, elevation: params.sunElevation });
@@ -1786,6 +2129,7 @@ function tick() {
   updateShadowMapInvalidation();
   constrainCameraToWorld();
   updateVisibilityCulling(now);
+  updatePlantInspection(deltaSeconds);
   updateLensFlare();
   updateDirectionalFogViewUniforms();
   rainOverlay.update(deltaSeconds);

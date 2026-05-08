@@ -585,6 +585,99 @@
       transition: width 0.18s ease;
     }
 
+    /* ---------- Plant inspection ---------- */
+    .plant-inspection-shell {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 6;
+    }
+    .plant-inspection-panel {
+      position: absolute;
+      top: 50%;
+      left: calc(50% + min(10vw, 132px));
+      width: min(360px, calc(48vw - 32px));
+      max-height: calc(100vh - 80px);
+      overflow: auto;
+      padding: 18px 20px 18px;
+      border-radius: 18px;
+      animation: plant-panel-in 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    @keyframes plant-panel-in {
+      from { opacity: 0; transform: translateY(calc(-50% + 6px)) scale(0.985); }
+      to { opacity: 1; transform: translateY(-50%); }
+    }
+    .plant-inspection-close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      appearance: none;
+      border: 0;
+      cursor: pointer;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      background: rgba(255, 247, 234, 0.08);
+      box-shadow: inset 0 0 0 1px var(--glass-stroke);
+      transition: color 160ms ease, background 160ms ease, transform 140ms ease;
+    }
+    .plant-inspection-close:hover {
+      color: var(--text);
+      background: rgba(255, 237, 194, 0.18);
+    }
+    .plant-inspection-close:active { transform: scale(0.94); }
+    .plant-inspection-close:focus-visible {
+      outline: 2px solid rgba(255, 239, 197, 0.85);
+      outline-offset: 3px;
+    }
+    .plant-inspection-title {
+      margin: 0 34px 14px 0;
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 750;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .plant-inspection-facts {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+    }
+    .plant-inspection-fact {
+      display: grid;
+      grid-template-columns: 76px 1fr;
+      gap: 14px;
+      padding-top: 10px;
+      border-top: 1px solid var(--glass-stroke);
+    }
+    .plant-inspection-fact dt {
+      color: var(--accent-warm);
+      font-size: 10.5px;
+      font-weight: 750;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .plant-inspection-fact dd {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .plant-inspection-note {
+      margin: 14px 0 0;
+      padding: 11px 12px;
+      border-radius: 10px;
+      color: rgba(255, 248, 236, 0.78);
+      background: rgba(255, 247, 234, 0.07);
+      box-shadow: inset 0 0 0 1px rgba(255, 247, 234, 0.08);
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+
     /* ---------- Focus visibility ---------- */
     .gui-icon-button:focus-visible,
     .gui-toggle:focus-visible,
@@ -644,6 +737,27 @@
       .gui-progress {
         top: 64px;
         width: calc(100vw - 24px);
+      }
+
+      .plant-inspection-panel {
+        top: auto;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        width: auto;
+        max-height: min(48vh, 390px);
+        transform: none;
+        padding: 16px 18px 16px;
+        animation-name: plant-panel-mobile-in;
+      }
+      @keyframes plant-panel-mobile-in {
+        from { opacity: 0; transform: translateY(10px) scale(0.985); }
+        to { opacity: 1; transform: none; }
+      }
+      .plant-inspection-title { font-size: 18px; }
+      .plant-inspection-fact {
+        grid-template-columns: 68px 1fr;
+        gap: 10px;
       }
     }
 

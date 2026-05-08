@@ -11,11 +11,84 @@ const ARIZONA_TIME_ZONE_OFFSET = -7;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const RATE_MAX = 1024;
 const RATE_STEP = 4;
+const PLANT_SPECIES = {
+  saguaro: {
+    eyebrow: 'Carnegiea gigantea',
+    title: 'Saguaro',
+    facts: [
+      ['Form', 'Columnar cactus with pleated stems that expand after rain.'],
+      ['Season', 'White flowers in late spring, followed by red fruit in early summer.'],
+      ['Desert role', 'Nesting cavities and fruit support birds, bats, insects, and mammals.'],
+    ],
+    note: 'Arms usually appear only after decades of growth, so branching often signals an older plant.',
+  },
+  barrel: {
+    eyebrow: 'Ferocactus wislizeni',
+    title: 'Fishhook Barrel Cactus',
+    facts: [
+      ['Form', 'Ribbed, water-storing barrel with hooked central spines.'],
+      ['Season', 'Yellow to orange flowers cluster near the crown in warm months.'],
+      ['Desert role', 'Fruit can persist on the plant and feed wildlife through dry spells.'],
+    ],
+    note: 'Older barrels often lean as they grow, giving them a directional, weathered silhouette.',
+  },
+  pricklyPear: {
+    eyebrow: 'Opuntia spp.',
+    title: 'Prickly Pear',
+    facts: [
+      ['Form', 'Flattened pads that act as both stems and water storage.'],
+      ['Season', 'Large spring flowers mature into red-purple tunas.'],
+      ['Desert role', 'Pads, flowers, and fruit are important food for desert animals.'],
+    ],
+    note: 'The tiny glochids around each areole detach easily, which makes this cactus more defensive than it looks.',
+  },
+  ocotillo: {
+    eyebrow: 'Fouquieria splendens',
+    title: 'Ocotillo',
+    facts: [
+      ['Form', 'Tall wand-like stems that leaf out quickly after rain.'],
+      ['Season', 'Red tubular flowers are common from spring into early summer.'],
+      ['Desert role', 'Flowers are a strong nectar source for hummingbirds and pollinators.'],
+    ],
+    note: 'Ocotillo can look dormant for long stretches, then turn green within days when moisture returns.',
+  },
+  creosote: {
+    eyebrow: 'Larrea tridentata',
+    title: 'Creosote Bush',
+    facts: [
+      ['Form', 'Resinous evergreen shrub with paired leaflets.'],
+      ['Season', 'Small yellow flowers appear after favorable rain.'],
+      ['Desert role', 'Its shade and leaf litter create small fertility islands in open desert.'],
+    ],
+    note: 'The familiar desert-rain smell often comes from volatile oils on creosote leaves.',
+  },
+  paloVerde: {
+    eyebrow: 'Parkinsonia spp.',
+    title: 'Palo Verde',
+    facts: [
+      ['Form', 'Green bark and fine leaves let the tree photosynthesize even when leafless.'],
+      ['Season', 'Bright yellow blooms can cover the canopy in spring.'],
+      ['Desert role', 'Acts as a nurse tree, shading young saguaros and other seedlings.'],
+    ],
+    note: 'Its green trunk is not just decorative; it is part of how the tree keeps working through drought.',
+  },
+  mesquite: {
+    eyebrow: 'Prosopis velutina',
+    title: 'Velvet Mesquite',
+    facts: [
+      ['Form', 'Broad desert tree with compound leaves and deeply searching roots.'],
+      ['Season', 'Cream flower spikes mature into protein-rich seed pods.'],
+      ['Desert role', 'Canopy shade cools soil and supports a richer understory.'],
+    ],
+    note: 'Mesquite roots can reach deep moisture, helping the tree stay active when shallow soil is dry.',
+  },
+};
 
 export function mountDesertUi(container, options = {}) {
   const root = createRoot(container);
   let setProgressState = () => {};
   let setSunControlsState = () => {};
+  let setPlantInspectionState = () => {};
 
   function setGenerationProgress(progress, visible = true, phase = '') {
     setProgressState({
@@ -29,13 +102,18 @@ export function mountDesertUi(container, options = {}) {
     setSunControlsState(current => ({ ...current, ...next }));
   }
 
+  function setPlantInspection(next) {
+    setPlantInspectionState(next);
+  }
+
   root.render(h(DesertUi, {
     bindProgressSetter: setter => { setProgressState = setter; },
     bindSunControlsSetter: setter => { setSunControlsState = setter; },
+    bindPlantInspectionSetter: setter => { setPlantInspectionState = setter; },
     ...options,
   }));
 
-  return { setGenerationProgress, setSunControls };
+  return { setGenerationProgress, setSunControls, setPlantInspection };
 }
 
 export function sunElevationFromTimeOfDay(timeOfDay) {
@@ -104,6 +182,7 @@ export function tucsonSolarPosition(timeOfDay, timeOfYear = DEFAULT_TIME_OF_YEAR
 function DesertUi({
   bindProgressSetter,
   bindSunControlsSetter,
+  bindPlantInspectionSetter,
   initialTimeOfDay = 7,
   initialTimeOfYear = DEFAULT_TIME_OF_YEAR,
   initialSunAzimuth = 145,
@@ -121,6 +200,7 @@ function DesertUi({
     sunAzimuth: initialSunAzimuth,
   });
   const [progress, setProgress] = useState({ progress: 0, visible: false, phase: '' });
+  const [plantInspection, setPlantInspection] = useState(null);
   const leftToolbarRef = useRef(null);
   const sunControlsRef = useRef(sunControls);
   const onSunControlsChangeRef = useRef(onSunControlsChange);
@@ -132,7 +212,8 @@ function DesertUi({
   useEffect(() => {
     bindProgressSetter(setProgress);
     bindSunControlsSetter(setSunControls);
-  }, [bindProgressSetter, bindSunControlsSetter]);
+    bindPlantInspectionSetter(setPlantInspection);
+  }, [bindProgressSetter, bindSunControlsSetter, bindPlantInspectionSetter]);
 
   useEffect(() => {
     onControlModeChange(isFullControls);
@@ -184,6 +265,15 @@ function DesertUi({
       window.removeEventListener('keydown', onKey);
     };
   }, [activePanel]);
+
+  useEffect(() => {
+    if (!plantInspection) return undefined;
+    function onKey(event) {
+      if (event.key === 'Escape') plantInspection.onClose?.();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [plantInspection]);
 
   function applySunControls(nextPartial) {
     const next = { ...sunControls, ...nextPartial };
@@ -287,6 +377,11 @@ function DesertUi({
     ),
 
     progress.visible && h('div', { className: 'gui-glass gui-progress' }, h(ProgressView, progress)),
+
+    plantInspection && h(PlantInspectionPanel, {
+      speciesKey: plantInspection.speciesKey,
+      onClose: plantInspection.onClose,
+    }),
   );
 }
 
@@ -483,6 +578,36 @@ function ProgressView({ progress, phase }) {
   );
 }
 
+function PlantInspectionPanel({ speciesKey, onClose }) {
+  const species = PLANT_SPECIES[speciesKey] ?? {
+    eyebrow: 'Sonoran Desert Plant',
+    title: 'Desert Plant',
+    facts: [['Habitat', 'Adapted to intense sun, scarce water, and fast seasonal change.']],
+    note: 'This specimen is part of the procedural desert planting system.',
+  };
+
+  return h('div', { className: 'plant-inspection-shell' },
+    h('section', { className: 'gui-glass plant-inspection-panel', 'aria-live': 'polite' },
+      h('button', {
+        className: 'plant-inspection-close',
+        type: 'button',
+        'aria-label': 'Close plant information',
+        title: 'Close',
+        onClick: onClose,
+      }, h(CloseIcon)),
+      h('div', { className: 'gui-panel-eyebrow' }, species.eyebrow),
+      h('h2', { className: 'plant-inspection-title' }, species.title),
+      h('dl', { className: 'plant-inspection-facts' },
+        species.facts.map(([label, value]) => h('div', { key: label, className: 'plant-inspection-fact' },
+          h('dt', null, label),
+          h('dd', null, value),
+        )),
+      ),
+      h('p', { className: 'plant-inspection-note' }, species.note),
+    ),
+  );
+}
+
 /* ---------- Icons ---------- */
 function BackIcon() {
   return h('svg', {
@@ -588,6 +713,17 @@ function LeafIcon() {
   },
     h('path', { d: 'M20 4c-9 0-15 5-15 12 0 2 .8 3.6 1.6 4.4' }),
     h('path', { d: 'M6.5 20.5C9 14 14 9 20 8' }),
+  );
+}
+
+function CloseIcon() {
+  return h('svg', {
+    width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none',
+    stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round',
+    'aria-hidden': true,
+  },
+    h('path', { d: 'M18 6 6 18' }),
+    h('path', { d: 'm6 6 12 12' }),
   );
 }
 
