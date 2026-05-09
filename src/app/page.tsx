@@ -1,13 +1,5 @@
 import Nav from '@/components/nav';
-
-type Work = {
-  company: string;
-  href: string;
-  role: string;
-  period: string;
-  headline: string;
-  body: string;
-};
+import WorkRow, { type Work } from '@/components/work-row';
 
 const work: Work[] = [
   {
@@ -17,6 +9,7 @@ const work: Work[] = [
     period: '2020 — 2023',
     headline: '36M COVID tests · over $1B revenue in year one · 7,000 people',
     body: 'Led engineering through the pandemic-era buildout. From a standing start to nationwide testing infrastructure, fast.',
+    hoverImage: { src: '/work/curative.png', width: 1686, height: 1269, alt: 'curative.com — Curative health plan' },
   },
   {
     company: 'Figma',
@@ -25,6 +18,7 @@ const work: Work[] = [
     period: '2018 — 2019',
     headline: 'Multiplayer collaboration · editor and viewer performance',
     body: 'Worked on the systems that made Figma feel instant — the reason it became the tool every designer reaches for. Now FIG on the public markets.',
+    hoverImage: { src: '/work/figma.png', width: 1679, height: 1256, alt: 'figma.com — Figma homepage' },
   },
   {
     company: 'Assembly',
@@ -33,6 +27,7 @@ const work: Work[] = [
     period: '2014 — 2018 · YC S15',
     headline: 'Quality control software for modern manufacturing',
     body: 'Co-founded out of YC to rebuild how factories catch defects in real time. Built consoles, networks, and ingestion across factories in the US and China.',
+    hoverImage: { src: '/work/assembly.png', width: 1727, height: 1080, alt: 'asm.co — Assembly homepage' },
   },
 ];
 
@@ -56,7 +51,7 @@ const Home = () => {
     <>
       <Nav />
 
-      <main className="relative">
+      <main className="relative overflow-x-clip">
         <div className="mx-auto max-w-3xl px-6 sm:px-10 pt-24 sm:pt-36 pb-32">
 
           {/* Hero */}
@@ -134,33 +129,7 @@ const Home = () => {
 
             <ol className="mt-2 divide-y divide-rule/60">
               {work.map((entry) => (
-                <li key={entry.company} className="grid grid-cols-1 sm:grid-cols-[1fr_2.2fr] gap-y-3 sm:gap-x-10 py-10 sm:py-12">
-                  <div>
-                    <a
-                      href={entry.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="heading-link font-serif text-3xl sm:text-4xl leading-none"
-                    >
-                      {entry.company}
-                    </a>
-                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted mt-3">
-                      {entry.role}
-                    </p>
-                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted mt-1">
-                      {entry.period}
-                    </p>
-                  </div>
-
-                  <div className="sm:pt-1">
-                    <p className="font-mono text-sm sm:text-base leading-relaxed text-ink">
-                      {entry.headline}
-                    </p>
-                    <p className="font-mono text-sm leading-relaxed text-muted mt-4 max-w-xl">
-                      {entry.body}
-                    </p>
-                  </div>
-                </li>
+                <WorkRow key={entry.company} entry={entry} />
               ))}
             </ol>
 

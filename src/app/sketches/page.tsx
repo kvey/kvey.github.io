@@ -1,6 +1,8 @@
 "use client";
 
+import { useRef } from 'react';
 import Nav from '@/components/nav';
+import HoverImage from '@/components/hover-image';
 import { useBackground, BackgroundType } from '@/components/background-provider';
 
 type SketchKind = 'standalone' | 'background';
@@ -13,6 +15,7 @@ interface Sketch {
   year: string;
   kind: SketchKind;
   href?: string;
+  hoverImage?: { src: string; width: number; height: number; alt: string };
 }
 
 const sketches: Sketch[] = [
@@ -24,6 +27,7 @@ const sketches: Sketch[] = [
     year: '2026',
     kind: 'standalone',
     href: '/sketches/desert/index.html',
+    hoverImage: { src: '/work/desert.png', width: 1690, height: 1172, alt: 'Tucson desert sketch' },
   },
   {
     id: 'flocking',
@@ -85,7 +89,7 @@ export default function SketchesPage() {
   return (
     <>
       <Nav />
-      <main className="relative">
+      <main className="relative overflow-x-clip">
         <div className="mx-auto max-w-3xl px-6 sm:px-10 pt-24 sm:pt-36 pb-32">
 
           <header className="mb-24">
@@ -149,9 +153,10 @@ function SketchEntry({
 }) {
   const isStandalone = s.kind === 'standalone';
   const cta = isStandalone ? 'Open page ↗' : 'Set as background →';
+  const ref = useRef<HTMLDivElement>(null);
 
   return (
-    <div className={`relative ${index > 0 ? 'mt-24 sm:mt-28' : ''}`}>
+    <div ref={ref} className={`relative ${index > 0 ? 'mt-24 sm:mt-28' : ''}`}>
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_2.2fr] gap-y-3 sm:gap-x-10 pb-10 border-b border-rule/60">
         <div>
           <button
@@ -181,6 +186,8 @@ function SketchEntry({
           </button>
         </div>
       </div>
+
+      {s.hoverImage && <HoverImage image={s.hoverImage} containerRef={ref} />}
     </div>
   );
 }
