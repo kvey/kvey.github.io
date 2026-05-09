@@ -7,7 +7,9 @@ export default function BackgroundWrapper({ children }: { children: ReactNode })
   const { contentHidden } = useBackground();
 
   return (
-    <div className={`transition-[filter] duration-300 ${contentHidden ? '' : 'blur-[2px]'}`}>
+    <div
+      className={`fixed inset-0 pointer-events-none transition-[filter] duration-300 ${contentHidden ? '' : 'blur-[2px]'}`}
+    >
       {children}
     </div>
   );
