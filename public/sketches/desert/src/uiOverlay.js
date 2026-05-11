@@ -32,6 +32,16 @@ const PLANT_SPECIES = {
     ],
     note: 'Older barrels often lean as they grow, giving them a directional, weathered silhouette.',
   },
+  jumpingCholla: {
+    eyebrow: 'Cylindropuntia fulgida',
+    title: 'Jumping Cholla',
+    facts: [
+      ['Form', 'Tree-like cholla, usually 1-3 m tall, with a spreading crown from a low trunk.'],
+      ['Joints', 'Terminal stem segments are about 6-16 cm long and 2-3.5 cm thick.'],
+      ['Fruit', 'Green fruit can persist for years, forming pendent chains up to roughly 60 cm.'],
+    ],
+    note: 'Dense yellow-white spine sheaths can obscure young stems; older lower stems lose spines and expose dark scaly bark.',
+  },
   pricklyPear: {
     eyebrow: 'Opuntia spp.',
     title: 'Prickly Pear',

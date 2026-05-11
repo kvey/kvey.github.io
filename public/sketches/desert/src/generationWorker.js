@@ -9,6 +9,7 @@ const PHASES = [
   ['mesquite', 'Placing mesquite wash trees'],
   ['saguaro', 'Placing saguaros'],
   ['barrel', 'Placing barrel cacti'],
+  ['jumpingCholla', 'Placing jumping cholla'],
   ['pricklyPear', 'Placing prickly pear'],
   ['ocotillo', 'Placing ocotillo'],
   ['creosote', 'Placing creosote shrubs'],
@@ -202,6 +203,30 @@ async function generateChunk({ generation, params, lodLevels, chunk }) {
         const placement = decomposeMatrix(mat);
         placement.quat = multiplyQuat(placement.quat, quatFromAxisAngle(X_AXIS, tilt));
         composeMatrixInto(mat, placement.pos, placement.quat, placement.scale);
+      },
+    },
+    {
+      key: 'jumpingCholla',
+      generatorOpts: rng => ({ age: Math.pow(rng(), 0.58) }),
+      densityPerArea: params.jumpingChollaEnabled ? params.jumpingChollaDensity : 0,
+      maxSlope: 1.1,
+      scaleRange: [0.82, 1.18],
+      variantCount: 8,
+      seed: subSeed(chunkSeed, 11),
+      geometrySeed: subSeed(params.seed, 11),
+      lodLevels,
+      attemptMultiplier: 14,
+      candidateFilter: ctx => acceptJumpingChollaCandidate(ctx, state.matureSaguaroZones, state.resourceZones, proportions),
+      onPlace: (mat, rng, i, ctx) => {
+        const age = ctx.variantOpts.age ?? 0.5;
+        const maturity = smoothstep(0.20, 0.78, age);
+        state.resourceZones.push({
+          x: ctx.x,
+          z: ctx.z,
+          radius: proportions.jumpingCholla.rootRadius * lerp(0.48, 1.18, maturity) * ctx.scale,
+          strength: lerp(0.20, 0.46, maturity),
+          kind: 'jumpingCholla',
+        });
       },
     },
     {
@@ -1007,6 +1032,27 @@ function acceptPricklyPearCandidate(ctx, nursePlants, matureSaguaroZones, resour
   return chanceFromScore(ctx, waterScore);
 }
 
+function acceptJumpingChollaCandidate(ctx, matureSaguaroZones, resourceZones, proportions) {
+  const water = terrainWater(ctx);
+  if (water.flow > 0.84 && water.gravel > 0.48) return ctx.rng() < 0.10;
+  if (water.moisture > 0.78) return ctx.rng() < 0.16;
+  const open = acceptOpenPlantCandidate(ctx, matureSaguaroZones, resourceZones, proportions, 0.34);
+  if (!open) return false;
+  const chollaPressure = resourcePressure(ctx.x, ctx.z, resourceZones, {
+    padding: proportions.jumpingCholla.rootRadius * 0.35,
+    kinds: ['jumpingCholla'],
+  });
+  if (chollaPressure > 0.72) return ctx.rng() < 0.08;
+  const dryFlatScore =
+    0.38 +
+    water.basin * 0.18 +
+    water.shoulder * 0.16 -
+    water.moisture * 0.26 -
+    Math.max(0, ctx.slope - 0.55) * 0.34 -
+    chollaPressure * 0.20;
+  return chanceFromScore(ctx, dryFlatScore);
+}
+
 function acceptMesquiteCandidate(ctx, resourceZones, proportions) {
   const water = terrainWater(ctx);
   const treePressure = resourcePressure(ctx.x, ctx.z, resourceZones, {
@@ -1156,6 +1202,9 @@ function createWorkerProportions(rootMeasurement) {
     mesquite: {
       canopyRadius: measure(0.58),
       rootRadius: measure(0.92),
+    },
+    jumpingCholla: {
+      rootRadius: measure(0.20),
     },
     rocks: {
       pebbleSize: range([0.0143, 0.0400]),

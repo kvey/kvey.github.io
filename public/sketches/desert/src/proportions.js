@@ -40,6 +40,14 @@ export const PROPORTION_RATIOS = Object.freeze({
     oldHeightBoost: 0.018,
     flowerRadius: [0.0057, 0.0100],
   }),
+  jumpingCholla: Object.freeze({
+    height: [0.13, 0.43],
+    trunkRadius: [0.0045, 0.0105],
+    jointRadius: [0.00145, 0.00250],
+    jointLength: [0.0086, 0.0229],
+    fruitRadius: [0.0010, 0.0032],
+    fruitLength: [0.0030, 0.0079],
+  }),
   pricklyPear: Object.freeze({
     padBaseSize: [0.0286, 0.0486],
   }),
@@ -229,6 +237,14 @@ export function createProportionOracle(opts = {}) {
       heightByAge: range(ratios.barrelCactus.heightByAge),
       oldHeightBoost: measure(ratios.barrelCactus.oldHeightBoost),
       flowerRadius: range(ratios.barrelCactus.flowerRadius),
+    }),
+    jumpingCholla: Object.freeze({
+      height: range(ratios.jumpingCholla.height),
+      trunkRadius: range(ratios.jumpingCholla.trunkRadius),
+      jointRadius: range(ratios.jumpingCholla.jointRadius),
+      jointLength: range(ratios.jumpingCholla.jointLength),
+      fruitRadius: range(ratios.jumpingCholla.fruitRadius),
+      fruitLength: range(ratios.jumpingCholla.fruitLength),
     }),
     pricklyPear: Object.freeze({
       padBaseSize: range(ratios.pricklyPear.padBaseSize),

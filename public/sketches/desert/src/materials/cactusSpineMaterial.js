@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // One shared material for cactus bodies. Geometry supplies a cactusSpine vec4:
 //   x/y = procedural spine coordinates
 //   z   = local strength
-//   w   = mode: 1 ribbed cactus, 2 pad cactus, 0 disabled
+//   w   = mode: 1 ribbed cactus, 2 pad cactus, 5 dense cholla, 0 disabled
 export function createCactusSpineMaterial() {
   const seasonalUniforms = {
     saguaroFlowerVisibility: { value: 1 },
@@ -103,6 +103,22 @@ float cactusNeedleCluster(vec2 p, vec2 seedCell, float spread, float lengthScale
   return needles;
 }
 
+float cactusChollaNeedleCluster(vec2 p, vec2 seedCell) {
+  float needles = 0.0;
+  for (int i = 0; i < 12; i++) {
+    float fi = float(i);
+    float h0 = cactusSpineHash(seedCell + vec2(fi * 17.9, 5.7));
+    float h1 = cactusSpineHash(seedCell + vec2(fi * 11.3, 23.1));
+    float h2 = cactusSpineHash(seedCell + vec2(fi * 4.7, 53.2));
+    float angle = (fi / 12.0) * 6.2831853 + (h0 - 0.5) * 0.72;
+    vec2 dir = vec2(cos(angle), sin(angle));
+    float len = mix(0.30, 0.62, h1);
+    float width = mix(0.0065, 0.014, h2);
+    needles = max(needles, cactusNeedleParticle(p, dir, len, width));
+  }
+  return needles;
+}
+
 float cactusScreenDetailFade() {
   vec2 footprint = fwidth(vCactusSpine.xy);
   float cellFootprint = max(footprint.x, footprint.y);
@@ -131,6 +147,17 @@ vec3 cactusApplySpines(vec3 baseColor) {
       + cactusMicroParticles(cluster, cellId, density) * 0.34
     ) * rowGate * breakup;
     spine = ribGate * rowGate * cactusNeedleCluster(cluster, cellId, 1.85, 1.0) * breakup;
+  } else if (vCactusSpine.w > 4.5) {
+    vec2 cellId = floor(vCactusSpine.xy);
+    vec2 local = fract(vCactusSpine.xy) - 0.5;
+    float faceFade = 1.0 - smoothstep(0.42, 0.72, length(local));
+    float breakup = 0.72 + cactusSpineHash(cellId) * 0.36;
+    float density = mix(8.0, 12.0, cactusSpineHash(cellId + 4.19));
+    float sheath = cactusParticleDisk(local, 0.255) * 0.42
+      + cactusMicroParticles(local, cellId, density) * 0.56;
+
+    areole = sheath * faceFade * breakup;
+    spine = cactusChollaNeedleCluster(local, cellId) * faceFade * breakup;
   } else {
     vec2 cellId = floor(vCactusSpine.xy);
     vec2 local = fract(vCactusSpine.xy) - 0.5;
@@ -147,11 +174,12 @@ vec3 cactusApplySpines(vec3 baseColor) {
 
   areole *= mix(0.18, 1.0, detailFade);
   spine *= detailFade * detailFade;
-  float areoleMix = clamp(areole * strength * 0.58, 0.0, 0.70);
-  float spineMix = clamp(spine * strength * 0.72, 0.0, 0.82);
+  float chollaMode = step(4.5, vCactusSpine.w);
+  float areoleMix = clamp(areole * strength * mix(0.58, 0.88, chollaMode), 0.0, mix(0.70, 0.86, chollaMode));
+  float spineMix = clamp(spine * strength * mix(0.72, 1.05, chollaMode), 0.0, mix(0.82, 0.94, chollaMode));
   vec3 c = mix(baseColor, cactusAreoleColor, areoleMix);
   c = mix(c, cactusSpineColor, spineMix);
-  return c + cactusSpineColor * spineMix * 0.035;
+  return c + cactusSpineColor * spineMix * mix(0.035, 0.075, chollaMode);
 }`,
       )
       .replace(
@@ -163,6 +191,6 @@ diffuseColor.rgb = cactusApplySpines(diffuseColor.rgb);`,
       );
   };
 
-  material.customProgramCacheKey = () => 'cactus-spine-material-v4-saguaro-seasonal';
+  material.customProgramCacheKey = () => 'cactus-spine-material-v5-cholla-seasonal';
   return material;
 }

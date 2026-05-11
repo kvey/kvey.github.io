@@ -7,6 +7,7 @@ function createSunsetDome() {
     moonDirection: { value: new THREE.Vector3(0, 1, 0) },
     sunElevation: { value: 35 },
     cloudTime: { value: 0 },
+    rainAmount: { value: 0 },
   };
 
   const material = new THREE.ShaderMaterial({
@@ -28,6 +29,7 @@ function createSunsetDome() {
       uniform vec3 moonDirection;
       uniform float sunElevation;
       uniform float cloudTime;
+      uniform float rainAmount;
       varying vec3 vWorldDirection;
 
       float hash(vec2 p) {
@@ -76,6 +78,41 @@ function createSunsetDome() {
 
       vec2 safeNormalize(vec2 v) {
         return v / max(length(v), 0.0001);
+      }
+
+      float lightningPulse(float t) {
+        float period = 6.8;
+        float eventIndex = floor(t / period);
+        float local = fract(t / period);
+        float armed = step(0.82, hash(vec2(eventIndex * 19.17, 42.3)));
+        float first = exp(-pow((local - 0.025) / 0.014, 2.0));
+        float second = exp(-pow((local - 0.092) / 0.024, 2.0)) * 0.70;
+        float afterglow = exp(-pow((local - 0.190) / 0.052, 2.0)) * 0.24;
+        return armed * clamp(first + second + afterglow, 0.0, 1.0);
+      }
+
+      vec2 lightningDirection(float t) {
+        float eventIndex = floor(t / 6.8);
+        float angle = hash(vec2(eventIndex * 7.31, 11.9)) * 6.2831853;
+        return vec2(cos(angle), sin(angle));
+      }
+
+      float lightningBolt(vec3 dir, vec2 horizonDir, vec2 strikeDir, float t) {
+        float eventIndex = floor(t / 6.8);
+        vec2 sideAxis = vec2(-strikeDir.y, strikeDir.x);
+        float side = dot(horizonDir, sideAxis);
+        float front = dot(horizonDir, strikeDir);
+        float y = dir.y;
+        float reach = pow(smoothstep(0.52, 0.98, front), 6.0);
+        float vertical = smoothstep(0.02, 0.09, y) * (1.0 - smoothstep(0.43, 0.55, y));
+        float jag = (noise(vec2(y * 42.0, eventIndex * 3.7)) - 0.5) * 0.070;
+        jag += sin(y * 78.0 + eventIndex * 1.91) * 0.012;
+        float core = 1.0 - smoothstep(0.0012, 0.0065, abs(side - jag));
+        float branchA = 1.0 - smoothstep(0.0018, 0.0095, abs(side - jag - (y - 0.18) * 0.52));
+        float branchB = 1.0 - smoothstep(0.0018, 0.0085, abs(side - jag + (y - 0.25) * 0.38));
+        branchA *= smoothstep(0.11, 0.20, y) * (1.0 - smoothstep(0.25, 0.34, y));
+        branchB *= smoothstep(0.22, 0.30, y) * (1.0 - smoothstep(0.34, 0.42, y));
+        return (core + branchA * 0.30 + branchB * 0.24) * vertical * reach;
       }
 
       vec3 starLayer(vec3 dir, float scale, float threshold, float radius, float glowRadius, vec3 tint) {
@@ -172,6 +209,37 @@ function createSunsetDome() {
         vec3 cloudLit = mix(vec3(0.48, 0.50, 0.62), vec3(1.0, 0.47, 0.23), sunSide * sunset);
         vec3 cloudShade = mix(vec3(0.22, 0.22, 0.34), vec3(0.46, 0.22, 0.39), sunset);
         color = mix(color, mix(cloudShade, cloudLit, 0.36 + sunSide * 0.58), cloudMask);
+
+        float rain = clamp(rainAmount, 0.0, 1.0);
+        vec2 stormProjection = dir.xz / max(dir.y + 0.42, 0.26);
+        vec2 stormDrift = cloudTime * vec2(0.018, 0.006);
+        float stormLarge = fbm(stormProjection * 0.78 + vec2(-1.4, 2.6) + stormDrift);
+        float stormMid = fbm(stormProjection * 1.85 + vec2(6.7, -3.1) - stormDrift * 0.62 + stormLarge * 1.7);
+        float stormSmall = fbm(stormProjection * 4.60 + vec2(3.1, 8.9) + stormDrift * vec2(1.5, -0.7));
+        float stormMass = clamp(stormLarge * 0.56 + stormMid * 0.34 + stormSmall * 0.18, 0.0, 1.0);
+        float stormMask = smoothstep(0.37, 0.72, stormMass + horizon * 0.12);
+        stormMask *= smoothstep(-0.10, 0.03, dir.y);
+        float ceiling = smoothstep(0.03, 0.28, dir.y) * (1.0 - smoothstep(0.82, 1.0, dir.y));
+        float cloudBelly = smoothstep(0.03, 0.18, dir.y) * (1.0 - smoothstep(0.36, 0.62, dir.y));
+        float overcast = rain * smoothstep(-0.08, 0.08, dir.y);
+        vec3 stormBase = mix(vec3(0.085, 0.095, 0.115), vec3(0.20, 0.22, 0.25), stormMass);
+        vec3 stormBelly = vec3(0.045, 0.052, 0.070);
+        vec3 stormColor = mix(stormBase, stormBelly, cloudBelly * (1.0 - stormMass * 0.45));
+        stormColor = mix(stormColor, vec3(0.15, 0.17, 0.22), ceiling * stormSmall * 0.22);
+        color = mix(color, vec3(0.105, 0.120, 0.145), overcast * 0.62);
+        color = mix(color, stormColor, overcast * (0.46 + stormMask * 0.50));
+        cloudMask = max(cloudMask, stormMask * rain);
+
+        float lightning = lightningPulse(cloudTime) * rain;
+        vec2 strikeDir = lightningDirection(cloudTime);
+        float strikeSide = pow(smoothstep(0.40, 0.98, dot(horizonDir, strikeDir)), 3.8);
+        float flashHeight = smoothstep(0.00, 0.13, dir.y) * (1.0 - smoothstep(0.66, 0.92, dir.y));
+        float cloudFlash = lightning * strikeSide * flashHeight * (0.30 + stormMask * 0.92);
+        float bolt = lightningBolt(dir, horizonDir, strikeDir, cloudTime) * lightning;
+        vec3 lightningColor = vec3(0.72, 0.84, 1.0);
+        color += lightningColor * cloudFlash * 1.65;
+        color += mix(vec3(0.90, 0.95, 1.0), vec3(0.55, 0.72, 1.0), smoothstep(0.0, 0.38, dir.y)) * bolt * 2.55;
+        color = mix(color, vec3(0.58, 0.68, 0.86), lightning * overcast * flashHeight * 0.10);
         color = mix(color, belowHorizonColor, belowHorizon);
 
         float aboveHorizon = smoothstep(0.02, 0.22, dir.y);
@@ -194,6 +262,7 @@ function createSunsetDome() {
         color = mix(color, vec3(1.0, 0.99, 0.93), moonInner * moonVisible * 0.34);
 
         float alpha = clamp(0.36 + horizon * 0.38 + sunset * 0.18 + goldGlow * 0.18 + belowHorizon * 0.46, 0.0, 0.98);
+        alpha = mix(alpha, max(alpha, 0.90 + stormMask * 0.08 + lightning * 0.02), rain * smoothstep(-0.10, 0.05, dir.y));
         gl_FragColor = vec4(color, alpha);
       }
     `,
@@ -365,6 +434,7 @@ export function buildSky(scene, renderer) {
   const moon = new THREE.Vector3();
   const sunsetDome = createSunsetDome();
   const mountains = createDistantMountains();
+  let rainAmount = 0;
   scene.add(sunsetDome.mesh);
   scene.add(mountains.mesh);
 
@@ -378,10 +448,14 @@ export function buildSky(scene, renderer) {
     moon.setFromSphericalCoords(1, moonPhi, moonTheta);
     u.sunPosition.value.copy(sun);
     const sunsetAmount = 1 - THREE.MathUtils.smoothstep(elevation, 12, 44);
-    u.turbidity.value = THREE.MathUtils.lerp(6.0, 11.5, sunsetAmount);
-    u.rayleigh.value = THREE.MathUtils.lerp(1.15, 2.25, sunsetAmount);
-    u.mieCoefficient.value = THREE.MathUtils.lerp(0.0045, 0.013, sunsetAmount);
-    u.mieDirectionalG.value = THREE.MathUtils.lerp(0.78, 0.91, sunsetAmount);
+    const baseTurbidity = THREE.MathUtils.lerp(6.0, 11.5, sunsetAmount);
+    const baseRayleigh = THREE.MathUtils.lerp(1.15, 2.25, sunsetAmount);
+    const baseMieCoefficient = THREE.MathUtils.lerp(0.0045, 0.013, sunsetAmount);
+    const baseMieDirectionalG = THREE.MathUtils.lerp(0.78, 0.91, sunsetAmount);
+    u.turbidity.value = THREE.MathUtils.lerp(baseTurbidity, 19.0, rainAmount);
+    u.rayleigh.value = THREE.MathUtils.lerp(baseRayleigh, 0.45, rainAmount);
+    u.mieCoefficient.value = THREE.MathUtils.lerp(baseMieCoefficient, 0.038, rainAmount);
+    u.mieDirectionalG.value = THREE.MathUtils.lerp(baseMieDirectionalG, 0.94, rainAmount);
     sunsetDome.uniforms.sunDirection.value.copy(sun);
     sunsetDome.uniforms.moonDirection.value.copy(moon);
     sunsetDome.uniforms.sunElevation.value = elevation;
@@ -394,5 +468,10 @@ export function buildSky(scene, renderer) {
     sunsetDome.uniforms.cloudTime.value = elapsedSeconds;
   }
 
-  return { sky, sunsetDome: sunsetDome.mesh, mountains: mountains.mesh, sun, moon, update, updateTime };
+  function setRainAmount(value) {
+    rainAmount = THREE.MathUtils.clamp(value, 0, 1);
+    sunsetDome.uniforms.rainAmount.value = rainAmount;
+  }
+
+  return { sky, sunsetDome: sunsetDome.mesh, mountains: mountains.mesh, sun, moon, update, updateTime, setRainAmount };
 }

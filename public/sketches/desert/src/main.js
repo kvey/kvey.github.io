@@ -8,6 +8,7 @@ import { buildSky } from './sky.js';
 import { generateRock } from './rocks.js';
 import { generateSaguaro } from './plants/saguaro.js';
 import { generateBarrelCactus } from './plants/barrelCactus.js';
+import { generateJumpingCholla } from './plants/jumpingCholla.js';
 import { generatePaloVerde } from './plants/paloVerde.js';
 import { generateMesquite } from './plants/mesquite.js';
 import { generatePricklyPear } from './plants/pricklyPear.js';
@@ -62,6 +63,7 @@ const CAMERA_COLLIDER_CONFIG = {
   mesquite: { radiusScale: 0.62, minRadius: 0.45 },
   saguaro: { radiusScale: 0.78, minRadius: 0.35 },
   barrel: { radiusScale: 0.82, minRadius: 0.35 },
+  jumpingCholla: { radiusScale: 0.88, minRadius: 0.45 },
   pricklyPear: { radiusScale: 0.82, minRadius: 0.35 },
   ocotillo: { radiusScale: 0.42, minRadius: 0.3 },
   boulders: { radiusScale: 0.95, minRadius: 0.35 },
@@ -86,6 +88,7 @@ const SCATTER_CULL_CELL = {
   mesquite: { size: 120, minInstances: 96 },
   saguaro: { size: 96, minInstances: 64 },
   barrel: { size: 64, minInstances: 48 },
+  jumpingCholla: { size: 80, minInstances: 48 },
   pricklyPear: { size: 64, minInstances: 48 },
   ocotillo: { size: 96, minInstances: 64 },
   creosote: { size: 56, minInstances: 48 },
@@ -97,6 +100,7 @@ const SCATTER_CULL_DISTANCE = {
   mesquite: 300,
   saguaro: 320,
   barrel: 210,
+  jumpingCholla: 240,
   pricklyPear: 210,
   ocotillo: 240,
   creosote: 145,
@@ -109,6 +113,7 @@ const PLANT_INSPECTION_STAGE_KEYS = new Set([
   'mesquite',
   'saguaro',
   'barrel',
+  'jumpingCholla',
   'pricklyPear',
   'ocotillo',
   'creosote',
@@ -345,6 +350,8 @@ const params = {
   saguaroFruiting: DEFAULT_SEASONAL_PLANTS.saguaroFruiting,
   barrelEnabled: true,
   barrelDensity: 0.030,
+  jumpingChollaEnabled: true,
+  jumpingChollaDensity: 0.003,
   paloVerdeEnabled: true,
   paloVerdeDensity: 0.008,
   paloVerdeFlowering: DEFAULT_SEASONAL_PLANTS.paloVerdeFlowering,
@@ -660,6 +667,8 @@ function generationParams() {
     saguaroArmProbability: params.saguaroArmProbability,
     barrelEnabled: params.barrelEnabled,
     barrelDensity: params.barrelDensity,
+    jumpingChollaEnabled: params.jumpingChollaEnabled,
+    jumpingChollaDensity: params.jumpingChollaDensity,
     paloVerdeEnabled: params.paloVerdeEnabled,
     paloVerdeDensity: params.paloVerdeDensity,
     paloVerdeFlowering: true,
@@ -1353,6 +1362,8 @@ function scatterRenderConfig(key, proportions) {
       return { generator: generateSaguaro, material: cactusMaterial };
     case 'barrel':
       return { generator: generateBarrelCactus, material: cactusMaterial };
+    case 'jumpingCholla':
+      return { generator: generateJumpingCholla, material: cactusMaterial };
     case 'pricklyPear':
       return { generator: generatePricklyPear, material: cactusMaterial };
     case 'ocotillo':
@@ -1711,8 +1722,9 @@ function easeInOutCubic(t) {
 
 // ---------- Sun update ----------
 function updateSun() {
-  const dir = skyCtl.update({ azimuth: params.sunAzimuth, elevation: params.sunElevation });
   const rain01 = rainAmountForDate(params.timeOfYear);
+  skyCtl.setRainAmount(rain01);
+  const dir = skyCtl.update({ azimuth: params.sunAzimuth, elevation: params.sunElevation });
   rainOverlay.setActive(rain01 > 0);
   updateRendererExposure(rain01);
   updateLightAnchors(dir);
@@ -2021,6 +2033,10 @@ addGuiControl(fSag, 'saguaroFruiting').onChange(updateSeasonalPlantVisibility).n
 const fBar = gui.addFolder('Barrel cacti');
 addGuiControl(fBar, 'barrelEnabled').onChange(scheduleRegenerate).name('enabled');
 addGuiControl(fBar, 'barrelDensity', 0, 0.1, 0.002).onChange(scheduleRegenerate).name('density');
+
+const fCholla = gui.addFolder('Jumping cholla');
+addGuiControl(fCholla, 'jumpingChollaEnabled').onChange(scheduleRegenerate).name('enabled');
+addGuiControl(fCholla, 'jumpingChollaDensity', 0, 0.04, 0.001).onChange(scheduleRegenerate).name('density');
 
 const fPV = gui.addFolder('Palo verde');
 addGuiControl(fPV, 'paloVerdeEnabled').onChange(scheduleRegenerate).name('enabled');

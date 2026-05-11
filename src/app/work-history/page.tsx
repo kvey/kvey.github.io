@@ -126,22 +126,34 @@ const roles: Role[] = [
       'Co-founded out of Y Combinator. From 2014 to 2018 I led an international team in Redwood City and Shanghai — building practices around engineering, security, and operations; participating in hiring, culture, sales, and operations. The company began as GetScale (high-volume consumer electronics manufacturing) and became Assembly (fulfillment, sourcing, and process control).',
     projects: [
       {
-        year: '2017',
-        title: 'mDNS-based local peer discovery and console network',
+        year: '2014',
+        title: 'Prototype quality control system',
         body:
-          'Consoles further down an assembly line needed to be notified when units failed particular criteria — even when the facility had no internet. Consoles broadcast over mDNS, performed leader election, and replicated logs across one another. Clients queried local logs for the state of units the network had encountered. Consoles displayed notifications when they fell behind the shared log.',
+          'Designed and built semi-custom touchscreen terminals with camera and sensor packages, deployed into factories in China and the US for data collection during QC processes. Initial customer base and a rudimentary system for managing the procedures shown on the consoles, manageable from the US. Got us into Y Combinator (Summer 2015).',
       },
       {
-        year: '2017',
-        title: 'Source-controlled DevOps',
+        year: '2014',
+        title: 'Bill-of-materials optimization',
         body:
-          'Required all developer operational tools to live and be documented in our source repository. Auditable management of changes to infrastructure. Kubernetes clusters in China and the US on separate cloud providers, defined initially with CloudFormation in a Clojure DSL, later Terraform.',
+          'Visualize BoM pricing at varying production quantities and select quotations from multiple vendors. Accounted for break bulk, minimum order quantities, and unit quotations; allowed interactive part-selection and target-quantity adjustment. Backend initially in C, later multithreaded Clojure as we extended supplier coverage. Frontend in ClojureScript with interactive zooming across all parts in the BoM.',
       },
       {
-        year: '2017',
-        title: 'Warehouse service sales and support',
+        year: '2014',
+        title: 'Product lifecycle management system',
         body:
-          'Managed the migration and handover of multiple warehousing clients as we acquired the customer base of another organization. Participated in sales and support calls, solo and with the team.',
+          'Initial product at GetScale: hierarchical bill-of-material management, version control, and automated part quotation.',
+      },
+      {
+        year: '2015',
+        title: 'Event-sourced model with reactive queries',
+        body:
+          'Moved console management infrastructure to an eventually-consistent event-sourcing model. Queries defined in DataScript on the client; configurations stored in Datomic on the server. Single language (Clojure / ClojureScript) and single query language (Datalog) end-to-end. All events dispatched on the client were handled on the server in the same format and propagated to subscribed clients. Both sides operated over a normalized representation of the data.',
+      },
+      {
+        year: '2015',
+        title: 'Delay-tolerant networking infrastructure',
+        body:
+          'Service that managed multiple hops between particular geographically-located infrastructure providers and queued all intermediate data for reliable delivery into rural factories with constrained access to specific internet services.',
       },
       {
         year: '2016',
@@ -168,34 +180,22 @@ const roles: Role[] = [
           'Ingested terabytes of temperature, orientation, and behavior data per day from consoles installed in the field. Online analysis and alerting on process behavior, offline analysis of factory conditions.',
       },
       {
-        year: '2015',
-        title: 'Event-sourced model with reactive queries',
+        year: '2017',
+        title: 'mDNS-based local peer discovery and console network',
         body:
-          'Moved console management infrastructure to an eventually-consistent event-sourcing model. Queries defined in DataScript on the client; configurations stored in Datomic on the server. Single language (Clojure / ClojureScript) and single query language (Datalog) end-to-end. All events dispatched on the client were handled on the server in the same format and propagated to subscribed clients. Both sides operated over a normalized representation of the data.',
+          'Consoles further down an assembly line needed to be notified when units failed particular criteria — even when the facility had no internet. Consoles broadcast over mDNS, performed leader election, and replicated logs across one another. Clients queried local logs for the state of units the network had encountered. Consoles displayed notifications when they fell behind the shared log.',
       },
       {
-        year: '2015',
-        title: 'Delay-tolerant networking infrastructure',
+        year: '2017',
+        title: 'Source-controlled DevOps',
         body:
-          'Service that managed multiple hops between particular geographically-located infrastructure providers and queued all intermediate data for reliable delivery into rural factories with constrained access to specific internet services.',
+          'Required all developer operational tools to live and be documented in our source repository. Auditable management of changes to infrastructure. Kubernetes clusters in China and the US on separate cloud providers, defined initially with CloudFormation in a Clojure DSL, later Terraform.',
       },
       {
-        year: '2014',
-        title: 'Prototype quality control system',
+        year: '2017',
+        title: 'Warehouse service sales and support',
         body:
-          'Designed and built semi-custom touchscreen terminals with camera and sensor packages, deployed into factories in China and the US for data collection during QC processes. Initial customer base and a rudimentary system for managing the procedures shown on the consoles, manageable from the US. Got us into Y Combinator (Summer 2015).',
-      },
-      {
-        year: '2014',
-        title: 'Bill-of-materials optimization',
-        body:
-          'Visualize BoM pricing at varying production quantities and select quotations from multiple vendors. Accounted for break bulk, minimum order quantities, and unit quotations; allowed interactive part-selection and target-quantity adjustment. Backend initially in C, later multithreaded Clojure as we extended supplier coverage. Frontend in ClojureScript with interactive zooming across all parts in the BoM.',
-      },
-      {
-        year: '2014',
-        title: 'Product lifecycle management system',
-        body:
-          'Initial product at GetScale: hierarchical bill-of-material management, version control, and automated part quotation.',
+          'Managed the migration and handover of multiple warehousing clients as we acquired the customer base of another organization. Participated in sales and support calls, solo and with the team.',
       },
     ],
   },
