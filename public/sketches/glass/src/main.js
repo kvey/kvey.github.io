@@ -692,6 +692,94 @@ window.addEventListener('drop', (e) => {
   if (f) loadFromFile(f);
 });
 
+// ---------- Scene bounds (wall + floor collision) ----------
+// The glass plane sits at z = 0 with the plaster wall just behind it. The
+// wood frame protrudes to z ≈ 0.16. Keep the camera (and target) safely in
+// front of the wall and above the floor so neither WASD nor orbit can clip
+// through. Lateral / upper bounds are loose — only depth and floor matter.
+const BOUND_MIN_Z_CAM = 0.45;   // camera stays at least this far in front of the glass
+const BOUND_MIN_Z_TGT = 0.10;   // orbit target can sit slightly closer
+const BOUND_MIN_Y_CAM = 0.30;   // camera can't dip below the floor
+const BOUND_MIN_Y_TGT = 0.00;   // target can sit exactly on the floor
+function clampSceneBounds() {
+  if (camera.position.z < BOUND_MIN_Z_CAM) camera.position.z = BOUND_MIN_Z_CAM;
+  if (camera.position.y < BOUND_MIN_Y_CAM) camera.position.y = BOUND_MIN_Y_CAM;
+  if (controls.target.z < BOUND_MIN_Z_TGT) controls.target.z = BOUND_MIN_Z_TGT;
+  if (controls.target.y < BOUND_MIN_Y_TGT) controls.target.y = BOUND_MIN_Y_TGT;
+}
+
+// ---------- WASD fly-around movement ----------
+// Pan the camera + orbit target in lockstep so orbit/zoom keep working from
+// wherever you've moved to. W/S go along the camera's horizontal forward axis,
+// A/D strafe along the right axis, Q/E shift vertically. Shift multiplies
+// speed. Movement applied per-frame from a held-keys map so motion is smooth.
+const moveKeys = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false };
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  // Ignore when typing into an input or contenteditable.
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'shift') { moveKeys.shift = true; return; }
+  if (k in moveKeys) { moveKeys[k] = true; e.preventDefault(); }
+});
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'shift') { moveKeys.shift = false; return; }
+  if (k in moveKeys) moveKeys[k] = false;
+});
+window.addEventListener('blur', () => {
+  for (const k of Object.keys(moveKeys)) moveKeys[k] = false;
+});
+
+const _moveFwd   = new THREE.Vector3();
+const _moveRight = new THREE.Vector3();
+const _moveDelta = new THREE.Vector3();
+function applyMovement(dt) {
+  const horizSpeed = (moveKeys.shift ? 8.5 : 3.5);
+  const vertSpeed  = (moveKeys.shift ? 6.0 : 2.5);
+
+  // Forward = camera look direction projected onto the horizontal plane.
+  camera.getWorldDirection(_moveFwd);
+  _moveFwd.y = 0;
+  if (_moveFwd.lengthSq() < 1e-6) return; // looking straight up/down — skip
+  _moveFwd.normalize();
+  _moveRight.crossVectors(_moveFwd, camera.up).normalize();
+
+  _moveDelta.set(0, 0, 0);
+  if (moveKeys.w) _moveDelta.add(_moveFwd);
+  if (moveKeys.s) _moveDelta.sub(_moveFwd);
+  if (moveKeys.d) _moveDelta.add(_moveRight);
+  if (moveKeys.a) _moveDelta.sub(_moveRight);
+  const horizLen = _moveDelta.length();
+  if (horizLen > 1e-6) _moveDelta.multiplyScalar(horizSpeed * dt / horizLen);
+
+  // Vertical motion is independent of horizontal speed/normalization.
+  if (moveKeys.e) _moveDelta.y += vertSpeed * dt;
+  if (moveKeys.q) _moveDelta.y -= vertSpeed * dt;
+
+  // Clamp the delta so neither the camera nor the target can be pushed past
+  // the wall or below the floor. We tighten the most-restrictive of the two
+  // (camera vs target) on each axis so they stay in sync.
+  if (_moveDelta.z !== 0) {
+    const camMinDz = BOUND_MIN_Z_CAM - camera.position.z;
+    const tgtMinDz = BOUND_MIN_Z_TGT - controls.target.z;
+    const allowedMinDz = Math.max(camMinDz, tgtMinDz);
+    if (_moveDelta.z < allowedMinDz) _moveDelta.z = allowedMinDz;
+  }
+  if (_moveDelta.y !== 0) {
+    const camMinDy = BOUND_MIN_Y_CAM - camera.position.y;
+    const tgtMinDy = BOUND_MIN_Y_TGT - controls.target.y;
+    const allowedMinDy = Math.max(camMinDy, tgtMinDy);
+    if (_moveDelta.y < allowedMinDy) _moveDelta.y = allowedMinDy;
+  }
+
+  if (_moveDelta.lengthSq() > 0) {
+    camera.position.add(_moveDelta);
+    controls.target.add(_moveDelta);
+  }
+}
+
 // ---------- Resize ----------
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -704,7 +792,11 @@ const clock = new THREE.Clock();
 function tick() {
   requestAnimationFrame(tick);
   const dt = clock.getDelta();
+  applyMovement(dt);
   controls.update(dt);
+  // Backstop: orbit-around-target can also push the camera through the wall
+  // (when the user circles past the wall plane). Clamp every frame.
+  clampSceneBounds();
   raysMat.uniforms.uCameraPos.value.copy(camera.position);
   renderer.render(scene, camera);
 }
