@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries, resolveDetailScale, resolvePlantAge, scaledSegments } from './common.js';
+import { mergeGeometries, resolveDetailScale, resolvePlantAge, resolveStructureScale, scaledSegments } from './common.js';
 import {
   makeBranchSegment,
   makeLeafletSpray,
@@ -17,24 +17,26 @@ const UP = new THREE.Vector3(0, 1, 0);
 // wide umbrella crown, feathery compound leaflets, thorns, and long pods.
 export function generateMesquite(rng, opts = {}) {
   const detailScale = resolveDetailScale(opts);
-  const structureScale = THREE.MathUtils.clamp(detailScale, 0.36, 1);
+  const structureScale = resolveStructureScale(opts, 0.36);
   const proportions = resolveProportionOracle(opts);
   // Lifecycle scalar: young mesquites are scrubby, thorny shrubs; old trees
   // develop heavier dark trunks, broad umbrella crowns, and more pod clusters.
   const age = resolvePlantAge(rng, opts, 0.54);
+  const form = opts.form ?? 'upland_or_wash_unspecified';
+  const washTreeForm = form === 'wash_floodplain_tree';
   const maturity = THREE.MathUtils.smoothstep(age, 0.16, 0.74);
   const oldGrowth = THREE.MathUtils.smoothstep(age, 0.62, 1.0);
   const mesquiteMinHeight = Math.max(proportions.mesquite.minHeight, proportions.mesquite.height[0]);
   const mesquiteMaxHeight = Math.max(mesquiteMinHeight + proportions.mesquite.minHeightGap, proportions.mesquite.height[1]);
   const height = THREE.MathUtils.lerp(mesquiteMinHeight * 0.38, mesquiteMaxHeight, Math.pow(age, 0.78))
-    * rngRange(rng, 0.88, 1.12);
+    * rngRange(rng, washTreeForm ? 1.02 : 0.70, washTreeForm ? 1.24 : 0.96);
   const spread = height * rngRange(
     rng,
-    THREE.MathUtils.lerp(0.86, 1.34, maturity),
-    THREE.MathUtils.lerp(1.15, 1.88, maturity + oldGrowth * 0.15),
+    THREE.MathUtils.lerp(washTreeForm ? 0.98 : 1.10, washTreeForm ? 1.42 : 1.58, maturity),
+    THREE.MathUtils.lerp(washTreeForm ? 1.30 : 1.38, washTreeForm ? 2.05 : 2.25, maturity + oldGrowth * 0.15),
   );
   const trunkRadius = THREE.MathUtils.lerp(proportions.mesquite.trunkRadius[0] * 0.42, proportions.mesquite.trunkRadius[1] * 1.12, Math.pow(age, 0.70))
-    * rngRange(rng, 0.86, 1.14);
+    * rngRange(rng, washTreeForm ? 0.98 : 0.70, washTreeForm ? 1.28 : 0.96);
   const rawMaxDepth = rngInt(
     rng,
     Math.round(THREE.MathUtils.lerp(2, 5, maturity)),
@@ -42,13 +44,15 @@ export function generateMesquite(rng, opts = {}) {
   );
   const maxDepth = Math.max(2, Math.round(rawMaxDepth * THREE.MathUtils.lerp(0.72, 1.0, structureScale)));
   const seedPods = (opts.seedPods ?? rngChance(rng, THREE.MathUtils.lerp(0.08, 0.50, maturity))) && age > 0.38;
+  const catkins = (opts.catkins ?? false) && age > 0.30;
 
   const barkBase = new THREE.Color(0x30251d);
   const barkTip = new THREE.Color(0x5f4b32);
-  const twig = new THREE.Color(0x74613c);
+  const twig = new THREE.Color(0x5f7440);
   const leaf = new THREE.Color(0x5d6c42);
   const thorn = new THREE.Color(0xcab777);
   const pod = new THREE.Color(0xc49348);
+  const catkin = new THREE.Color(0xdfcf75);
 
   const parts = [];
   const maxBranches = Math.round(THREE.MathUtils.lerp(240, 980, structureScale) * THREE.MathUtils.lerp(0.76, 1.18, maturity));
@@ -99,6 +103,20 @@ export function generateMesquite(rng, opts = {}) {
       });
       if (pods) parts.push(pods);
     }
+
+    if (catkins && structureScale > 0.58 && rngChance(rng, THREE.MathUtils.lerp(0.12, 0.38, maturity) * structureScale)) {
+      const blooms = makePodCluster(rng, {
+        center: at.clone().addScaledVector(UP, -proportions.mesquite.podDrop * 0.45),
+        axis: droopAxis,
+        count: rngInt(rng, 2, Math.max(2, Math.round(THREE.MathUtils.lerp(4, 10, maturity) * structureScale))),
+        color: catkin,
+        lengthRange: [proportions.mesquite.podLength[0] * 0.34, proportions.mesquite.podLength[0] * 0.62],
+        radiusRange: [proportions.mesquite.podRadius[0] * 0.55, proportions.mesquite.podRadius[0] * 0.78],
+        curl: 0.025,
+        segmentsAlong: scaledSegments(5, detailScale, 4),
+      });
+      if (blooms) parts.push(blooms);
+    }
   }
 
   function grow(start, dir, length, radius, depth, crownLevel, azimuthBias) {
@@ -117,13 +135,13 @@ export function generateMesquite(rng, opts = {}) {
       colorBase: woody ? barkBase : barkTip,
       colorTip: depth <= 2 ? twig : barkTip,
       curveScale: (woody ? 0.16 : 0.20) * THREE.MathUtils.lerp(1.18, 0.90, oldGrowth),
-      twistScale: (woody ? 0.18 : 0.07) * THREE.MathUtils.lerp(0.76, 1.12, maturity),
+      twistScale: (woody ? 0.22 : 0.07) * THREE.MathUtils.lerp(0.76, 1.12, maturity),
       sag: depth <= 2
         ? rngRange(rng, THREE.MathUtils.lerp(-0.08, -0.22, oldGrowth), -0.04)
         : rngRange(rng, -0.045, THREE.MathUtils.lerp(0.060, 0.015, oldGrowth)),
       segmentsAround: scaledSegments(woody ? 11 : 6, detailScale, woody ? 6 : 4),
-      ribCount: woody ? 7 : 0,
-      ribDepth: woody ? 0.10 : 0,
+      ribCount: woody ? 9 : 0,
+      ribDepth: woody ? THREE.MathUtils.lerp(0.10, 0.17, oldGrowth) : 0,
       colorNoise: woody ? 0.12 : 0.08,
       detailScale,
     });
@@ -175,8 +193,8 @@ export function generateMesquite(rng, opts = {}) {
     }
   }
 
-  const trunkMin = Math.max(1, Math.round(THREE.MathUtils.lerp(1, 2, maturity) * THREE.MathUtils.lerp(0.86, 1.0, structureScale)));
-  const trunkMax = Math.max(trunkMin, Math.round(THREE.MathUtils.lerp(2, 6, maturity + oldGrowth * 0.12) * THREE.MathUtils.lerp(0.82, 1.0, structureScale)));
+  const trunkMin = Math.max(washTreeForm ? 1 : 3, Math.round(THREE.MathUtils.lerp(washTreeForm ? 1 : 3, washTreeForm ? 2 : 5, maturity) * THREE.MathUtils.lerp(0.86, 1.0, structureScale)));
+  const trunkMax = Math.max(trunkMin, Math.round(THREE.MathUtils.lerp(washTreeForm ? 2 : 4, washTreeForm ? 6 : 9, maturity + oldGrowth * 0.12) * THREE.MathUtils.lerp(0.82, 1.0, structureScale)));
   const trunkCount = rngInt(rng, trunkMin, trunkMax);
   for (let i = 0; i < trunkCount; i++) {
     const angle = (i / trunkCount) * Math.PI * 2 + rngRange(rng, -0.6, 0.6);
@@ -196,5 +214,7 @@ export function generateMesquite(rng, opts = {}) {
 
   const geom = mergeGeometries(parts);
   geom.userData.age = age;
+  geom.userData.growthStage = age < 0.24 ? 'juvenile_thorny_shrub' : age < 0.68 ? 'adult_mesquite' : 'old_bosque_tree';
+  geom.userData.form = form;
   return geom;
 }

@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sonoran Plant Lab</title>
+  <style>
+    :root {
+      --panel: rgba(29, 24, 19, 0.76);
+      --panel-soft: rgba(45, 36, 27, 0.58);
+      --stroke: rgba(255, 244, 223, 0.18);
+      --stroke-strong: rgba(255, 244, 223, 0.30);
+      --text: #fff5df;
+      --muted: rgba(255, 245, 223, 0.66);
+      --accent: #ffd07a;
+      --accent-2: #96d8bf;
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #bda780;
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    .plant-lab-ui,
+    .plant-lab-ui * {
+      box-sizing: border-box;
+    }
+
+    .plant-lab-ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      font-size: 13px;
+      line-height: 1.35;
+      text-shadow: 0 1px 2px rgba(14, 8, 3, 0.45);
+    }
+
+    .plant-info {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      width: min(320px, calc(100vw - 32px));
+      padding: 14px 16px;
+      pointer-events: auto;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      backdrop-filter: blur(18px) saturate(145%);
+      box-shadow: 0 18px 46px rgba(23, 14, 7, 0.28);
+    }
+
+    .plant-info__eyebrow {
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .plant-info__title {
+      margin: 0 0 9px;
+      font-size: 22px;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .plant-info__facts {
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 6px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .plant-info__facts strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .plant-toolbar {
+      position: fixed;
+      left: 50%;
+      bottom: 16px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      max-width: calc(100vw - 32px);
+      padding: 6px;
+      pointer-events: auto;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      backdrop-filter: blur(18px) saturate(145%);
+      box-shadow: 0 18px 46px rgba(23, 14, 7, 0.28);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .plant-toolbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .plant-button {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 16px max-content;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      padding: 7px 10px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .plant-button:hover {
+      color: var(--text);
+      background: rgba(255, 245, 223, 0.08);
+    }
+
+    .plant-button.is-active {
+      color: #fffaf0;
+      border-color: var(--stroke-strong);
+      background: rgba(255, 208, 122, 0.20);
+    }
+
+    .plant-button__icon {
+      width: 16px;
+      height: 16px;
+      display: inline-grid;
+      place-items: center;
+      color: var(--accent-2);
+    }
+
+    .plant-button svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .lil-gui.root {
+      --background-color: rgba(29, 24, 19, 0.82);
+      --widget-color: rgba(255, 245, 223, 0.12);
+      --hover-color: rgba(255, 245, 223, 0.18);
+      --focus-color: rgba(255, 245, 223, 0.22);
+      --number-color: #ffd07a;
+      --string-color: #96d8bf;
+      --font-family: ui-sans-serif, system-ui, sans-serif;
+      --font-size: 12px;
+      --name-width: 42%;
+      top: 16px;
+      right: 16px;
+      width: min(330px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px);
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 245, 223, 0.36) rgba(29, 24, 19, 0.34);
+      backdrop-filter: blur(18px) saturate(145%);
+      box-shadow: 0 18px 46px rgba(23, 14, 7, 0.28);
+    }
+
+    .lil-gui.root::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    .lil-gui.root::-webkit-scrollbar-track {
+      background: rgba(29, 24, 19, 0.34);
+    }
+
+    .lil-gui.root::-webkit-scrollbar-thumb {
+      background: rgba(255, 245, 223, 0.32);
+      border: 2px solid rgba(29, 24, 19, 0.72);
+      border-radius: 999px;
+    }
+
+    .lil-gui.root .title {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .plant-label {
+      color: #fff5df;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-shadow: 0 2px 5px rgba(18, 9, 2, 0.70);
+    }
+
+    @media (max-width: 760px) {
+      .plant-info {
+        top: 10px;
+        left: 10px;
+        width: min(265px, calc(100vw - 20px));
+        padding: 11px 12px;
+      }
+
+      .plant-info__title {
+        font-size: 18px;
+      }
+
+      .plant-info__facts {
+        grid-template-columns: 70px 1fr;
+        font-size: 11px;
+      }
+
+      .lil-gui.root {
+        top: auto;
+        right: 10px;
+        bottom: 66px;
+        width: calc(100vw - 20px);
+        max-height: 42vh;
+      }
+
+      .plant-toolbar {
+        bottom: 10px;
+        max-width: calc(100vw - 20px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="ui" class="plant-lab-ui">
+    <section id="plant-info" class="plant-info"></section>
+    <nav id="plant-toolbar" class="plant-toolbar" aria-label="Plant species"></nav>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+      "lil-gui": "https://unpkg.com/lil-gui@0.19.2/dist/lil-gui.esm.js"
+    }
+  }
+  </script>
+  <script type="module" src="./src/plantLab.js"></script>
+</body>
+</html>

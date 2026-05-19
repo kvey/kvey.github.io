@@ -2,6 +2,70 @@ import * as THREE from 'three';
 
 export const DEFAULT_ROOT_MEASUREMENT = 7.0;
 
+const SAGUARO_MAX_REFERENCE_HEIGHT_M = 15.0;
+export const SCENE_SCALE_REFERENCE = Object.freeze({
+  referenceSpecies: 'saguaro',
+  referenceHeight_m: SAGUARO_MAX_REFERENCE_HEIGHT_M,
+  defaultSceneHeight: DEFAULT_ROOT_MEASUREMENT,
+});
+const SAGUARO_GROWTH_TABLE = Object.freeze([
+  [0, 0.03],
+  [8, 0.038],
+  [10, 0.075],
+  [30, 0.60],
+  [55, 2.10],
+  [90, 3.80],
+  [125, 6.40],
+  [170, 10.0],
+  [200, SAGUARO_MAX_REFERENCE_HEIGHT_M],
+]);
+
+// Metric ranges from SONORAN_PLANT_GENERATION.md. Scene units are scaled so
+// a 15 m exceptional saguaro maps to the current `saguaroMaxHeight` control.
+export const SPECIES_METRIC_RANGES = Object.freeze({
+  saguaro: Object.freeze({
+    height_m: [0.03, 15.0],
+    commonMatureHeight_m: [6.0, 10.0],
+    trunkDiameter_m: [0.30, 0.60],
+    adultSpacing_m: [6.0, 18.0],
+  }),
+  paloVerde: Object.freeze({
+    height_m: [1.5, 6.0],
+    canopyRadius_m: [1.5, 5.0],
+    spacing_m: [4.0, 12.0],
+  }),
+  mesquite: Object.freeze({
+    uplandHeight_m: [2.0, 6.0],
+    washHeight_m: [6.0, 15.0],
+    canopyRadius_m: [2.0, 10.0],
+    spacing_m: [5.0, 20.0],
+  }),
+  creosote: Object.freeze({
+    height_m: [0.6, 2.5],
+    canopyRadius_m: [0.8, 2.5],
+    spacing_m: [1.5, 4.0],
+  }),
+  ocotillo: Object.freeze({
+    height_m: [2.0, 9.0],
+    spacing_m: [3.0, 10.0],
+  }),
+  barrelCactus: Object.freeze({
+    height_m: [0.3, 3.0],
+    diameter_m: [0.45, 0.83],
+    spacing_m: [1.5, 6.0],
+  }),
+  pricklyPear: Object.freeze({
+    height_m: [0.8, 2.5],
+    clumpWidth_m: [1.5, 9.0],
+    spacing_m: [2.0, 8.0],
+  }),
+  jumpingCholla: Object.freeze({
+    height_m: [1.5, 3.0],
+    colonySpacing_m: [10.0, 50.0],
+    internalSpacing_m: [1.0, 6.0],
+  }),
+});
+
 export const PROPORTION_RATIOS = Object.freeze({
   saguaro: Object.freeze({
     seedlingHeight: 0.08,
@@ -18,12 +82,12 @@ export const PROPORTION_RATIOS = Object.freeze({
     armReachOpenMature: [0.22, 0.36],
     armReachCompactChance: 0.16,
     armReachOpenChance: 0.10,
-    firstArmAge: 0.56,
-    adultAge: 0.76,
+    firstArmAge: 0.25,
+    adultAge: 0.625,
     seniorAge: 0.90,
-    middleArmBudget: [0.35, 1.8],
-    adultArmBudget: [1.8, 5.0],
-    seniorArmBudget: [5.0, 9.0],
+    middleArmBudget: [0.20, 1.5],
+    adultArmBudget: [1.2, 4.4],
+    seniorArmBudget: [3.0, 6.5],
     armBudgetNoise: [0.78, 1.20],
     middleJointRange: [0.46, 0.64],
     adultJointRange: [0.34, 0.72],
@@ -32,7 +96,7 @@ export const PROPORTION_RATIOS = Object.freeze({
     armRiseFractionAdult: [0.18, 0.42],
     armRiseFractionSenior: [0.18, 0.52],
     nearTopArmChance: 0.08,
-    woodyBaseStartAge: 0.76,
+    woodyBaseStartAge: 0.35,
     woodyBaseMaxFraction: 0.22,
   }),
   barrelCactus: Object.freeze({
@@ -144,10 +208,13 @@ export function createProportionOracle(opts = {}) {
     saguaro: Object.freeze({
       maxHeight: rootMeasurement,
       minHeight: measure(ratios.saguaro.minHeight),
+      ageYearsForNormalized(age) {
+        return normalizedSaguaroAgeYears(age);
+      },
       heightForAge(age) {
-        const heightGrowth = Math.pow(THREE.MathUtils.clamp(age, 0, 1), 1.38);
+        const naturalHeightM = saguaroHeightMetersForAge(normalizedSaguaroAgeYears(age));
         return THREE.MathUtils.clamp(
-          rootMeasurement * THREE.MathUtils.lerp(ratios.saguaro.seedlingHeight, 1.0, heightGrowth),
+          rootMeasurement * (naturalHeightM / SAGUARO_MAX_REFERENCE_HEIGHT_M),
           measure(ratios.saguaro.minHeight),
           rootMeasurement,
         );
@@ -211,7 +278,8 @@ export function createProportionOracle(opts = {}) {
         );
         let count = Math.floor(noisyBudget + rng());
         if (count === 0 && rng() < armChance * firstArmReadiness) count = 1;
-        return THREE.MathUtils.clamp(count, 0, 10);
+        if (age > 0.88 && rng() < armChance * 0.055) count += 2 + Math.floor(rng() * 5);
+        return THREE.MathUtils.clamp(count, 0, 14);
       },
       armJointRange(age) {
         if (age < ratios.saguaro.adultAge) return ratios.saguaro.middleJointRange;
@@ -307,6 +375,31 @@ export function createProportionOracle(opts = {}) {
       Object.entries(ratios.ecology).map(([key, value]) => [key, measure(value)]),
     )),
   });
+}
+
+export function sceneUnitsFromMeters(meters, rootMeasurement = DEFAULT_ROOT_MEASUREMENT) {
+  return rootMeasurement * (meters / SAGUARO_MAX_REFERENCE_HEIGHT_M);
+}
+
+export function sceneRangeFromMeters(rangeMeters, rootMeasurement = DEFAULT_ROOT_MEASUREMENT) {
+  return rangeMeters.map(value => sceneUnitsFromMeters(value, rootMeasurement));
+}
+
+function normalizedSaguaroAgeYears(age) {
+  return THREE.MathUtils.clamp(age, 0, 1) * 200;
+}
+
+function saguaroHeightMetersForAge(ageYears) {
+  const age = THREE.MathUtils.clamp(ageYears, 0, 200);
+  for (let i = 1; i < SAGUARO_GROWTH_TABLE.length; i++) {
+    const [prevAge, prevHeight] = SAGUARO_GROWTH_TABLE[i - 1];
+    const [nextAge, nextHeight] = SAGUARO_GROWTH_TABLE[i];
+    if (age > nextAge) continue;
+    const t = (age - prevAge) / (nextAge - prevAge || 1);
+    const eased = t * t * (3 - 2 * t);
+    return THREE.MathUtils.lerp(prevHeight, nextHeight, eased);
+  }
+  return SAGUARO_MAX_REFERENCE_HEIGHT_M;
 }
 
 export function resolveProportionOracle(opts = {}) {

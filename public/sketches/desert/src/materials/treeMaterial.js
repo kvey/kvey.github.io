@@ -16,11 +16,12 @@ export function createTreeMaterial() {
     mesquitePodVisibility: { value: 1 },
   };
   material.userData.setSeasonalVisibility = ({
+    seasonalState = null,
     paloVerdeFlowering = true,
     mesquiteSeedPods = true,
   } = {}) => {
-    seasonalUniforms.paloVerdeFlowerVisibility.value = paloVerdeFlowering ? 1 : 0;
-    seasonalUniforms.mesquitePodVisibility.value = mesquiteSeedPods ? 1 : 0;
+    seasonalUniforms.paloVerdeFlowerVisibility.value = (seasonalState?.paloVerdeFlowering ?? paloVerdeFlowering) ? 1 : 0;
+    seasonalUniforms.mesquitePodVisibility.value = (seasonalState?.mesquiteSeedPods ?? mesquiteSeedPods) ? 1 : 0;
   };
 
   material.onBeforeCompile = (shader) => {

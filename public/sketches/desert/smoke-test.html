@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Desert Generation Smoke Test</title>
+  <style>
+    body { margin: 0; padding: 24px; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #15120f; color: #f7ead6; }
+    pre { white-space: pre-wrap; }
+    .pass { color: #9be28f; }
+    .fail { color: #ff9b86; }
+  </style>
+</head>
+<body>
+<pre id="out">running deterministic generation smoke test...</pre>
+<script type="module">
+const out = document.getElementById('out');
+const requiredSpecies = ['paloVerde', 'mesquite', 'creosote', 'saguaro', 'ocotillo', 'barrel', 'pricklyPear', 'jumpingCholla'];
+const stages = new Map();
+const logs = [];
+
+function log(line) {
+  logs.push(line);
+  out.textContent = logs.join('\n');
+}
+
+function fail(message) {
+  out.className = 'fail';
+  log(`FAIL ${message}`);
+  throw new Error(message);
+}
+
+function pass(message) {
+  log(`PASS ${message}`);
+}
+
+function positionsFor(stage) {
+  const positions = [];
+  for (const bucket of stage.buckets ?? []) {
+    const matrices = bucket.matrices;
+    for (let i = 0; i < matrices.length; i += 16) {
+      positions.push([matrices[i + 12], matrices[i + 14]]);
+    }
+  }
+  return positions;
+}
+
+function assertMinSpacing(stageKey, minimum) {
+  const positions = positionsFor(stages.get(stageKey));
+  for (let i = 0; i < positions.length; i++) {
+    for (let j = i + 1; j < positions.length; j++) {
+      const dx = positions[i][0] - positions[j][0];
+      const dz = positions[i][1] - positions[j][1];
+      const distance = Math.hypot(dx, dz);
+      if (distance < minimum) fail(`${stageKey} spacing ${distance.toFixed(2)} below ${minimum}`);
+    }
+  }
+  pass(`${stageKey} spacing >= ${minimum}`);
+}
+
+function runAssertions() {
+  for (const key of requiredSpecies) {
+    const count = stages.get(key)?.count ?? 0;
+    if (count < 1) fail(`${key} placed ${count}`);
+    pass(`${key} placed ${count}`);
+  }
+  assertMinSpacing('creosote', 1.45);
+  assertMinSpacing('barrel', 1.45);
+
+  out.className = 'pass';
+  log('DONE deterministic generation smoke test passed');
+}
+
+const worker = new Worker(new URL('./src/generationWorker.js', import.meta.url), { type: 'module' });
+worker.onmessage = event => {
+  const message = event.data;
+  if (message.type === 'scatter') {
+    stages.set(message.stage.key, message.stage);
+    log(`stage ${message.stage.key}: ${message.stage.count}`);
+  } else if (message.type === 'chunkComplete') {
+    worker.terminate();
+    runAssertions();
+  } else if (message.type === 'error') {
+    fail(message.message);
+  }
+};
+worker.onerror = event => fail(event.message);
+
+worker.postMessage({
+  type: 'generateChunk',
+  generation: 1,
+  chunk: { key: '0,0', cx: 0, cz: 0, size: 140 },
+  lodLevels: [
+    { name: 'near', distance: 45, detailScale: 1, castShadow: true },
+    { name: 'mid', distance: 95, detailScale: 0.72, castShadow: false },
+    { name: 'far', distance: Infinity, detailScale: 0.48, castShadow: false },
+  ],
+  params: {
+    seed: 1337,
+    terrainSize: 140,
+    terrainSegments: 120,
+    hydrologySegments: 48,
+    heightScale: 5.5,
+    macroScale: 0.012,
+    ridgeScale: 0.035,
+    rippleScale: 0.16,
+    washStrength: 0.6,
+    fanStrength: 0.72,
+    erosionStrength: 0.75,
+    rockySlopeStrength: 0.38,
+    chunkEdgePadding: 1,
+    logGenerationDebug: false,
+    saguaroEnabled: true,
+    saguaroDensity: 21517 / (45 * 200 * 200),
+    saguaroMaxHeight: 7.0,
+    saguaroArmProbability: 0.7,
+    barrelEnabled: true,
+    barrelDensity: 0.026,
+    jumpingChollaEnabled: true,
+    jumpingChollaDensity: 0.0035,
+    paloVerdeEnabled: true,
+    paloVerdeDensity: 0.010,
+    mesquiteEnabled: true,
+    mesquiteDensity: 0.0025,
+    pricklyPearEnabled: true,
+    pricklyPearDensity: 0.018,
+    ocotilloEnabled: true,
+    ocotilloDensity: 0.007,
+    creosoteEnabled: true,
+    creosoteDensity: 0.055,
+    seasonalState: {
+      recentRainDays: 5,
+      monsoonRain_0_1: 0.35,
+      winterRain_0_1: 0.55,
+      postRainFlush: true,
+      monsoon: false,
+      springBloom: true,
+      paloVerdeFlowering: true,
+      paloVerdeSeedPods: false,
+      paloVerdeLeafDensity: 0.75,
+      mesquiteSeedPods: false,
+      mesquiteCatkins: true,
+      creosoteFlowering: true,
+      creosoteRainFlush: true,
+      ocotilloFlowering: true,
+      ocotilloLeafFlush: true,
+      saguaroHydration: 0.42,
+      barrelFlowering: true,
+      pricklyPearFlowering: true,
+      pricklyPearFruiting: false,
+      chollaFruitChains: true,
+    },
+    smallRockDensity: 0.18,
+    largeRockDensity: 0.012,
+  },
+});
+</script>
+</body>
+</html>

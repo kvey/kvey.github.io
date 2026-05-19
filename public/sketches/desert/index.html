@@ -115,11 +115,8 @@
 
     /* ---------- Mode toggle (segmented) ---------- */
     .gui-toggle {
-      appearance: none;
-      border: 0;
-      cursor: pointer;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 2px;
       padding: 4px;
       border-radius: 999px;
@@ -130,9 +127,17 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      min-width: 168px;
+      min-width: min(282px, calc(100vw - 132px));
     }
-    .gui-toggle span {
+    .gui-toggle button {
+      appearance: none;
+      border: 0;
+      cursor: pointer;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      text-transform: inherit;
+      letter-spacing: inherit;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -142,12 +147,16 @@
       color: var(--text-muted);
       transition: background 180ms ease, color 180ms ease, box-shadow 180ms ease;
     }
-    .gui-toggle span.is-active {
+    .gui-toggle button.is-active {
       color: #fffaee;
       background: rgba(255, 237, 194, 0.20);
       box-shadow:
         inset 0 0 0 1px rgba(255, 255, 255, 0.20),
         0 6px 18px rgba(45, 30, 20, 0.20);
+    }
+    .gui-toggle button:focus-visible {
+      outline: 2px solid rgba(255, 239, 197, 0.85);
+      outline-offset: 2px;
     }
 
     /* ---------- Floating panels (Help / About) ---------- */
@@ -587,6 +596,209 @@
       transition: width 0.18s ease;
     }
 
+    /* ---------- Step-by-step generation ---------- */
+    .generation-steps {
+      width: min(372px, calc(100vw - 36px));
+      max-height: calc(100vh - 92px);
+      padding: 14px 14px 12px;
+      border-radius: 18px;
+      overflow: hidden;
+    }
+    .generation-steps-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .generation-steps-title {
+      margin: 0;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 750;
+      letter-spacing: 0;
+    }
+    .generation-steps-count {
+      flex: none;
+      color: var(--accent-warm);
+      font-size: 11px;
+      font-weight: 750;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.08em;
+      padding-top: 2px;
+    }
+    .generation-steps-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 5px;
+      max-height: calc(100vh - 168px);
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 210, 139, 0.38) transparent;
+    }
+    .generation-step {
+      appearance: none;
+      border: 0;
+      width: 100%;
+      cursor: pointer;
+      color: inherit;
+      background: rgba(255, 247, 234, 0.055);
+      border-radius: 10px;
+      padding: 8px 9px;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      text-align: left;
+      box-shadow: inset 0 0 0 1px rgba(255, 247, 234, 0.07);
+      transition: background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+    }
+    .generation-step:hover {
+      background: rgba(255, 237, 194, 0.12);
+    }
+    .generation-step.is-selected {
+      background: rgba(255, 237, 194, 0.18);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.20),
+        0 5px 18px rgba(45, 30, 20, 0.18);
+    }
+    .generation-step.is-hidden {
+      color: rgba(255, 247, 234, 0.44);
+      background: rgba(18, 11, 6, 0.12);
+    }
+    .generation-step.is-current .generation-step-index {
+      color: #1a120a;
+      background: linear-gradient(180deg, #ffe1a8, #ef8f4e);
+      box-shadow: 0 0 12px rgba(239, 143, 78, 0.42);
+    }
+    .generation-step-index {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-warm);
+      background: rgba(255, 247, 234, 0.08);
+      font-size: 10px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.04em;
+      text-shadow: none;
+    }
+    .generation-step-copy {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+    }
+    .generation-step-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.01em;
+    }
+    .generation-step-phase {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-muted);
+      font-size: 10.5px;
+      line-height: 1.25;
+    }
+    .generation-step-state {
+      color: var(--text-faint);
+      font-size: 9.5px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .generation-step.is-shown .generation-step-state { color: var(--accent-warm); }
+    .generation-step:focus-visible {
+      outline: 2px solid rgba(255, 239, 197, 0.85);
+      outline-offset: 2px;
+    }
+    .generation-modal-shell {
+      position: fixed;
+      inset: 0;
+      pointer-events: auto;
+      z-index: 8;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }
+    .generation-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 8, 3, 0.28);
+    }
+    .generation-modal {
+      width: min(430px, calc(100vw - 36px));
+      max-height: calc(100vh - 54px);
+      overflow: auto;
+      padding: 18px 20px 18px;
+      border-radius: 18px;
+      animation: gui-panel-in 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    .generation-modal-title {
+      margin: 0 34px 14px 0;
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 760;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .generation-modal-section {
+      padding-top: 12px;
+      border-top: 1px solid var(--glass-stroke);
+    }
+    .generation-modal-section + .generation-modal-section { margin-top: 12px; }
+    .generation-modal-section h3 {
+      margin: 0 0 6px;
+      color: var(--accent-warm);
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .generation-modal-section p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+    .generation-modal-close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      appearance: none;
+      border: 0;
+      cursor: pointer;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      background: rgba(255, 247, 234, 0.08);
+      box-shadow: inset 0 0 0 1px var(--glass-stroke);
+      transition: color 160ms ease, background 160ms ease, transform 140ms ease;
+    }
+    .generation-modal-close:hover {
+      color: var(--text);
+      background: rgba(255, 237, 194, 0.18);
+    }
+    .generation-modal-close:active { transform: scale(0.94); }
+    .generation-modal-close:focus-visible {
+      outline: 2px solid rgba(255, 239, 197, 0.85);
+      outline-offset: 3px;
+    }
+
     /* ---------- Plant inspection ---------- */
     .plant-inspection-shell {
       position: fixed;
@@ -682,7 +894,6 @@
 
     /* ---------- Focus visibility ---------- */
     .gui-icon-button:focus-visible,
-    .gui-toggle:focus-visible,
     .gui-panel-foot a:focus-visible {
       outline: 2px solid rgba(255, 239, 197, 0.85);
       outline-offset: 3px;
@@ -710,10 +921,10 @@
 
       /* Mode toggle: tighter */
       .gui-toggle { min-width: 0; }
-      .gui-toggle span {
-        padding: 7px 12px;
-        font-size: 10.5px;
-        letter-spacing: 0.06em;
+      .gui-toggle button {
+        padding: 7px 9px;
+        font-size: 9.5px;
+        letter-spacing: 0.045em;
       }
 
       /* Help / About panels: full-width sheet below the top toolbars */
@@ -733,6 +944,18 @@
         right: 12px;
         width: auto;
         max-width: none;
+      }
+      .gui-toolbar-right .generation-steps {
+        position: fixed;
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+        width: auto;
+        max-width: none;
+        max-height: min(54vh, 430px);
+      }
+      .generation-steps-list {
+        max-height: calc(min(54vh, 430px) - 74px);
       }
 
       /* Generation progress: drop below the toolbars so it doesn't get covered */
@@ -765,7 +988,7 @@
 
     @media (max-width: 380px) {
       .gui-toolbar-left .gui-icon-button { padding: 7px 8px; }
-      .gui-toggle span { padding: 6px 9px; font-size: 10px; }
+      .gui-toggle button { padding: 6px 6px; font-size: 8.8px; }
       .gui-pill { padding: 3px; }
     }
   </style>

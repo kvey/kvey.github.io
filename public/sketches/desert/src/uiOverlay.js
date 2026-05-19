@@ -196,12 +196,19 @@ function DesertUi({
   initialTimeOfDay = 7,
   initialTimeOfYear = DEFAULT_TIME_OF_YEAR,
   initialSunAzimuth = 145,
+  generationSteps = [],
+  initialGenerationStepKey = '',
   onControlModeChange = () => {},
+  onGenerationStepChange = () => {},
   onSunControlsChange = () => {},
   onPlaybackChange = () => {},
 }) {
   const [activePanel, setActivePanel] = useState(null);
-  const [isFullControls, setIsFullControls] = useState(false);
+  const [controlMode, setControlMode] = useState('simple');
+  const [selectedGenerationStepKey, setSelectedGenerationStepKey] = useState(
+    initialGenerationStepKey || generationSteps[generationSteps.length - 1]?.key || '',
+  );
+  const [generationModalStepKey, setGenerationModalStepKey] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [rate, setRate] = useState(1);
   const [sunControls, setSunControls] = useState({
@@ -226,8 +233,13 @@ function DesertUi({
   }, [bindProgressSetter, bindSunControlsSetter, bindPlantInspectionSetter]);
 
   useEffect(() => {
-    onControlModeChange(isFullControls);
-  }, [isFullControls, onControlModeChange]);
+    onControlModeChange(controlMode);
+  }, [controlMode, onControlModeChange]);
+
+  useEffect(() => {
+    if (!selectedGenerationStepKey) return;
+    onGenerationStepChange(selectedGenerationStepKey);
+  }, [selectedGenerationStepKey, onGenerationStepChange]);
 
   useEffect(() => {
     onPlaybackChange({ isPlaying, rate });
@@ -284,6 +296,15 @@ function DesertUi({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [plantInspection]);
+
+  useEffect(() => {
+    if (!generationModalStepKey) return undefined;
+    function onKey(event) {
+      if (event.key === 'Escape') setGenerationModalStepKey(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [generationModalStepKey]);
 
   function applySunControls(nextPartial) {
     const next = { ...sunControls, ...nextPartial };
@@ -360,17 +381,21 @@ function DesertUi({
 
     h('div', { className: 'gui-toolbar gui-toolbar-right' },
       h('div', { className: 'gui-glass gui-pill' },
-        h('button', {
+        h('div', {
           className: 'gui-toggle',
-          type: 'button',
-          'aria-pressed': isFullControls,
-          onClick: () => setIsFullControls(value => !value),
+          role: 'group',
+          'aria-label': 'Control mode',
         },
-          h('span', { className: isFullControls ? '' : 'is-active' }, 'Simple'),
-          h('span', { className: isFullControls ? 'is-active' : '' }, 'Full'),
+          ['simple', 'full', 'step'].map(mode => h('button', {
+            key: mode,
+            className: controlMode === mode ? 'is-active' : '',
+            type: 'button',
+            'aria-pressed': controlMode === mode,
+            onClick: () => setControlMode(mode),
+          }, mode === 'step' ? 'Step-by-step' : capitalize(mode))),
         ),
       ),
-      !isFullControls && h('div', { className: 'gui-glass gui-controls' },
+      controlMode === 'simple' && h('div', { className: 'gui-glass gui-controls' },
         h(SimpleSunControls, {
           timeOfDay: sunControls.timeOfDay,
           timeOfYear: sunControls.timeOfYear,
@@ -384,9 +409,23 @@ function DesertUi({
           onTimeOfYearChange: value => applySunControls({ timeOfYear: value }),
         }),
       ),
+      controlMode === 'step' && h(GenerationStepPanel, {
+        steps: generationSteps,
+        selectedKey: selectedGenerationStepKey,
+        progress,
+        onSelect: step => {
+          setSelectedGenerationStepKey(step.key);
+          setGenerationModalStepKey(step.key);
+        },
+      }),
     ),
 
     progress.visible && h('div', { className: 'gui-glass gui-progress' }, h(ProgressView, progress)),
+
+    generationModalStepKey && h(GenerationStepModal, {
+      step: generationSteps.find(item => item.key === generationModalStepKey),
+      onClose: () => setGenerationModalStepKey(null),
+    }),
 
     plantInspection && h(PlantInspectionPanel, {
       speciesKey: plantInspection.speciesKey,
@@ -468,7 +507,8 @@ function AboutContent() {
       h('p', null,
         'The sun follows real Tucson coordinates — ', h('strong', null, '32.22°N, 110.97°W'),
         '. Built with Three.js, simplex-noise, and custom GLSL shaders. Switch to ',
-        h('strong', null, 'Full'), ' to tune every parameter.'
+        h('strong', null, 'Full'), ' to tune every parameter, or ',
+        h('strong', null, 'Step-by-step'), ' to inspect the generation order.'
       ),
     ),
     h('div', { className: 'gui-panel-foot' },
@@ -584,6 +624,77 @@ function ProgressView({ progress, phase }) {
         className: 'gui-progress-bar',
         style: { width: `${progress * 100}%` },
       }),
+    ),
+  );
+}
+
+function GenerationStepPanel({ steps, selectedKey, progress, onSelect }) {
+  const selectedIndex = Math.max(0, steps.findIndex(step => step.key === selectedKey));
+  const currentIndex = generationProgressStepIndex(steps, progress);
+  return h('div', { className: 'gui-glass generation-steps' },
+    h('div', { className: 'generation-steps-head' },
+      h('div', null,
+        h('div', { className: 'gui-panel-eyebrow' }, 'Generation'),
+        h('h2', { className: 'generation-steps-title' }, 'Step-by-step'),
+      ),
+      h('span', { className: 'generation-steps-count' }, `${selectedIndex + 1}/${Math.max(steps.length, 1)}`),
+    ),
+    h('ol', { className: 'generation-steps-list' },
+      steps.map((step, index) => {
+        const isSelected = step.key === selectedKey;
+        const isShown = index <= selectedIndex;
+        const isCurrent = progress.visible && index === currentIndex;
+        return h('li', { key: step.key },
+          h('button', {
+            className: [
+              'generation-step',
+              isSelected ? 'is-selected' : '',
+              isShown ? 'is-shown' : 'is-hidden',
+              isCurrent ? 'is-current' : '',
+            ].filter(Boolean).join(' '),
+            type: 'button',
+            onClick: () => onSelect(step),
+          },
+            h('span', { className: 'generation-step-index' }, String(index + 1).padStart(2, '0')),
+            h('span', { className: 'generation-step-copy' },
+              h('span', { className: 'generation-step-label' }, step.label),
+              h('span', { className: 'generation-step-phase' }, step.phase),
+            ),
+            h('span', { className: 'generation-step-state' }, isShown ? 'Shown' : 'Later'),
+          ),
+        );
+      }),
+    ),
+  );
+}
+
+function GenerationStepModal({ step, onClose }) {
+  if (!step) return null;
+  return h('div', { className: 'generation-modal-shell', role: 'presentation' },
+    h('div', { className: 'generation-modal-backdrop', onPointerDown: onClose }),
+    h('section', {
+      className: 'gui-glass generation-modal',
+      role: 'dialog',
+      'aria-modal': true,
+      'aria-labelledby': 'generation-modal-title',
+    },
+      h('button', {
+        className: 'generation-modal-close',
+        type: 'button',
+        'aria-label': 'Close generation stage explanation',
+        title: 'Close',
+        onClick: onClose,
+      }, h(CloseIcon)),
+      h('div', { className: 'gui-panel-eyebrow' }, 'Generation stage'),
+      h('h2', { id: 'generation-modal-title', className: 'generation-modal-title' }, step.label),
+      h('div', { className: 'generation-modal-section' },
+        h('h3', null, 'What happens'),
+        h('p', null, step.explains),
+      ),
+      h('div', { className: 'generation-modal-section' },
+        h('h3', null, 'Why it happens here'),
+        h('p', null, step.why),
+      ),
     ),
   );
 }
@@ -740,6 +851,18 @@ function CloseIcon() {
 /* ---------- Helpers ---------- */
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function capitalize(value) {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function generationProgressStepIndex(steps, progress) {
+  if (!steps.length) return -1;
+  const phase = progress.phase || '';
+  const matchingIndex = steps.findIndex(step => phase.includes(step.phase));
+  if (matchingIndex >= 0) return matchingIndex;
+  return clamp(Math.floor(progress.progress * steps.length), 0, steps.length - 1);
 }
 
 function wrapTimeOfDay(timeOfDay) {

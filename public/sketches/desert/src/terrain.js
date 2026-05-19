@@ -67,6 +67,9 @@ export function buildTerrain(params, seed) {
     fanStrength = 0.72,
     erosionStrength = 0.75,
     rockySlopeStrength = 0.38,
+    recentRainDays = 999,
+    monsoonRain_0_1 = 0,
+    winterRain_0_1 = 0,
   } = params;
   const half = size / 2;
   const invSize = 1 / size;
@@ -328,12 +331,108 @@ export function buildTerrain(params, seed) {
     const surfaceHeight = sample(x, z);
     const g = gradient(x, z, eps);
     const slopeMagnitude = Math.sqrt(g.hx * g.hx + g.hz * g.hz);
+    const slope_deg = Math.atan(slopeMagnitude) * 180 / Math.PI;
+    // Aspect is the downslope bearing: 0=N (-Z), 90=E (+X), 180=S (+Z), 270=W (-X).
+    const aspect = positiveDegrees(Math.atan2(-g.hx, g.hz) * 180 / Math.PI);
+    const washDistance_m = Math.max(0, (1 - info.wash.proximity) * THREE.MathUtils.lerp(18, 7, info.wash.gravel));
+    const rockCover_0_1 = clamp01(
+      info.ridge * 0.38 +
+      info.shoulder * 0.30 +
+      clamp01(slopeMagnitude * 0.82) * 0.24 +
+      info.wash.gravel * 0.16
+    );
+    const runonIndex_0_1 = clamp01(info.flowAccumulation * 0.64 + info.soilMoisture * 0.36);
+    const landform = classifyLandform({
+      wash: info.wash,
+      flowAccumulation: info.flowAccumulation,
+      soilMoisture: info.soilMoisture,
+      runoff: info.runoff,
+      shoulder: info.shoulder,
+      basin: info.basin,
+      ridge: info.ridge,
+      slope: slopeMagnitude,
+      rockCover_0_1,
+    });
+    const soilTexture = classifySoilTexture({
+      landform,
+      wash: info.wash,
+      basin: info.basin,
+      runoff: info.runoff,
+      soilMoisture: info.soilMoisture,
+      slope: slopeMagnitude,
+      rockCover_0_1,
+    });
+    const soilDepth_m = estimateSoilDepth({
+      landform,
+      soilTexture,
+      slope: slopeMagnitude,
+      wash: info.wash,
+      basin: info.basin,
+      rockCover_0_1,
+    });
+    const calicheDepth_m = estimateCalicheDepth({
+      landform,
+      soilTexture,
+      wash: info.wash,
+      basin: info.basin,
+      rockCover_0_1,
+    });
+    const southAspect = Math.max(0, Math.cos((aspect - 180) * Math.PI / 180));
+    const northAspect = Math.max(0, Math.cos(aspect * Math.PI / 180));
+    const frostRisk_0_1 = clamp01(
+      info.basin * 0.38 +
+      northAspect * 0.22 +
+      clamp01((-surfaceHeight + 1.8) * 0.08) +
+      (1 - info.runoff) * 0.10 -
+      southAspect * 0.18 -
+      info.shoulder * 0.12
+    );
+    const disturbanceNoise = colorNoise((x + 219.4) * 0.011, (z - 83.7) * 0.011) * 0.5 + 0.5;
+    const fireOrGrassDisturbance_0_1 = clamp01(
+      disturbanceNoise * 0.22 +
+      info.basin * 0.16 +
+      info.wash.proximity * (1 - info.wash.gravel) * 0.10 -
+      rockCover_0_1 * 0.18
+    );
+    const cell = {
+      elevation_m: surfaceHeight,
+      slope_deg,
+      aspect,
+      soilTexture,
+      soilDepth_m,
+      calicheDepth_m,
+      rockCover_0_1,
+      washDistance_m,
+      runonIndex_0_1,
+      frostRisk_0_1,
+      recentRainDays,
+      monsoonRain_0_1,
+      winterRain_0_1,
+      fireOrGrassDisturbance_0_1,
+      landform,
+    };
     const downhill = new THREE.Vector2(-g.hx, -g.hz);
     if (downhill.lengthSq() > 0.000001) downhill.normalize();
     return {
       ...info,
       height: surfaceHeight,
+      elevation_m: surfaceHeight,
       slope: slopeMagnitude,
+      slope_deg,
+      aspect,
+      soilTexture,
+      soilDepth_m,
+      calicheDepth_m,
+      rockCover_0_1,
+      washDistance_m,
+      runonIndex_0_1,
+      frostRisk_0_1,
+      recentRainDays,
+      monsoonRain_0_1,
+      winterRain_0_1,
+      fireOrGrassDisturbance_0_1,
+      landform,
+      cell,
       flowDirection: downhill,
       // Positive values mean runoff is likely to move toward the basin/south.
       southFlow: clamp01((downhill.y + 1) * 0.5),
@@ -355,6 +454,8 @@ export function buildTerrain(params, seed) {
   const ridge = new Float32Array(pos.count);
   const colors = new Float32Array(pos.count * 3);
   const terrainDetail = new Float32Array(pos.count * 4);
+  const terrainLandform = new Float32Array(pos.count);
+  const terrainDebugData = new Float32Array(pos.count * 4);
   const sand = new THREE.Color(0xc6a16d);
   const sandLight = new THREE.Color(0xd8bd8b);
   const desertVarnish = new THREE.Color(0x715036);
@@ -391,6 +492,53 @@ export function buildTerrain(params, seed) {
     const hx = (heightField[right] - heightField[left]) / dx;
     const hz = (heightField[next] - heightField[prev]) / dz;
     const s = Math.sqrt(hx * hx + hz * hz);
+    const sampledInfo = sampleHydrologyField(x, z);
+    const rockCover_0_1 = clamp01(
+      ridge[i] * 0.38 +
+      shoulder[i] * 0.30 +
+      clamp01(s * 0.82) * 0.24 +
+      washGravel[i] * 0.16
+    );
+    const landform = classifyLandform({
+      wash: {
+        gravel: washGravel[i],
+        proximity: washProximity[i],
+        bank: sampledInfo.wash.bank,
+      },
+      flowAccumulation: sampledInfo.flowAccumulation,
+      soilMoisture: sampledInfo.soilMoisture,
+      runoff: sampledInfo.runoff,
+      shoulder: shoulder[i],
+      basin: basin[i],
+      ridge: ridge[i],
+      slope: s,
+      rockCover_0_1,
+    });
+    const soilTexture = classifySoilTexture({
+      landform,
+      wash: {
+        gravel: washGravel[i],
+        proximity: washProximity[i],
+        bank: sampledInfo.wash.bank,
+      },
+      basin: basin[i],
+      runoff: sampledInfo.runoff,
+      soilMoisture: sampledInfo.soilMoisture,
+      slope: s,
+      rockCover_0_1,
+    });
+    const runonIndex_0_1 = clamp01(sampledInfo.flowAccumulation * 0.64 + sampledInfo.soilMoisture * 0.36);
+    const aspect = positiveDegrees(Math.atan2(-hx, hz) * 180 / Math.PI);
+    const southAspect = Math.max(0, Math.cos((aspect - 180) * Math.PI / 180));
+    const northAspect = Math.max(0, Math.cos(aspect * Math.PI / 180));
+    const frostRisk_0_1 = clamp01(
+      basin[i] * 0.38 +
+      northAspect * 0.22 +
+      clamp01((-heightField[i] + 1.8) * 0.08) +
+      (1 - sampledInfo.runoff) * 0.10 -
+      southAspect * 0.18 -
+      shoulder[i] * 0.12
+    );
     const mottle = colorNoise(x * 0.55, z * 0.55) * 0.5 + 0.5;
     const dirty = colorNoise((x - 17.3) * 0.12, (z + 11.9) * 0.12) * 0.5 + 0.5;
     const paleCrust = smoothstep(0.22, 0.74, basin[i]) * (1 - washGravel[i]) * (colorNoise(x * 0.08, z * 0.08) * 0.5 + 0.5);
@@ -410,9 +558,16 @@ export function buildTerrain(params, seed) {
     terrainDetail[i * 4 + 1] = shoulder[i];
     terrainDetail[i * 4 + 2] = basin[i];
     terrainDetail[i * 4 + 3] = Math.min(1, s * 0.65);
+    terrainLandform[i] = landformIndex(landform);
+    terrainDebugData[i * 4] = Math.max(0, SOIL_TEXTURE_NAMES.indexOf(soilTexture));
+    terrainDebugData[i * 4 + 1] = runonIndex_0_1;
+    terrainDebugData[i * 4 + 2] = frostRisk_0_1;
+    terrainDebugData[i * 4 + 3] = rockCover_0_1;
   }
   geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geom.setAttribute('terrainDetail', new THREE.BufferAttribute(terrainDetail, 4));
+  geom.setAttribute('terrainLandform', new THREE.BufferAttribute(terrainLandform, 1));
+  geom.setAttribute('terrainDebugData', new THREE.BufferAttribute(terrainDebugData, 4));
   geom.computeVertexNormals();
 
   const mat = createTerrainMaterial();
@@ -420,4 +575,115 @@ export function buildTerrain(params, seed) {
   mesh.receiveShadow = true;
 
   return { mesh, sample, slope, sampleInfo, size };
+}
+
+function positiveDegrees(degrees) {
+  return ((degrees % 360) + 360) % 360;
+}
+
+const LANDFORM_NAMES = Object.freeze([
+  'rockySlope',
+  'upperBajada',
+  'wash',
+  'washMargin',
+  'lowerBajada',
+  'sandyAlluvialFlat',
+  'calicheFlat',
+  'basinFlat',
+]);
+const SOIL_TEXTURE_NAMES = Object.freeze(['rock', 'gravel', 'wash_alluvium', 'sand', 'loam', 'clay']);
+
+function classifyLandform({
+  wash,
+  flowAccumulation,
+  soilMoisture,
+  runoff,
+  shoulder,
+  basin,
+  ridge,
+  slope,
+  rockCover_0_1,
+}) {
+  const washScore = clamp01(wash.proximity * 0.54 + wash.gravel * 0.34 + flowAccumulation * 0.22);
+  const washMargin = clamp01(wash.proximity * (1 - wash.gravel * 0.58) + wash.bank * 0.55);
+  const rockySlope = clamp01(shoulder * 0.45 + ridge * 0.34 + rockCover_0_1 * 0.32 + slope * 0.20);
+  const upperBajada = clamp01(shoulder * 0.42 + runoff * 0.24 + ridge * 0.16 + (1 - basin) * 0.12 - washScore * 0.18);
+  const lowerBajada = clamp01(basin * 0.44 + runoff * 0.12 + (1 - soilMoisture) * 0.20 - washScore * 0.18 - shoulder * 0.10);
+  const sandyAlluvialFlat = clamp01(basin * 0.46 + (1 - slope * 1.7) * 0.24 + (1 - rockCover_0_1) * 0.20 - wash.gravel * 0.14);
+  const calicheFlat = clamp01(basin * 0.38 + (1 - slope * 1.9) * 0.22 + (1 - soilMoisture) * 0.18 - washScore * 0.12);
+  const basinFlat = clamp01(basin * 0.54 + (1 - slope * 2.2) * 0.26 - shoulder * 0.16);
+  return {
+    rockySlope,
+    upperBajada,
+    wash: washScore,
+    washMargin,
+    lowerBajada,
+    sandyAlluvialFlat,
+    calicheFlat,
+    basinFlat,
+  };
+}
+
+function primaryLandformName(landform = {}) {
+  let bestName = 'unknown';
+  let bestScore = -Infinity;
+  for (const name of LANDFORM_NAMES) {
+    const score = landform[name] ?? 0;
+    if (score <= bestScore) continue;
+    bestScore = score;
+    bestName = name;
+  }
+  return bestName;
+}
+
+function landformIndex(landform = {}) {
+  const name = primaryLandformName(landform);
+  return Math.max(0, LANDFORM_NAMES.indexOf(name));
+}
+
+function classifySoilTexture({
+  landform,
+  wash,
+  basin,
+  runoff,
+  soilMoisture,
+  slope,
+  rockCover_0_1,
+}) {
+  if (landform.wash > 0.58 && (wash.gravel > 0.28 || landform.washMargin > 0.52)) return 'wash_alluvium';
+  if (rockCover_0_1 > 0.62 || landform.rockySlope > 0.72) return 'rock';
+  if (wash.gravel > 0.38 || (landform.upperBajada > 0.52 && rockCover_0_1 > 0.28)) return 'gravel';
+  if (basin > 0.64 && slope < 0.16 && soilMoisture > 0.58 && runoff < 0.22 && wash.gravel < 0.18) return 'clay';
+  if (landform.sandyAlluvialFlat > 0.56 && rockCover_0_1 < 0.24) return 'sand';
+  return 'loam';
+}
+
+function estimateSoilDepth({
+  landform,
+  soilTexture,
+  slope,
+  wash,
+  basin,
+  rockCover_0_1,
+}) {
+  let depth = 0.42 + basin * 0.34 + landform.wash * 0.48 + landform.washMargin * 0.26;
+  depth -= rockCover_0_1 * 0.34 + slope * 0.18;
+  if (soilTexture === 'rock') depth *= 0.42;
+  if (soilTexture === 'gravel') depth *= 0.78;
+  if (soilTexture === 'wash_alluvium') depth += 0.34 + wash.gravel * 0.12;
+  if (soilTexture === 'clay') depth += 0.16;
+  return THREE.MathUtils.clamp(depth, 0.08, 1.65);
+}
+
+function estimateCalicheDepth({
+  landform,
+  soilTexture,
+  wash,
+  basin,
+  rockCover_0_1,
+}) {
+  if (soilTexture === 'wash_alluvium' || landform.wash > 0.68) return THREE.MathUtils.clamp(1.10 + wash.gravel * 0.45, 0.55, 2.0);
+  if (soilTexture === 'rock') return THREE.MathUtils.clamp(0.12 + rockCover_0_1 * 0.20, 0.06, 0.55);
+  const calicheFlat = Math.max(landform.calicheFlat, landform.lowerBajada * 0.72, basin * 0.45);
+  return THREE.MathUtils.clamp(THREE.MathUtils.lerp(1.25, 0.24, calicheFlat) + rockCover_0_1 * 0.22, 0.12, 1.7);
 }

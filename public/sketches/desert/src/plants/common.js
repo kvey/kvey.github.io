@@ -4,6 +4,10 @@ export function resolveDetailScale(opts = {}, min = 0.45) {
   return THREE.MathUtils.clamp(opts.detailScale ?? 1, min, 1);
 }
 
+export function resolveStructureScale(opts = {}, min = 0.45) {
+  return THREE.MathUtils.clamp(opts.structureDetailScale ?? opts.detailScale ?? 1, min, 1);
+}
+
 export function scaledSegments(value, detailScale, min) {
   return Math.max(min, Math.round(value * detailScale));
 }

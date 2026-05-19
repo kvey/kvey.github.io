@@ -16,9 +16,10 @@ export function createOcotilloMaterial() {
     ocotilloFlowerVisibility: { value: 1 },
   };
   material.userData.setSeasonalVisibility = ({
+    seasonalState = null,
     ocotilloFlowering = true,
   } = {}) => {
-    seasonalUniforms.ocotilloFlowerVisibility.value = ocotilloFlowering ? 1 : 0;
+    seasonalUniforms.ocotilloFlowerVisibility.value = (seasonalState?.ocotilloFlowering ?? ocotilloFlowering) ? 1 : 0;
   };
 
   material.onBeforeCompile = (shader) => {

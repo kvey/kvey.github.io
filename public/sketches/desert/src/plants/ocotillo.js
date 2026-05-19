@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sweepRibbedTube, mergeGeometries, resolveDetailScale, resolvePlantAge, scaledSegments, paintGeometry } from './common.js';
+import { sweepRibbedTube, mergeGeometries, resolveDetailScale, resolvePlantAge, resolveStructureScale, scaledSegments, paintGeometry } from './common.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
 
@@ -8,16 +8,18 @@ import { resolveProportionOracle } from '../proportions.js';
 // red-orange tubular flower clusters sit at the cane tips when in bloom.
 export function generateOcotillo(rng, opts = {}) {
   const detailScale = resolveDetailScale(opts);
+  const structureScale = resolveStructureScale(opts);
   const proportions = resolveProportionOracle(opts);
   // Lifecycle scalar: young ocotillos have a few short whips; old plants form
   // tall, many-stemmed crowns with darker basal canes and more bloom tips.
   const age = resolvePlantAge(rng, opts, 0.64);
   const maturity = THREE.MathUtils.smoothstep(age, 0.16, 0.78);
   const oldGrowth = THREE.MathUtils.smoothstep(age, 0.62, 1.0);
+  const caneBudget = THREE.MathUtils.lerp(0.36, 1.0, structureScale);
   const stemCount = rngInt(
     rng,
-    Math.round(THREE.MathUtils.lerp(3, 9, maturity)),
-    Math.round(THREE.MathUtils.lerp(6, 24, maturity + oldGrowth * 0.20)),
+    Math.round(THREE.MathUtils.lerp(4, 14, maturity) * caneBudget),
+    Math.max(6, Math.round(THREE.MathUtils.lerp(8, 100, maturity + oldGrowth * 0.36) * caneBudget)),
   );
   const stemHeight = THREE.MathUtils.lerp(
     proportions.ocotillo.stemHeight[0] * 0.38,
@@ -30,7 +32,8 @@ export function generateOcotillo(rng, opts = {}) {
     maturity,
   ) * rngRange(rng, 0.82, 1.16);
   const flowering = (opts.flowering ?? rngChance(rng, THREE.MathUtils.lerp(0.08, 0.46, maturity))) && age > 0.34;
-  const plantHydration = rngChance(rng, 0.42) ? rngRange(rng, 0.58, 1.0) : rngRange(rng, 0.0, 0.28);
+  const leafFlush = opts.leafFlush ?? false;
+  const plantHydration = leafFlush ? rngRange(rng, 0.68, 1.0) : rngChance(rng, 0.42) ? rngRange(rng, 0.58, 1.0) : rngRange(rng, 0.0, 0.28);
 
   const dryBark = new THREE.Color(0x756a58);
   const oldBark = new THREE.Color(0x4f4638);
@@ -91,6 +94,33 @@ export function generateOcotillo(rng, opts = {}) {
     });
     parts.push(stem);
 
+    if (leafFlush && stemHydration > 0.42 && detailScale > 0.44) {
+      const leafCount = scaledSegments(
+        rngInt(rng, Math.round(THREE.MathUtils.lerp(4, 8, maturity)), Math.round(THREE.MathUtils.lerp(8, 18, maturity))),
+        detailScale,
+        3,
+      );
+      for (let leafIndex = 0; leafIndex < leafCount; leafIndex++) {
+        const t = rngRange(rng, 0.08, 0.88);
+        const center = curve.getPointAt(t);
+        const tangent = curve.getTangentAt(t).normalize();
+        const around = rng() * Math.PI * 2;
+        const side = new THREE.Vector3(Math.cos(around), 0, Math.sin(around));
+        if (Math.abs(side.dot(tangent)) > 0.88) side.crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+        const leafLength = rngRange(rng, proportions.ocotillo.stemRadius[0] * 2.8, proportions.ocotillo.stemRadius[1] * 5.2);
+        parts.push(makeOcotilloLeafCard({
+          center: center.addScaledVector(side, baseR * rngRange(rng, 1.2, 1.8)),
+          tangent,
+          side,
+          length: leafLength,
+          width: leafLength * rngRange(rng, 0.18, 0.28),
+          color: wetStem.clone().offsetHSL(0.02, 0.10, 0.08),
+          hydration: stemHydration,
+          id: rng(),
+        }));
+      }
+    }
+
     // Flowering canes carry loose red-orange clusters at the tips.
     if (flowering && rngChance(rng, THREE.MathUtils.lerp(0.22, 0.86, stemHydration) * THREE.MathUtils.lerp(0.42, 1.0, maturity))) {
       const tip = curve.getPointAt(1);
@@ -136,6 +166,9 @@ export function generateOcotillo(rng, opts = {}) {
 
   const geom = mergeGeometries(parts);
   geom.userData.age = age;
+  geom.userData.growthStage = age < 0.24 ? 'juvenile_canes' : age < 0.68 ? 'adult_wand_cluster' : 'old_dense_cane_crown';
+  geom.userData.leafFlush = leafFlush;
+  geom.userData.caneCount = stemCount;
   return geom;
 }
 
@@ -168,6 +201,48 @@ function addOcotilloDetail(geom, {
   }
 
   geom.setAttribute('ocotilloDetail', new THREE.BufferAttribute(detail, 4));
+}
+
+function makeOcotilloLeafCard({
+  center,
+  tangent,
+  side,
+  length,
+  width,
+  color,
+  hydration,
+  id,
+}) {
+  const along = tangent.clone().normalize();
+  const lateral = side.clone().normalize();
+  const lift = new THREE.Vector3().crossVectors(lateral, along).normalize().multiplyScalar(width * 0.18);
+  const p0 = center.clone().addScaledVector(along, -length * 0.46).addScaledVector(lateral, -width).add(lift);
+  const p1 = center.clone().addScaledVector(along, -length * 0.46).addScaledVector(lateral, width).add(lift);
+  const p2 = center.clone().addScaledVector(along, length * 0.54).addScaledVector(lateral, width * 0.18).add(lift);
+  const p3 = center.clone().addScaledVector(along, length * 0.54).addScaledVector(lateral, -width * 0.18).add(lift);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute([
+    p0.x, p0.y, p0.z,
+    p1.x, p1.y, p1.z,
+    p2.x, p2.y, p2.z,
+    p3.x, p3.y, p3.z,
+  ], 3));
+  const tint = color.clone().multiplyScalar(0.88 + (id % 1) * 0.22);
+  geom.setAttribute('color', new THREE.Float32BufferAttribute([
+    tint.r, tint.g, tint.b,
+    tint.r, tint.g, tint.b,
+    tint.r, tint.g, tint.b,
+    tint.r, tint.g, tint.b,
+  ], 3));
+  geom.setAttribute('ocotilloDetail', new THREE.Float32BufferAttribute([
+    0, 0.25, id, hydration,
+    0, 0.25, id, hydration,
+    0, 0.85, id, hydration,
+    0, 0.85, id, hydration,
+  ], 4));
+  geom.setIndex([0, 1, 2, 0, 2, 3]);
+  geom.computeVertexNormals();
+  return geom;
 }
 
 function addFlowerDetail(geom, { hydration }) {

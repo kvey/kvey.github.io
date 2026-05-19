@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stained Glass</title>
+  <style>
+    :root {
+      --ink: #fff4d8;
+      --muted: rgba(255, 244, 216, 0.65);
+      --faint: rgba(255, 244, 216, 0.42);
+      --accent: #ffc878;
+      --stroke: rgba(255, 244, 216, 0.16);
+      --stroke-strong: rgba(255, 244, 216, 0.28);
+    }
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #08070b; color: var(--ink); font-family: ui-sans-serif, system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+
+    .hud { position: fixed; pointer-events: none; }
+    .hud * { box-sizing: border-box; pointer-events: auto; }
+
+    .panel {
+      background: linear-gradient(135deg, rgba(255, 230, 190, 0.06), rgba(20, 12, 5, 0.32));
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      border: 1px solid var(--stroke);
+      border-radius: 14px;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 244, 216, 0.45),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+        0 14px 40px -8px rgba(0, 0, 0, 0.55);
+      color: var(--ink);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    }
+
+    /* ---- Header (top-left) ---- */
+    /* ---- Header pill + info panel (matches desert chrome) ---- */
+    .header {
+      top: 16px;
+      left: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .header .pill {
+      display: inline-flex;
+      align-items: stretch;
+      padding: 4px;
+      border-radius: 999px;
+      gap: 2px;
+    }
+    .header .pill-divider {
+      width: 1px;
+      align-self: stretch;
+      margin: 4px 0;
+      background: var(--stroke);
+    }
+    .header .icon-button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 13px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 11.5px;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      transition: background 160ms ease, color 160ms ease, transform 140ms ease;
+    }
+    .header .icon-button:hover { background: rgba(255, 244, 216, 0.10); }
+    .header .icon-button:active { transform: translateY(0.5px); }
+    .header .icon-button.is-active {
+      background: rgba(255, 237, 194, 0.20);
+      color: #fffaee;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+    }
+    .header .icon-button svg { flex: none; opacity: 0.85; }
+    .header .icon-button.is-active svg { opacity: 1; }
+    .header .icon-button:focus-visible {
+      outline: 2px solid rgba(255, 239, 197, 0.85);
+      outline-offset: 3px;
+    }
+
+    .header .info-panel {
+      padding: 16px 18px 14px;
+      border-radius: 18px;
+      max-width: min(360px, calc(100vw - 36px));
+      animation: header-panel-in 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    @keyframes header-panel-in {
+      from { opacity: 0; transform: translateY(-4px) scale(0.985); }
+      to   { opacity: 1; transform: none; }
+    }
+    .header .info-eyebrow {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .header .info-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.005em;
+      margin: 0 0 10px;
+      color: var(--ink);
+    }
+    .header .info-body {
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+    .header .info-body p { margin: 0 0 8px; }
+    .header .info-body p:last-child { margin-bottom: 0; }
+    .header .info-foot {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--stroke);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--faint);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* ---- Controls (bottom-right) ---- */
+    .controls {
+      bottom: 16px;
+      right: 16px;
+      width: min(300px, calc(100vw - 32px));
+    }
+    .controls .panel { padding: 14px 16px 16px; }
+    .controls h2 {
+      margin: 0 0 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .slider {
+      display: grid;
+      gap: 6px;
+      margin: 0 0 10px;
+    }
+    .slider:last-child { margin-bottom: 0; }
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .slider-label .accent { color: var(--accent); font-size: 11px; letter-spacing: 0.04em; text-transform: none; font-variant-numeric: tabular-nums; }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 18px;
+      margin: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]:focus { outline: none; }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(20, 12, 5, 0.45);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 244, 216, 0.08);
+    }
+    input[type="range"]::-moz-range-track {
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(20, 12, 5, 0.45);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      margin-top: -5px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fff5dc, #efc16a 70%, #b6803a);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 0 10px rgba(255, 200, 120, 0.55), 0 1px 3px rgba(0, 0, 0, 0.45);
+      cursor: grab;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fff5dc, #efc16a 70%, #b6803a);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 0 10px rgba(255, 200, 120, 0.55), 0 1px 3px rgba(0, 0, 0, 0.45);
+      cursor: grab;
+    }
+
+    .row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+    .button {
+      appearance: none;
+      border: 0;
+      cursor: pointer;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(255, 230, 190, 0.10);
+      color: var(--ink);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      box-shadow: inset 0 0 0 1px var(--stroke-strong);
+      transition: background 160ms ease, transform 140ms ease;
+    }
+    .button:hover { background: rgba(255, 230, 190, 0.18); }
+    .button:active { transform: scale(0.96); }
+    .button.primary {
+      background: linear-gradient(180deg, #ffe0a8, #ef9c4e);
+      color: #1a120a;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4), 0 0 14px rgba(239, 156, 78, 0.4);
+    }
+    .button.primary:hover { filter: brightness(1.06); }
+
+    /* ---- Source thumb (top-right) ---- */
+    .source { top: 16px; right: 16px; }
+    .source .panel {
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+      justify-items: end;
+    }
+    .source canvas { display: block; border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+    .source .label {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    /* ---- Status (bottom-left) ---- */
+    .status { bottom: 16px; left: 16px; }
+    .status .panel { padding: 7px 12px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* ---- Drop overlay ---- */
+    .drop-overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(8, 6, 4, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+    }
+    .drop-overlay.is-active { display: flex; }
+    .drop-overlay .panel {
+      padding: 28px 36px;
+      font-size: 14px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border-style: dashed;
+      border-color: var(--accent);
+    }
+
+    @media (max-width: 600px) {
+      .controls { width: calc(100vw - 32px); }
+      .source canvas { max-width: 60px; height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div class="hud header">
+    <div class="panel pill">
+      <a class="icon-button" href="/sketches" aria-label="Back to sketches">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+        </svg>
+        <span>Back</span>
+      </a>
+      <span class="pill-divider"></span>
+      <button class="icon-button" type="button" id="infoToggle" aria-pressed="false" aria-controls="infoPanel" aria-label="Sketch info">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="17"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/>
+        </svg>
+        <span>Info</span>
+      </button>
+    </div>
+    <div class="panel info-panel" id="infoPanel" hidden>
+      <div class="info-eyebrow">Sketch · Stained Glass</div>
+      <h2 class="info-title">Voronoi → Lead Came → Light Pool</h2>
+      <div class="info-body">
+        <p>Drop in any image and it gets re-cut: K-means posterizes the source into a small palette, connected components find color regions, Voronoi sub-cells subdivide flat areas, and Douglas-Peucker simplifies the outlines into cuttable polygons.</p>
+        <p>The glass texture is projected through the plane along the sun direction to pool colored light on the floor; the volume between is raymarched for god rays. Drop an image · drag to orbit · scroll to zoom.</p>
+      </div>
+      <div class="info-foot">
+        <span>Three.js · Custom shader</span>
+        <span>2026</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="hud source">
+    <div class="panel">
+      <div class="label">Source</div>
+      <canvas id="thumb" width="80" height="80" style="display: none"></canvas>
+    </div>
+  </div>
+
+  <div class="hud status">
+    <div class="panel"><span id="status">Loading…</span></div>
+  </div>
+
+  <div class="hud controls">
+    <div class="panel">
+      <h2>Glass</h2>
+
+      <div class="slider">
+        <div class="slider-label">
+          <span>Color palette</span>
+          <span class="accent" id="pieceMergeVal">—</span>
+        </div>
+        <input id="pieceMerge" type="range" min="0" max="100" value="44">
+      </div>
+
+      <div class="slider">
+        <div class="slider-label">
+          <span>Piece subdivision</span>
+          <span class="accent" id="cellDensityVal">—</span>
+        </div>
+        <input id="cellDensity" type="range" min="0" max="100" value="60">
+      </div>
+
+      <div class="slider">
+        <div class="slider-label">
+          <span>Min piece size</span>
+          <span class="accent" id="minPieceVal">—</span>
+        </div>
+        <input id="minPiece" type="range" min="0" max="100" value="45">
+      </div>
+
+      <div class="slider">
+        <div class="slider-label">
+          <span>Edge curve</span>
+          <span class="accent" id="edgeCurveVal">—</span>
+        </div>
+        <input id="edgeCurve" type="range" min="0" max="100" value="45">
+      </div>
+
+      <div class="slider">
+        <div class="slider-label">
+          <span>Lead thickness</span>
+          <span class="accent" id="leadThicknessVal">—</span>
+        </div>
+        <input id="leadThickness" type="range" min="1" max="5" value="2">
+      </div>
+
+      <h2 style="margin-top: 14px">Light</h2>
+
+      <div class="slider">
+        <div class="slider-label">
+          <span>Sun azimuth</span>
+          <span class="accent" id="timeOfDayVal">—</span>
+        </div>
+        <input id="timeOfDay" type="range" min="0" max="100" value="45">
+      </div>
+
+      <div class="slider">
+        <div class="slider-label">
+          <span>Sun elevation</span>
+          <span class="accent" id="sunElevVal">—</span>
+        </div>
+        <input id="sunElev" type="range" min="0" max="100" value="42">
+      </div>
+
+      <div class="slider">
+        <div class="slider-label">
+          <span>God rays</span>
+          <span class="accent" id="raysIntensityVal">—</span>
+        </div>
+        <input id="raysIntensity" type="range" min="0" max="100" value="55">
+      </div>
+
+      <div class="row">
+        <button class="button primary" id="regenerate">Regenerate</button>
+        <button class="button" id="pickFile">Image…</button>
+        <input id="fileInput" type="file" accept="image/*" style="display:none">
+      </div>
+    </div>
+  </div>
+
+  <div class="drop-overlay" id="dropOverlay">
+    <div class="panel">Drop image to re-cut the glass</div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

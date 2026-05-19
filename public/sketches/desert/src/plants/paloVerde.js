@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { mergeGeometries, resolveDetailScale, resolvePlantAge, scaledSegments } from './common.js';
-import { makeBranchSegment, makeLeafletSpray, makeThornCluster, safeSideVector } from './treeCommon.js';
+import { mergeGeometries, resolveDetailScale, resolvePlantAge, resolveStructureScale, scaledSegments } from './common.js';
+import { makeBranchSegment, makeLeafletSpray, makePodCluster, makeThornCluster, safeSideVector } from './treeCommon.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
 
@@ -10,13 +10,14 @@ const UP = new THREE.Vector3(0, 1, 0);
 // angular twigs, tiny bipinnate leaves, and a very open canopy.
 export function generatePaloVerde(rng, opts = {}) {
   const detailScale = resolveDetailScale(opts);
-  const structureScale = THREE.MathUtils.clamp(detailScale, 0.42, 1);
+  const structureScale = resolveStructureScale(opts, 0.42);
   const proportions = resolveProportionOracle(opts);
   // Lifecycle scalar: young palo verdes are small green multi-stem shrubs;
   // mature trees widen into airy canopies, thicken trunks, and flower heavily.
   const age = resolvePlantAge(rng, opts, 0.58);
   const maturity = THREE.MathUtils.smoothstep(age, 0.18, 0.76);
   const oldGrowth = THREE.MathUtils.smoothstep(age, 0.66, 1.0);
+  const leafDensity = THREE.MathUtils.clamp(opts.leafDensity ?? 0.62, 0, 1);
   const minHeight = Math.max(proportions.paloVerde.minHeight, proportions.paloVerde.height[0]);
   const maxHeight = Math.max(minHeight + proportions.paloVerde.minHeightGap, proportions.paloVerde.height[1]);
   const height = THREE.MathUtils.lerp(minHeight * 0.42, maxHeight, Math.pow(age, 0.82))
@@ -35,6 +36,7 @@ export function generatePaloVerde(rng, opts = {}) {
   );
   const maxDepth = Math.max(2, Math.round(rawMaxDepth * THREE.MathUtils.lerp(0.58, 1.0, structureScale)));
   const flowering = (opts.flowering ?? rngChance(rng, THREE.MathUtils.lerp(0.05, 0.42, maturity))) && age > 0.34;
+  const seedPods = (opts.seedPods ?? false) && age > 0.38;
 
   const barkBase = new THREE.Color(0x4f865f);
   const barkTip = new THREE.Color(0x83aa61);
@@ -42,6 +44,7 @@ export function generatePaloVerde(rng, opts = {}) {
   const leaf = new THREE.Color(0x6f8740);
   const flower = new THREE.Color(0xe7c63a);
   const thorn = new THREE.Color(0xd8ca8e);
+  const pod = new THREE.Color(0xc7a34c);
 
   const parts = [];
 
@@ -103,23 +106,41 @@ export function generatePaloVerde(rng, opts = {}) {
   }
 
   function addLeafSprays(at, axis, vigor) {
+    if (leafDensity <= 0.02 && !flowering) return;
     const scale = THREE.MathUtils.clamp(vigor * THREE.MathUtils.lerp(0.74, 1.08, maturity), 0.45, 1.20);
-    parts.push(makeLeafletSpray(rng, {
-      center: at,
-      axis,
-      color: leaf,
-      sprigs: scaledSegments(rngInt(rng, 1, Math.round(THREE.MathUtils.lerp(3, 6, maturity))), detailScale, 1),
-      pairs: scaledSegments(rngInt(rng, 2, Math.round(THREE.MathUtils.lerp(4, 7, maturity))), detailScale, 2),
-      spread: proportions.paloVerde.leafSpraySpread * scale,
-      sprigLength: proportions.paloVerde.sprigLength * scale,
-      leafletLength: rngRange(rng, proportions.paloVerde.leafletLength[0], proportions.paloVerde.leafletLength[1]) * scale,
-      leafletWidth: rngRange(rng, proportions.paloVerde.leafletWidth[0], proportions.paloVerde.leafletWidth[1]) * scale,
-      droop: 0.10,
-      density: 0.52 * THREE.MathUtils.lerp(0.55, 1.0, maturity) * THREE.MathUtils.lerp(0.42, 1.0, structureScale),
-    }));
+    if (leafDensity > 0.02) {
+      parts.push(makeLeafletSpray(rng, {
+        center: at,
+        axis,
+        color: leaf,
+        sprigs: scaledSegments(rngInt(rng, 1, Math.round(THREE.MathUtils.lerp(3, 6, maturity))), detailScale, 1),
+        pairs: scaledSegments(rngInt(rng, 2, Math.round(THREE.MathUtils.lerp(4, 7, maturity))), detailScale, 2),
+        spread: proportions.paloVerde.leafSpraySpread * scale,
+        sprigLength: proportions.paloVerde.sprigLength * scale,
+        leafletLength: rngRange(rng, proportions.paloVerde.leafletLength[0], proportions.paloVerde.leafletLength[1]) * scale,
+        leafletWidth: rngRange(rng, proportions.paloVerde.leafletWidth[0], proportions.paloVerde.leafletWidth[1]) * scale,
+        droop: 0.10,
+        density: leafDensity * 0.72 * THREE.MathUtils.lerp(0.55, 1.0, maturity) * THREE.MathUtils.lerp(0.42, 1.0, structureScale),
+      }));
+    }
 
     if (flowering && structureScale > 0.62 && rngChance(rng, THREE.MathUtils.lerp(0.28, 0.78, maturity) * structureScale)) {
       parts.push(makeBlossomCluster(at.clone().addScaledVector(UP, 0.025), axis, scale));
+    }
+
+    if (seedPods && structureScale > 0.55 && rngChance(rng, THREE.MathUtils.lerp(0.10, 0.34, maturity) * structureScale)) {
+      const podDrop = proportions.paloVerde.podDrop ?? 0.045;
+      const pods = makePodCluster(rng, {
+        center: at.clone().addScaledVector(UP, -podDrop),
+        axis,
+        count: rngInt(rng, 1, Math.max(1, Math.round(THREE.MathUtils.lerp(2, 6, maturity) * structureScale))),
+        color: pod,
+        lengthRange: proportions.paloVerde.podLength ?? [0.11, 0.22],
+        radiusRange: proportions.paloVerde.podRadius ?? [0.006, 0.010],
+        curl: 0.07,
+        segmentsAlong: scaledSegments(6, detailScale, 4),
+      });
+      if (pods) parts.push(pods);
     }
   }
 
@@ -189,7 +210,7 @@ export function generatePaloVerde(rng, opts = {}) {
     }
   }
 
-  const trunkMin = Math.max(1, Math.round(THREE.MathUtils.lerp(1, 3, maturity) * THREE.MathUtils.lerp(0.60, 1.0, structureScale)));
+  const trunkMin = Math.max(2, Math.round(THREE.MathUtils.lerp(2, 3, maturity) * THREE.MathUtils.lerp(0.60, 1.0, structureScale)));
   const trunkMax = Math.max(trunkMin, Math.round(THREE.MathUtils.lerp(2, 7, maturity + oldGrowth * 0.15) * THREE.MathUtils.lerp(0.52, 1.0, structureScale)));
   const trunkCount = rngInt(rng, trunkMin, trunkMax);
   for (let i = 0; i < trunkCount; i++) {
@@ -210,5 +231,6 @@ export function generatePaloVerde(rng, opts = {}) {
 
   const geom = mergeGeometries(parts);
   geom.userData.age = age;
+  geom.userData.growthStage = age < 0.24 ? 'juvenile_thorny_shrub' : age < 0.72 ? 'adult_open_tree' : 'old_life_island';
   return geom;
 }

@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { sweepRibbedTube, mergeGeometries, colorRamp, paintCactusSpines, paintGeometry, resolveDetailScale, scaledSegments } from './common.js';
+import { buildCactusSpineBlades, sampleColumnAreoles, ensureCactusBillboardAttribute } from './cactusSpineBlades.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
+
+const SAGUARO_SPINE_COLOR_BASE = new THREE.Color(0xf2e5b4);
+const SAGUARO_SPINE_COLOR_TIP = new THREE.Color(0xc7a767);
 
 // Saguaro (Carnegiea gigantea).
 //
@@ -42,10 +46,10 @@ export function generateSaguaro(rng, opts = {}) {
   const maturity = THREE.MathUtils.smoothstep(age, 0.18, 0.72);
   const oldGrowth = THREE.MathUtils.smoothstep(age, 0.68, 1.0);
   const armMaturity = THREE.MathUtils.smoothstep(age, 0.52, 0.96);
-  const heightGrowth = Math.pow(age, heightCurvePower);
+  const hydration = THREE.MathUtils.clamp(opts.hydration ?? 0.36, 0, 1);
   const sizeNoise = opts.height == null ? rngRange(rng, 0.90, 1.10) : 1;
   const trunkHeight = opts.height ?? THREE.MathUtils.clamp(
-    maxTrunkHeight * THREE.MathUtils.lerp(proportions.ratios.saguaro.seedlingHeight, 1.0, heightGrowth) * sizeNoise,
+    proportions.saguaro.heightForAge(age) * sizeNoise,
     proportions.saguaro.minHeight,
     maxTrunkHeight,
   );
@@ -53,11 +57,11 @@ export function generateSaguaro(rng, opts = {}) {
     maturity,
     oldGrowth,
     rngRange(rng, proportions.saguaro.oldRadiusBoostRange[0], proportions.saguaro.oldRadiusBoostRange[1]),
-  ) * rngRange(rng, 0.92, 1.10);
+  ) * rngRange(rng, 0.92, 1.10) * THREE.MathUtils.lerp(0.97, 1.08, hydration);
   const ribCount = Math.round(
-    THREE.MathUtils.lerp(11, 24, maturity) + oldGrowth * rngRange(rng, 0, 3),
+    THREE.MathUtils.clamp(THREE.MathUtils.lerp(12, 24, maturity) + oldGrowth * rngRange(rng, 0, 1), 12, 24),
   );
-  const ribDepth = THREE.MathUtils.lerp(0.055, 0.15, maturity) * rngRange(rng, 0.88, 1.12);
+  const ribDepth = THREE.MathUtils.lerp(0.055, 0.15, maturity) * rngRange(rng, 0.88, 1.12) * THREE.MathUtils.lerp(1.18, 0.92, hydration);
 
   // The dome at the apex is built into the same sweep as the trunk by
   // extending the curve a little beyond `trunkHeight` and tapering radius
@@ -177,6 +181,64 @@ export function generateSaguaro(rng, opts = {}) {
   );
   const trunkSegmentsAround = Math.max(ribCount * 4, scaledSegments(Math.max(60, ribCount * 6), detailScale, 36));
 
+  // Per-blade mesh spines built once per cactus geometry variant. Blades
+  // are bezier-curved ribbons whose curvature is evaluated in the vertex
+  // shader (mode 10 in cactusSpineMaterial). LOD scales density: distant
+  // cacti fall back to the cheap procedural halo only.
+  const spineDetail = THREE.MathUtils.clamp((detailScale - 0.55) / 0.45, 0, 1);
+  const wantBlades = spineDetail > 0.04;
+  const spineAttachments = [];
+  function addColumnBlades({
+    curve,
+    radiusFn,
+    totalLen,
+    spineRows,
+    bodyFrac = 1,
+    apexBoost = 1,
+    rowPhase = 0,
+    rowsPerUnit,
+  }) {
+    if (!wantBlades) return;
+    const skipBelow = woodyBaseT > 0 ? woodyBaseT * 0.9 : 0.04;
+    // 3-4 stiff spines per areole — the user-facing target. Texture areoles
+    // sit at floor(y)+0.5 along each rib peak; we sample the same grid.
+    const bladesPerAreole = Math.max(2, Math.round(THREE.MathUtils.lerp(3, 4, spineDetail)));
+    const apexT = bodyFrac;
+    sampleColumnAreoles({
+      curve,
+      radiusFn,
+      ribCount,
+      ribDepth,
+      rowsPerUnit,
+      rowPhase,
+      bladesPerAreole,
+      totalLength: totalLen,
+      rng,
+      skipBelow,
+      skipAbove: Math.min(0.98, bodyFrac + 0.06),
+      // Keep central spine perpendicular; radial spines tilt ~9°.
+      fanTiltMax: 0.16,
+      strengthFn: t => {
+        const apexFactor = THREE.MathUtils.smoothstep(t, apexT - 0.45, apexT);
+        const woodyFade = woodyBaseT > 0
+          ? 1 - THREE.MathUtils.smoothstep(t, 0.0, woodyBaseT * 1.05)
+          : 0;
+        return spineDetail * apexBoost * (0.40 + apexFactor * 0.45) * (1 - woodyFade * 0.75);
+      },
+      // Real saguaro spines are 2-4 cm. Scale to trunk radius so visual
+      // proportion holds across plant sizes.
+      lengthFn: t => {
+        const apexFactor = THREE.MathUtils.smoothstep(t, apexT - 0.45, apexT);
+        return trunkRadius * THREE.MathUtils.lerp(0.11, 0.20, apexFactor) * rngRange(rng, 0.90, 1.10);
+      },
+      widthFn: () => trunkRadius * 0.014,
+      colorFn: t => {
+        const apexFactor = THREE.MathUtils.smoothstep(t, apexT - 0.3, apexT);
+        return SAGUARO_SPINE_COLOR_BASE.clone().lerp(SAGUARO_SPINE_COLOR_TIP, apexFactor * 0.34);
+      },
+    }).forEach(a => spineAttachments.push(a));
+  }
+
   const trunkGeom = sweepRibbedTube({
     curve: trunkCurve,
     segmentsAlong: trunkSegmentsAlong,
@@ -202,6 +264,19 @@ export function generateSaguaro(rng, opts = {}) {
   });
   const parts = [trunkGeom];
   const seasonalParts = [];
+
+  addColumnBlades({
+    curve: trunkCurve,
+    radiusFn: trunkRadiusFn,
+    totalLen: totalHeight,
+    spineRows: trunkHeight * spineRowsPerMeter,
+    bodyFrac: trunkFrac,
+    apexBoost: 1.0,
+    // Trunk body spineFn writes y = t * totalHeight * spineRowsPerMeter + spinePhase.
+    // Sampling the same rowsPerUnit + rowPhase puts each cluster on a texture areole.
+    rowsPerUnit: spineRowsPerMeter,
+    rowPhase: spinePhase,
+  });
 
   function addSeasonalCrown({ curve, count, phase = 0 }) {
     if (age < 0.56 || count <= 0) return;
@@ -411,6 +486,20 @@ export function generateSaguaro(rng, opts = {}) {
       closeEnd: true,
     });
     parts.push(armGeom);
+    addColumnBlades({
+      curve: armCurve,
+      radiusFn: armRadiusFn,
+      totalLen: armRise + armReach + armApexExt,
+      spineRows: (armRise + armReach) * armSpineRows,
+      bodyFrac: armBodyFrac,
+      apexBoost: 1.05,
+      // Arm spineFn writes y = t * (armRise + armReach) * armSpineRows + armSpinePhase.
+      // Note totalLen here is (armRise+armReach+armApexExt) — the curve length —
+      // so rowsPerUnit must be scaled to keep y = totalLen * rowsPerUnit + phase
+      // matching the body's expression at t=1.
+      rowsPerUnit: armSpineRows * ((armRise + armReach) / Math.max(0.001, armRise + armReach + armApexExt)),
+      rowPhase: armSpinePhase,
+    });
 
     if (age > 0.62 && rngChance(rng, THREE.MathUtils.lerp(0.32, 0.88, armMaturity))) {
       addSeasonalCrown({
@@ -423,8 +512,18 @@ export function generateSaguaro(rng, opts = {}) {
 
   parts.push(...seasonalParts);
 
+  if (spineAttachments.length) {
+    const bladeGeom = buildCactusSpineBlades(spineAttachments, { segments: 3 });
+    if (bladeGeom) parts.push(bladeGeom);
+  }
+
+  // Blade parts carry cactusBillboard; mergeGeometries drops attributes that
+  // aren't on every part. Stub a zero billboard on body/seasonal parts.
+  for (const part of parts) ensureCactusBillboardAttribute(part);
+
   const geom = mergeGeometries(parts);
   geom.userData.age = age;
+  geom.userData.spineBladeCount = spineAttachments.length;
   return geom;
 }
 

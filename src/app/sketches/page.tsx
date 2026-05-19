@@ -8,7 +8,7 @@ import { useBackground, BackgroundType } from '@/components/background-provider'
 type SketchKind = 'standalone' | 'background';
 
 interface Sketch {
-  id: BackgroundType | 'desert';
+  id: BackgroundType | 'desert' | 'glass' | 'plant-lab';
   title: string;
   description: string;
   tech: string;
@@ -20,6 +20,15 @@ interface Sketch {
 
 const sketches: Sketch[] = [
   {
+    id: 'glass',
+    title: 'Stained Glass',
+    description: 'Drop in any image and it gets re-cut the way a glazier would: K-means posterizes the source into a small palette, the assignment map is median-smoothed to round the region edges, then Poisson-disk Voronoi sub-cells subdivide the flat regions. Connected components on the (palette, sub-cell) composite become pieces — boundaries snap to content edges, flat areas get deliberate cuts, lead came runs every seam. The glass texture is projected through the plane along the sun direction to pool colored light on the floor and the view ray is raymarched through a bounding box of dust for god-rays.',
+    tech: 'Three.js · Voronoi · custom gobo shader',
+    year: '2026',
+    kind: 'standalone',
+    href: '/sketches/glass/index.html',
+  },
+  {
     id: 'desert',
     title: 'Desert',
     description: 'Procedurally generated Tucson desert, built as a zen garden out of love for Tucson and the desert. In memory of my brother Larry William Pierson (1966-2025) and my Aunt Alice Gutierrez, born Alice Pierson (1949-2026). Layered terrain, scattered rocks, plants, and sky.',
@@ -28,6 +37,16 @@ const sketches: Sketch[] = [
     kind: 'standalone',
     href: '/sketches/desert/index.html',
     hoverImage: { src: '/work/desert.png', width: 1690, height: 1172, alt: 'Tucson desert sketch' },
+  },
+  {
+    id: 'plant-lab',
+    title: 'Plant Lab',
+    description: 'A focused sandbox for the desert sketch plant system, with interactive controls for inspecting and tuning Sonoran plant forms.',
+    tech: 'Three.js · procedural plants · lil-gui',
+    year: '2026',
+    kind: 'standalone',
+    href: '/sketches/desert/plant-lab.html',
+    hoverImage: { src: '/work/desert.png', width: 1690, height: 1172, alt: 'Plant lab sketch' },
   },
   {
     id: 'flocking',

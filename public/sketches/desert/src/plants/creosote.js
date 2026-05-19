@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sweepRibbedTube, mergeGeometries, resolveDetailScale, resolvePlantAge, scaledSegments } from './common.js';
+import { sweepRibbedTube, mergeGeometries, resolveDetailScale, resolvePlantAge, resolveStructureScale, scaledSegments, paintGeometry } from './common.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
 
@@ -89,19 +89,25 @@ function rngWidthTaper(t) {
 // resinous paired leaves clustered on the outer crown.
 export function generateCreosote(rng, opts = {}) {
   const detailScale = resolveDetailScale(opts);
+  const structureScale = resolveStructureScale(opts);
   const proportions = resolveProportionOracle(opts);
   // Lifecycle scalar: creosote starts as a loose few-stem shrub, then widens
   // into an old open ring with many gray basal stems and a leafier perimeter.
   const age = resolvePlantAge(rng, opts, 0.56);
   const maturity = THREE.MathUtils.smoothstep(age, 0.12, 0.70);
   const oldGrowth = THREE.MathUtils.smoothstep(age, 0.68, 1.0);
+  const cloneRing = opts.cloneRing ?? oldGrowth > 0.42;
+  const deadInterior = THREE.MathUtils.clamp(opts.deadInterior ?? oldGrowth, 0, 1);
+  const cloneRingRadius = THREE.MathUtils.clamp(opts.cloneRingRadius ?? THREE.MathUtils.lerp(0.38, 0.72, oldGrowth), 0, 0.92);
+  const rainFlush = opts.rainFlush ?? false;
+  const flowering = (opts.flowering ?? rngChance(rng, 0.18 + maturity * 0.28)) && maturity > 0.18;
   const branchCount = scaledSegments(
     rngInt(
       rng,
       Math.round(THREE.MathUtils.lerp(8, 28, maturity)),
       Math.round(THREE.MathUtils.lerp(14, 56, maturity + oldGrowth * 0.22)),
     ),
-    detailScale,
+    structureScale,
     6,
   );
   const height = THREE.MathUtils.lerp(
@@ -122,23 +128,25 @@ export function generateCreosote(rng, opts = {}) {
 
   const oldWood = new THREE.Color(0x746d61);
   const youngWood = new THREE.Color(0x8b8254);
-  const leaf = new THREE.Color(0x68753a);
+  const leaf = new THREE.Color(0x68753a).lerp(new THREE.Color(0x7f903f), rainFlush ? 0.55 : 0);
+  const flower = new THREE.Color(0xe7c83c);
   const parts = [];
 
   for (let i = 0; i < branchCount; i++) {
     const a = rng() * Math.PI * 2;
-    const rim = rngRange(rng, THREE.MathUtils.lerp(0.10, 0.30, maturity), 1.0);
+    const interiorGap = cloneRing ? cloneRingRadius * deadInterior : 0;
+    const rim = rngRange(rng, Math.max(interiorGap, THREE.MathUtils.lerp(0.10, 0.30, maturity)), 1.0);
     const r = spread * Math.sqrt(rim);
     const tipX = Math.cos(a) * r;
     const tipZ = Math.sin(a) * r;
     const crownT = THREE.MathUtils.clamp(r / spread, 0, 1);
     const tipY = crownHeight * (0.40 + 0.52 * (1 - Math.abs(crownT - 0.68) * 0.82) + rngRange(rng, -0.12, 0.10));
-    const baseJitter = spread * 0.12;
+    const baseJitter = spread * THREE.MathUtils.lerp(0.12, 0.32, cloneRing ? deadInterior : 0);
 
     const p0 = new THREE.Vector3(
-      rngRange(rng, -baseJitter, baseJitter),
+      cloneRing ? Math.cos(a) * spread * interiorGap * rngRange(rng, 0.30, 0.58) + rngRange(rng, -baseJitter, baseJitter) : rngRange(rng, -baseJitter, baseJitter),
       rngRange(rng, 0, height * 0.04),
-      rngRange(rng, -baseJitter, baseJitter),
+      cloneRing ? Math.sin(a) * spread * interiorGap * rngRange(rng, 0.30, 0.58) + rngRange(rng, -baseJitter, baseJitter) : rngRange(rng, -baseJitter, baseJitter),
     );
     const p1 = new THREE.Vector3(
       tipX * rngRange(rng, 0.18, 0.28),
@@ -173,7 +181,9 @@ export function generateCreosote(rng, opts = {}) {
     parts.push(stem);
 
     const axis = p3.clone().sub(p2).normalize();
-    const foliageChance = (crownT > 0.42 ? 0.96 : 0.46) * THREE.MathUtils.lerp(0.38, 1.0, maturity);
+    const foliageChance = (crownT > 0.42 ? 0.96 : 0.46) *
+      THREE.MathUtils.lerp(0.38, 1.0, maturity) *
+      (cloneRing && crownT < cloneRingRadius ? THREE.MathUtils.lerp(0.28, 0.08, deadInterior) : 1.0);
     if (rngChance(rng, foliageChance)) {
       const cardCount = scaledSegments(
         rngInt(rng, 1, crownT > 0.62 ? Math.round(THREE.MathUtils.lerp(2, 4, maturity)) : 2),
@@ -201,9 +211,28 @@ export function generateCreosote(rng, opts = {}) {
         }));
       }
     }
+    if (flowering && crownT > 0.62 && detailScale > 0.48 && rngChance(rng, 0.10 + maturity * 0.22)) {
+      const flowerGeom = new THREE.SphereGeometry(
+        rngRange(rng, proportions.creosote.leafClusterRadius[0] * 0.22, proportions.creosote.leafClusterRadius[1] * 0.32),
+        scaledSegments(6, detailScale, 4),
+        scaledSegments(4, detailScale, 3),
+      );
+      flowerGeom.translate(
+        p3.x + rngRange(rng, -spread * 0.018, spread * 0.018),
+        p3.y + rngRange(rng, -height * 0.015, height * 0.025),
+        p3.z + rngRange(rng, -spread * 0.018, spread * 0.018),
+      );
+      paintGeometry(flowerGeom, flower.clone().multiplyScalar(rngRange(rng, 0.92, 1.12)));
+      paintCreosoteDetail(flowerGeom, [CREOSOTE_PART_STEM, 0, 0, rng()]);
+      parts.push(flowerGeom);
+    }
   }
 
   const geom = mergeGeometries(parts);
   geom.userData.age = age;
+  geom.userData.growthStage = age < 0.24 ? 'juvenile_loose_shrub' : age < 0.68 ? 'adult_matrix_shrub' : 'old_clone_ring';
+  geom.userData.cloneRing = cloneRing;
+  geom.userData.cloneRingRadius = cloneRingRadius;
+  geom.userData.deadInterior = deadInterior;
   return geom;
 }

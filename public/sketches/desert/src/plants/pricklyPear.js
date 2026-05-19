@@ -8,11 +8,14 @@ import { resolveProportionOracle } from '../proportions.js';
 export function generatePricklyPear(rng, opts = {}) {
   const detailScale = resolveDetailScale(opts);
   const proportions = resolveProportionOracle(opts);
+  const suppressCloneDetails = opts.suppressCloneDetails ?? false;
   // Lifecycle scalar: young plants are a few tender pads, while old clumps
   // spread into branched thickets with thicker basal pads and more fruit.
   const age = resolvePlantAge(rng, opts, 0.70);
   const maturity = THREE.MathUtils.smoothstep(age, 0.18, 0.78);
   const oldGrowth = THREE.MathUtils.smoothstep(age, 0.66, 1.0);
+  const flowering = opts.flowering ?? true;
+  const fruiting = opts.fruiting ?? true;
   const baseSize = THREE.MathUtils.lerp(
     proportions.pricklyPear.padBaseSize[0],
     proportions.pricklyPear.padBaseSize[1],
@@ -45,6 +48,7 @@ export function generatePricklyPear(rng, opts = {}) {
 
   const parts = [];
   let padCount = 0;
+  let rootingPadCount = 0;
 
   function smoothstep(a, b, x) {
     const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1);
@@ -343,6 +347,19 @@ export function generatePricklyPear(rng, opts = {}) {
     return g;
   }
 
+  function buildRootingCollar(size) {
+    const collar = new THREE.CylinderGeometry(
+      size * rngRange(rng, 0.12, 0.20),
+      size * rngRange(rng, 0.16, 0.26),
+      size * rngRange(rng, 0.020, 0.035),
+      scaledSegments(10, detailScale, 6),
+      1,
+    );
+    collar.translate(0, size * 0.010, 0);
+    paintSolid(collar, dryScarColor.clone().lerp(oldPadColor, rngRange(rng, 0.20, 0.55)), [0, 0, 0.04, 2]);
+    return collar;
+  }
+
   function addRimGrowth(parentMat, spec, depth) {
     if (age < 0.42 || depth > 1 || !rngChance(rng, THREE.MathUtils.lerp(0.22, 0.82, maturity))) return;
 
@@ -359,7 +376,8 @@ export function generatePricklyPear(rng, opts = {}) {
       const t = y / spec.height;
       const x = padCenterX(spec, t) + side * padHalfWidth(spec, t, side < 0 ? -1 : 1) * rngRange(rng, 0.74, 0.98);
       const z = rngRange(rng, -padThickness(spec, t) * 0.28, padThickness(spec, t) * 0.28);
-      const isFlower = rngChance(rng, THREE.MathUtils.lerp(0.04, 0.18, maturity));
+      if (!flowering && !fruiting) continue;
+      const isFlower = flowering && (!fruiting || rngChance(rng, THREE.MathUtils.lerp(0.04, 0.18, maturity)));
       const g = isFlower
         ? buildFlower(rngRange(rng, spec.size * 0.10, spec.size * 0.16))
         : buildFruit(rngRange(rng, spec.size * 0.075, spec.size * 0.12), rngRange(rng, spec.size * 0.18, spec.size * 0.30));
@@ -429,10 +447,22 @@ export function generatePricklyPear(rng, opts = {}) {
     m.multiply(new THREE.Matrix4().makeRotationX(rngRange(rng, -0.46, 0.18)));
     m.multiply(new THREE.Matrix4().makeRotationZ(spread * rngRange(rng, 0.38, 0.78) + rngRange(rng, -0.22, 0.22)));
     const rootDepth = Math.max(0, maxDepth - rngInt(rng, 0, age < 0.46 ? 2 : 1));
+    if (!suppressCloneDetails && oldGrowth > 0.18 && detailScale > 0.42 && rngChance(rng, THREE.MathUtils.lerp(0.22, 0.74, oldGrowth))) {
+      const collar = buildRootingCollar(baseSize);
+      collar.applyMatrix4(m);
+      parts.push(collar);
+      rootingPadCount++;
+    }
     grow(m, baseSize * rngRange(rng, 0.72, 1.12), rootDepth, spread);
   }
 
   const geom = mergeGeometries(parts);
   geom.userData.age = age;
+  geom.userData.growthStage = age < 0.24 ? 'juvenile_pad_cluster' : age < 0.66 ? 'adult_spreading_clump' : 'old_rooting_thicket';
+  geom.userData.form = 'pad_graph_clump';
+  geom.userData.padCount = padCount;
+  geom.userData.rootingPads = rootingPadCount;
+  geom.userData.estimatedClumpWidth = colonySpread * 2 + baseSize * 1.6;
+  geom.userData.estimatedClumpHeight = baseSize * (1 + maxDepth * 1.15);
   return geom;
 }

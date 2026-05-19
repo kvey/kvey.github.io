@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { sweepRibbedTube, mergeGeometries, colorRamp, paintCactusSpines, resolveDetailScale, resolvePlantAge, scaledSegments } from './common.js';
+import { buildCactusSpineBlades, sampleColumnAreoles, ensureCactusBillboardAttribute } from './cactusSpineBlades.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';
+
+const BARREL_SPINE_BASE_COLOR = new THREE.Color(0xebd591);
+const BARREL_SPINE_TIP_COLOR = new THREE.Color(0xc6883b);
+
+const UP = new THREE.Vector3(0, 1, 0);
 
 // Ferocactus-style barrel: short ribbed ovoid, sometimes leaning slightly south.
 // Returns a merged BufferGeometry with vertex colors. The optional flower disc
@@ -17,7 +23,11 @@ export function generateBarrelCactus(rng, opts = {}) {
   const sizeNoise = rngRange(rng, 0.88, 1.12);
   const formNoise = rngRange(rng, -0.12, 0.14);
 
-  const ribCount = Math.round(THREE.MathUtils.lerp(15, 36, maturity) + rngRange(rng, -2, 3));
+  const ribCount = Math.round(THREE.MathUtils.clamp(
+    THREE.MathUtils.lerp(20, 28, maturity) + rngRange(rng, -1, 1),
+    20,
+    28,
+  ));
   const ribDepth = THREE.MathUtils.lerp(0.08, 0.19, maturity) * rngRange(rng, 0.88, 1.12);
   const heightToWidth = THREE.MathUtils.clamp(
     THREE.MathUtils.lerp(0.72, 1.08, maturity) + oldGrowth * rngRange(rng, 0.0, 0.08) + formNoise * 0.45,
@@ -95,6 +105,45 @@ export function generateBarrelCactus(rng, opts = {}) {
 
   const parts = [body];
 
+  // Per-blade mesh spines. Sample areoles along the body the same way the
+  // procedural shader spines are placed (rib peaks × rows), then bezier-bend
+  // each blade in the vertex shader.
+  const spineDetail = THREE.MathUtils.clamp((detailScale - 0.50) / 0.50, 0, 1);
+  if (spineDetail > 0.04) {
+    const bladesPerAreole = Math.max(2, Math.round(THREE.MathUtils.lerp(3, 4, spineDetail)));
+    // Body spineFn writes y = t * spineRows + spinePhase (no /height scaling)
+    // — so rowsPerUnit here is spineRows / height, and rowPhase = spinePhase.
+    const attachments = sampleColumnAreoles({
+      curve,
+      radiusFn: (t) => radius * profile(Math.min(0.99, Math.max(0.01, t))),
+      ribCount,
+      ribDepth,
+      rowsPerUnit: spineRows / Math.max(0.001, height),
+      rowPhase: spinePhase,
+      bladesPerAreole,
+      totalLength: height,
+      rng,
+      skipBelow: 0.05,
+      skipAbove: 0.96,
+      fanTiltMax: 0.22,
+      strengthFn: t => {
+        const crownFade = THREE.MathUtils.smoothstep(t, 0.66, 1.0);
+        return spineDetail * (0.55 + crownFade * 0.30) * THREE.MathUtils.lerp(0.60, 1.05, maturity);
+      },
+      // Real barrel spines are ~3-5 cm.
+      lengthFn: t => {
+        const crownBoost = THREE.MathUtils.smoothstep(t, 0.62, 0.95);
+        return radius * THREE.MathUtils.lerp(0.16, 0.26, crownBoost) * rngRange(rng, 0.90, 1.10);
+      },
+      widthFn: () => radius * 0.020,
+      colorFn: t => BARREL_SPINE_BASE_COLOR.clone().lerp(BARREL_SPINE_TIP_COLOR, 0.22 + t * 0.18),
+    });
+    if (attachments.length) {
+      const bladeGeom = buildCactusSpineBlades(attachments, { segments: 3 });
+      if (bladeGeom) parts.push(bladeGeom);
+    }
+  }
+
   // Woolly yellow crown grows in with maturity, then becomes prominent.
   const topR = radius * profile(0.98);
   const crownMaturity = THREE.MathUtils.smoothstep(age, 0.28, 0.64);
@@ -112,9 +161,37 @@ export function generateBarrelCactus(rng, opts = {}) {
     parts.push(crown);
   }
 
+  if (crownMaturity > 0.20 && detailScale > 0.48) {
+    const hookCount = rngInt(rng, 3, Math.round(THREE.MathUtils.lerp(5, 11, crownMaturity)));
+    for (let i = 0; i < hookCount; i++) {
+      const a = (i / hookCount) * Math.PI * 2 + rngRange(rng, -0.18, 0.18);
+      const outward = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      const base = outward.clone().multiplyScalar(topR * rngRange(rng, 0.20, 0.58));
+      base.y = height + height * 0.035;
+      const hookLen = height * rngRange(rng, 0.055, 0.105) * THREE.MathUtils.lerp(0.72, 1.18, maturity);
+      const curve = new THREE.CatmullRomCurve3([
+        base,
+        base.clone().addScaledVector(UP, hookLen * 0.42).addScaledVector(outward, hookLen * 0.16),
+        base.clone().addScaledVector(UP, hookLen * 0.62).addScaledVector(outward, hookLen * 0.42),
+        base.clone().addScaledVector(UP, hookLen * 0.38).addScaledVector(outward, hookLen * 0.62),
+      ]);
+      const hook = sweepRibbedTube({
+        curve,
+        segmentsAlong: scaledSegments(9, detailScale, 5),
+        segmentsAround: scaledSegments(5, detailScale, 4),
+        radiusFn: t => radius * THREE.MathUtils.lerp(0.018, 0.006, t),
+        colorFn: t => paleSpine.clone().lerp(straw, t * 0.45).multiplyScalar(rngRange(rng, 0.88, 1.10)),
+        spineFn: t => [i, t * 3, 1.0, 6],
+        closeStart: true,
+        closeEnd: true,
+      });
+      parts.push(hook);
+    }
+  }
+
   // Occasional small flowers around the crown on mature individuals.
-  const flowerChance = THREE.MathUtils.lerp(0.02, 0.45, crownMaturity);
-  if (age > 0.55 && rngChance(rng, flowerChance)) {
+  const flowering = opts.flowering ?? rngChance(rng, THREE.MathUtils.lerp(0.02, 0.45, crownMaturity));
+  if (age > 0.55 && flowering) {
     const flowerCount = rngInt(rng, 4, Math.round(THREE.MathUtils.lerp(6, 11, oldGrowth)));
     const crownR = topR * 0.95;
     for (let i = 0; i < flowerCount; i++) {
@@ -138,9 +215,14 @@ export function generateBarrelCactus(rng, opts = {}) {
     }
   }
 
+  for (const part of parts) ensureCactusBillboardAttribute(part);
+
   const geom = mergeGeometries(parts);
   geom.translate(0, -height * 0.075, 0);
   geom.userData.age = age;
+  geom.userData.growthStage = age < 0.22 ? 'globe' : age < 0.62 ? 'adult_barrel' : 'old_leaning_barrel';
+  geom.userData.toppleRisk = oldGrowth * THREE.MathUtils.smoothstep(heightToWidth, 1.35, 2.3);
+  geom.userData.hookedCentralSpines = crownMaturity > 0.20;
   return geom;
 }
 
