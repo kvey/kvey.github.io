@@ -277,9 +277,107 @@
       border-color: var(--accent);
     }
 
-    @media (max-width: 600px) {
-      .controls { width: calc(100vw - 32px); }
-      .source canvas { max-width: 60px; height: auto; }
+    /* ---- Mobile: collapsible controls drawer + tighter chrome ---- */
+    .controls-toggle {
+      display: none;
+      appearance: none;
+      border: 0;
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 230, 190, 0.10);
+      box-shadow: inset 0 0 0 1px var(--stroke-strong);
+      color: var(--ink);
+      flex: none;
+    }
+    .controls-toggle svg { transition: transform 200ms ease; }
+    .controls.is-collapsed .controls-toggle svg { transform: rotate(180deg); }
+    .controls-head {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .controls-head h2 { margin: 0; }
+
+    @media (max-width: 720px) {
+      /* Smaller header pill — icon-only buttons */
+      .header { top: 10px; left: 10px; }
+      .header .icon-button { padding: 7px 9px; gap: 0; }
+      .header .icon-button span:last-child {
+        position: absolute;
+        width: 1px; height: 1px;
+        margin: -1px; overflow: hidden;
+        clip: rect(0, 0, 0, 0); white-space: nowrap;
+      }
+      .header .info-panel {
+        position: fixed;
+        top: 58px;
+        left: 10px;
+        right: 10px;
+        max-width: none;
+      }
+
+      /* Smaller source thumb */
+      .source { top: 10px; right: 10px; }
+      .source .panel { padding: 5px; }
+      .source canvas { width: 44px !important; height: auto !important; }
+      .source .label { display: none; }
+
+      /* Status moves up and shrinks so it doesn't collide with the drawer */
+      .status { bottom: auto; top: 58px; left: 10px; right: 64px; }
+      .status .panel {
+        padding: 5px 9px;
+        font-size: 10px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Controls become a full-width bottom drawer with a chevron toggle */
+      .controls {
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-width: none;
+      }
+      .controls .panel {
+        padding: 10px 12px;
+        max-height: 62vh;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+      }
+      .controls.is-collapsed .panel {
+        max-height: 44px;
+        padding: 8px 12px;
+        overflow: hidden;
+      }
+      .controls-head { display: flex; }
+      .controls-toggle { display: inline-flex; }
+      /* Hide the section h2 in mobile — duplicated by the head's title */
+      .controls .panel > h2 { display: none; }
+
+      .slider { margin: 0 0 8px; }
+      .slider-label { font-size: 9.5px; letter-spacing: 0.08em; }
+      .slider-label .accent { font-size: 10px; }
+      input[type="range"] { height: 22px; }
+      input[type="range"]::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -6px; }
+      input[type="range"]::-moz-range-thumb     { width: 16px; height: 16px; }
+
+      .row { gap: 6px; flex-wrap: wrap; }
+      .button { padding: 6px 10px; font-size: 10px; }
+    }
+
+    @media (max-width: 380px) {
+      .controls .panel { max-height: 56vh; }
+      .source canvas { width: 36px !important; }
+      .header .icon-button { padding: 6px 8px; }
     }
   </style>
 </head>
@@ -327,8 +425,16 @@
     <div class="panel"><span id="status">Loading…</span></div>
   </div>
 
-  <div class="hud controls">
+  <div class="hud controls" id="controls">
     <div class="panel">
+      <div class="controls-head">
+        <h2 style="margin: 0">Controls</h2>
+        <button class="controls-toggle" type="button" id="controlsToggle" aria-label="Toggle controls" aria-controls="controls" aria-expanded="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+      </div>
       <h2>Glass</h2>
 
       <div class="slider">
@@ -353,6 +459,14 @@
           <span class="accent" id="minPieceVal">—</span>
         </div>
         <input id="minPiece" type="range" min="0" max="100" value="45">
+      </div>
+
+      <div class="slider">
+        <div class="slider-label">
+          <span>Flow alignment</span>
+          <span class="accent" id="flowAlignVal">—</span>
+        </div>
+        <input id="flowAlign" type="range" min="0" max="100" value="75">
       </div>
 
       <div class="slider">
@@ -401,6 +515,9 @@
         <button class="button primary" id="regenerate">Regenerate</button>
         <button class="button" id="pickFile">Image…</button>
         <input id="fileInput" type="file" accept="image/*" style="display:none">
+      </div>
+      <div class="row">
+        <button class="button" id="raytraceToggle" aria-pressed="false">Raytracer: off</button>
       </div>
     </div>
   </div>

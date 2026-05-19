@@ -23,8 +23,22 @@ renderer.toneMappingExposure = 1.0;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x07060a);
 scene.fog = new THREE.Fog(0x07060a, 12, 38);
+
+// ---------- Skybox (equirectangular) ----------
+// Loaded once at startup; the glass shader also samples this texture so light
+// glass cells reveal hints of the sky behind the window.
+const skyTexture = new THREE.TextureLoader().load('./sky.jpg', (t) => {
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  // Wrap horizontally so longitude can flow across the seam without artifacts.
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.ClampToEdgeWrapping;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+});
+scene.background = skyTexture;
 
 const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(1.8, 2.9, 7.0);
@@ -46,34 +60,236 @@ glassTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 glassTexture.minFilter = THREE.LinearMipmapLinearFilter;
 glassTexture.magFilter = THREE.LinearFilter;
 
-// ---------- Glass plane ----------
-const glassMat = new THREE.ShaderMaterial({
-  uniforms: {
-    uMap: { value: glassTexture },
-    uBacklight: { value: 1.25 },
-  },
-  vertexShader: /* glsl */`
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+// ---------- Glass material factory ----------
+// Each window in the hallway gets its own ShaderMaterial so it can hold its
+// own texture / uniforms. The shader source is reused (extracted below).
+const GLASS_VERT_SRC = /* glsl */`
+  varying vec2 vUv;
+  varying vec3 vWorldPos;
+  void main() {
+    vUv = uv;
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vWorldPos = wp.xyz;
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+
+const GLASS_FRAG_SRC = /* glsl */`
+  #define PI 3.14159265359
+  varying vec2 vUv;
+  varying vec3 vWorldPos;
+  uniform sampler2D uMap;
+  uniform vec2 uTexSize;
+  uniform float uBacklight;
+  uniform float uLeadR;
+  uniform float uDistMaxPx;
+  uniform vec3 uLeadTint;
+  uniform sampler2D uSkyTex;
+  uniform vec3 uSunDir;
+  uniform vec3 uCameraPos;
+
+  vec3 sampleSky(vec3 dir) {
+    float lon = atan(dir.z, dir.x);
+    float lat = asin(clamp(dir.y, -1.0, 1.0));
+    vec2 uv = vec2(lon / (2.0 * PI) + 0.5, lat / PI + 0.5);
+    return texture2D(uSkyTex, uv).rgb;
+  }
+
+  void main() {
+    vec4 tex = texture2D(uMap, vUv);
+    vec3 glassColor = tex.rgb * uBacklight;
+    vec2 texel = 1.0 / uTexSize;
+
+    vec3 viewThrough = normalize(vWorldPos - uCameraPos);
+    vec3 skyColor = sampleSky(viewThrough);
+    float sunDot = dot(viewThrough, -normalize(uSunDir));
+    float sunCore = pow(max(0.0, sunDot), 320.0) * 6.0;
+    float sunHalo = pow(max(0.0, sunDot), 16.0) * 0.55;
+    vec3 sunGlow = vec3(1.0, 0.92, 0.78) * (sunCore + sunHalo);
+
+    float Dc  = tex.a * uDistMaxPx;
+    float Dxp = texture2D(uMap, vUv + vec2( texel.x, 0.0)).a * uDistMaxPx;
+    float Dxm = texture2D(uMap, vUv + vec2(-texel.x, 0.0)).a * uDistMaxPx;
+    float Dyp = texture2D(uMap, vUv + vec2(0.0,  texel.y)).a * uDistMaxPx;
+    float Dym = texture2D(uMap, vUv + vec2(0.0, -texel.y)).a * uDistMaxPx;
+    float D = (Dc * 2.0 + Dxp + Dxm + Dyp + Dym) * 0.16666667;
+
+    float leadAlpha = 1.0 - smoothstep(uLeadR - 0.75, uLeadR + 0.75, D);
+    if (leadAlpha < 0.001) {
+      float lum = dot(tex.rgb, vec3(0.30, 0.59, 0.11));
+      float translucency = smoothstep(0.08, 0.65, lum) * 0.55;
+      vec3 transmitted = (skyColor + sunGlow) * tex.rgb * 1.6;
+      vec3 finalGlass = mix(glassColor, transmitted, translucency);
+      gl_FragColor = vec4(finalGlass, 1.0);
+      return;
     }
-  `,
-  fragmentShader: /* glsl */`
-    varying vec2 vUv;
-    uniform sampler2D uMap;
-    uniform float uBacklight;
-    void main() {
-      vec3 c = texture2D(uMap, vUv).rgb;
-      // Backlit glass: scale uniformly so colored cells glow, dark lead stays dark.
-      gl_FragColor = vec4(c * uBacklight, 1.0);
+
+    vec2 grad = vec2(Dxp - Dxm, Dyp - Dym) * 0.5;
+    float gradLen = length(grad);
+    vec3 N = vec3(0.0, 0.0, 1.0);
+    if (gradLen > 0.05) {
+      vec2 outDir = grad / gradLen;
+      float clampedD = min(D, uLeadR * 0.95);
+      float h = sqrt(max(0.001, uLeadR * uLeadR - clampedD * clampedD));
+      float hp = clampedD / h;
+      N = normalize(vec3(outDir * hp, 1.0));
     }
-  `,
-  side: THREE.DoubleSide,
-});
-const glassMesh = new THREE.Mesh(new THREE.PlaneGeometry(GLASS_W, GLASS_H), glassMat);
-glassMesh.position.set(0, GLASS_CENTER_Y, GLASS_Z);
-scene.add(glassMesh);
+    vec3 lightDir = normalize(vec3(0.45, -0.50, 0.78));
+    vec3 viewDir  = vec3(0.0, 0.0, 1.0);
+    float NdotL = max(0.0, dot(N, lightDir));
+    vec3 H = normalize(lightDir + viewDir);
+    float NdotH = max(0.0, dot(N, H));
+    float spec = pow(NdotH, 36.0);
+    vec3 silverLit = uLeadTint * (0.30 + 0.62 * NdotL)
+                     + vec3(0.85) * spec
+                     + glassColor * 0.10;
+    vec3 finalColor = mix(glassColor, silverLit, leadAlpha);
+    gl_FragColor = vec4(finalColor, 1.0);
+  }
+`;
+
+// Raytraced glass — a custom ShaderMaterial that traces rays through the
+// glass plane using real Snell-refraction, Schlick Fresnel, sky sampling in
+// both refracted and reflected directions, and direct sun visibility check
+// against the refracted ray. The lead came still gets bump shading. This is
+// the "raytracer" mode the toggle picks.
+const RAYTRACED_GLASS_FRAG_SRC = /* glsl */`
+  #define PI 3.14159265359
+  varying vec2 vUv;
+  varying vec3 vWorldPos;
+  uniform sampler2D uMap;
+  uniform vec2 uTexSize;
+  uniform float uBacklight;
+  uniform float uLeadR;
+  uniform float uDistMaxPx;
+  uniform vec3 uLeadTint;
+  uniform sampler2D uSkyTex;
+  uniform vec3 uSunDir;
+  uniform vec3 uCameraPos;
+  uniform float uIOR;
+
+  vec3 sampleSky(vec3 dir) {
+    float lon = atan(dir.z, dir.x);
+    float lat = asin(clamp(dir.y, -1.0, 1.0));
+    return texture2D(uSkyTex, vec2(lon / (2.0 * PI) + 0.5, lat / PI + 0.5)).rgb;
+  }
+
+  void main() {
+    vec4 tex = texture2D(uMap, vUv);
+    vec3 glassColor = tex.rgb;
+    vec2 texel = 1.0 / uTexSize;
+
+    // Glass plane normal is +Z in world (our windows all face +Z toward camera).
+    vec3 N = vec3(0.0, 0.0, 1.0);
+    vec3 V = normalize(vWorldPos - uCameraPos);
+
+    // Snell-refraction through the slab (a thin pane treated as one interface).
+    vec3 refracted = refract(V, N, 1.0 / uIOR);
+    if (dot(refracted, refracted) < 1e-4) refracted = V; // TIR fallback
+    vec3 reflected = reflect(V, N);
+
+    // Schlick Fresnel: how much of the view ray reflects vs. refracts.
+    float cosI = max(0.0, -dot(V, N));
+    float F0 = (uIOR - 1.0) / (uIOR + 1.0); F0 *= F0;
+    float fresnel = F0 + (1.0 - F0) * pow(1.0 - cosI, 5.0);
+
+    vec3 skyRef  = sampleSky(refracted);
+    vec3 skyRefl = sampleSky(reflected);
+
+    // Direct sun visibility along the REFRACTED ray (the ray that actually
+    // reaches the sky after passing through the pane).
+    float sunDot = dot(refracted, -normalize(uSunDir));
+    float sunCore = pow(max(0.0, sunDot), 280.0) * 9.0;
+    float sunHalo = pow(max(0.0, sunDot), 14.0) * 0.6;
+    vec3 sunGlow = vec3(1.0, 0.92, 0.78) * (sunCore + sunHalo);
+
+    // Lead detection / blur (same 5-tap distance field path as standard).
+    float Dc  = tex.a * uDistMaxPx;
+    float Dxp = texture2D(uMap, vUv + vec2( texel.x, 0.0)).a * uDistMaxPx;
+    float Dxm = texture2D(uMap, vUv + vec2(-texel.x, 0.0)).a * uDistMaxPx;
+    float Dyp = texture2D(uMap, vUv + vec2(0.0,  texel.y)).a * uDistMaxPx;
+    float Dym = texture2D(uMap, vUv + vec2(0.0, -texel.y)).a * uDistMaxPx;
+    float D = (Dc * 2.0 + Dxp + Dxm + Dyp + Dym) * 0.16666667;
+    float leadAlpha = 1.0 - smoothstep(uLeadR - 0.75, uLeadR + 0.75, D);
+
+    // Glass body: refracted sky tinted by glass color, plus a Fresnel-weighted
+    // reflection of the sky off the front face. Backlight boosts saturated
+    // cells so they still glow rather than going washed-out.
+    vec3 transmittedLight = (skyRef + sunGlow) * glassColor * 1.7 * uBacklight;
+    vec3 glassResult = mix(transmittedLight, skyRefl, fresnel * 0.42);
+
+    if (leadAlpha < 0.001) {
+      gl_FragColor = vec4(glassResult, 1.0);
+      return;
+    }
+
+    // Lead bump + specular + a tiny chromatic reflection of the actual sky.
+    vec2 grad = vec2(Dxp - Dxm, Dyp - Dym) * 0.5;
+    float gradLen = length(grad);
+    vec3 Nlead = vec3(0.0, 0.0, 1.0);
+    if (gradLen > 0.05) {
+      vec2 outDir = grad / gradLen;
+      float clampedD = min(D, uLeadR * 0.95);
+      float h = sqrt(max(0.001, uLeadR * uLeadR - clampedD * clampedD));
+      float hp = clampedD / h;
+      Nlead = normalize(vec3(outDir * hp, 1.0));
+    }
+    vec3 lightDir = normalize(vec3(0.45, -0.50, 0.78));
+    vec3 vDir = vec3(0.0, 0.0, 1.0);
+    float NdotL = max(0.0, dot(Nlead, lightDir));
+    vec3 H = normalize(lightDir + vDir);
+    float spec = pow(max(0.0, dot(Nlead, H)), 36.0);
+    vec3 leadSkyReflect = sampleSky(reflect(V, Nlead)) * 0.20;
+    vec3 silverLit = uLeadTint * (0.30 + 0.62 * NdotL)
+                     + vec3(0.85) * spec
+                     + leadSkyReflect
+                     + glassColor * 0.10;
+
+    vec3 finalColor = mix(glassResult, silverLit, leadAlpha);
+    gl_FragColor = vec4(finalColor, 1.0);
+  }
+`;
+
+function makeRaytracedGlassMaterial(initialTexture) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uMap:        { value: initialTexture },
+      uTexSize:    { value: new THREE.Vector2(64, 64) },
+      uBacklight:  { value: 1.35 },
+      uLeadR:      { value: 2.0 },
+      uDistMaxPx:  { value: 4.0 },
+      uLeadTint:   { value: new THREE.Color(0x1f1f23) },
+      uSkyTex:     { value: skyTexture },
+      uSunDir:     { value: new THREE.Vector3(-0.22, -0.42, 0.92) },
+      uCameraPos:  { value: new THREE.Vector3() },
+      uIOR:        { value: 1.48 },
+    },
+    vertexShader: GLASS_VERT_SRC,
+    fragmentShader: RAYTRACED_GLASS_FRAG_SRC,
+    side: THREE.DoubleSide,
+  });
+}
+
+function makeGlassMaterial(initialTexture) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uMap:        { value: initialTexture },
+      uTexSize:    { value: new THREE.Vector2(64, 64) },
+      uBacklight:  { value: 1.25 },
+      uLeadR:      { value: 2.0 },
+      uDistMaxPx:  { value: 4.0 },
+      uLeadTint:   { value: new THREE.Color(0x1f1f23) },
+      uSkyTex:     { value: skyTexture },
+      uSunDir:     { value: new THREE.Vector3(-0.22, -0.42, 0.92) },
+      uCameraPos:  { value: new THREE.Vector3() },
+    },
+    vertexShader: GLASS_VERT_SRC,
+    fragmentShader: GLASS_FRAG_SRC,
+    side: THREE.DoubleSide,
+  });
+}
+
+// Windows are created lazily when images load — no initial glass mesh here.
 
 // ---------- Procedural wood + plaster textures ----------
 const wallPlasterTex = makePlasterTexture();
@@ -91,94 +307,296 @@ const trimMat = new THREE.MeshBasicMaterial({ color: 0x05040a });
 const frameMatFront = new THREE.MeshBasicMaterial({ map: frameWoodTex });
 const frameMatSide  = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0x9a8270 });
 const frameMatBack  = new THREE.MeshBasicMaterial({ color: 0x1f140a });
-const wallGroup = new THREE.Group();
-const frameGroup = new THREE.Group();
-scene.add(wallGroup);
-scene.add(frameGroup);
+// ---- Hallway wall (plaster strips around every window) and per-window frame.
+// As the user uploads more images, each becomes a new `window` object: its
+// own glass mesh + frame group + sill, all sitting at its own x offset along
+// the wall. `rebuildHallwayWall()` rebuilds the plaster strips that fill the
+// gaps between windows.
+const HALLWAY_TOP_Y = 14;
+const HALLWAY_BOT_Y = -7;
+const HALLWAY_EXT_MARGIN = 16;          // wall continues this far past first/last window
+const WINDOW_SPACING = 1.6;             // gap between adjacent windows (world units)
 
-function rebuildWall() {
-  // Dispose previous geometries.
-  for (const g of [wallGroup, frameGroup]) {
-    while (g.children.length) {
-      const c = g.children.pop();
-      c.geometry?.dispose();
-    }
+const hallwayWall = new THREE.Group();
+scene.add(hallwayWall);
+
+function addHallwayStrip(w, h, x, y) {
+  if (w < 0.01 || h < 0.01) return;
+  const mat = wallMat.clone();
+  const tex = wallPlasterTex.clone();
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(Math.max(0.1, w / 3), Math.max(0.1, h / 3));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  mat.map = tex;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  m.position.set(x, y, WALL_Z);
+  hallwayWall.add(m);
+}
+
+// ---- Enclosed room: ceiling + back wall + side walls ----
+const ROOM_DEPTH  = 14;   // back wall sits at z = ROOM_DEPTH
+const ROOM_HEIGHT = 12;   // ceiling at y = ROOM_HEIGHT
+const roomEnclosure = new THREE.Group();
+scene.add(roomEnclosure);
+
+function rebuildRoomEnclosure() {
+  while (roomEnclosure.children.length) {
+    const c = roomEnclosure.children.pop();
+    c.geometry?.dispose();
+    if (c.material?.map?.dispose) c.material.map.dispose();
+    if (c.material?.dispose) c.material.dispose();
   }
+  // Match the hallway's left/right extents so the side walls meet the wall
+  // we already build for the windows.
+  let leftEdge = -16, rightEdge = 16;
+  if (windows.length > 0) {
+    leftEdge  = windows[0].positionX - windows[0].width / 2;
+    rightEdge = windows[windows.length - 1].positionX + windows[windows.length - 1].width / 2;
+  }
+  const sideLeft  = leftEdge  - HALLWAY_EXT_MARGIN;
+  const sideRight = rightEdge + HALLWAY_EXT_MARGIN;
+  const roomWidth = sideRight - sideLeft;
+  const cx        = (sideLeft + sideRight) / 2;
+  const midZ      = (WALL_Z + ROOM_DEPTH) / 2;
+  const depth     = ROOM_DEPTH - WALL_Z;
 
-  // ---- Plaster wall: 4 strips around the glass opening ----
-  const sideW = (WALL_W - GLASS_W) / 2;
-  const sideH = (WALL_H - GLASS_H) / 2;
-  const addWall = (w, h, x, y, repU, repV) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat.clone());
-    // each strip has its own clone so it can set independent texture repeats
-    m.material.map = wallPlasterTex.clone();
-    m.material.map.wrapS = m.material.map.wrapT = THREE.RepeatWrapping;
-    m.material.map.repeat.set(repU, repV);
-    m.material.map.colorSpace = THREE.SRGBColorSpace;
-    m.material.map.needsUpdate = true;
-    m.position.set(x, y, WALL_Z);
-    wallGroup.add(m);
+  const makePlasterPlane = (w, h) => {
+    const mat = wallMat.clone();
+    const tex = wallPlasterTex.clone();
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(Math.max(0.1, w / 3), Math.max(0.1, h / 3));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    mat.map = tex;
+    return new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
   };
-  addWall(WALL_W, sideH, 0, GLASS_CENTER_Y + GLASS_H / 2 + sideH / 2, WALL_W / 3, sideH / 3);
-  addWall(WALL_W, sideH, 0, GLASS_CENTER_Y - GLASS_H / 2 - sideH / 2, WALL_W / 3, sideH / 3);
-  addWall(sideW, GLASS_H, -GLASS_W / 2 - sideW / 2, GLASS_CENTER_Y, sideW / 3, GLASS_H / 3);
-  addWall(sideW, GLASS_H,  GLASS_W / 2 + sideW / 2, GLASS_CENTER_Y, sideW / 3, GLASS_H / 3);
 
-  // Dark inset trim sits just behind the glass to hide any sub-pixel seam.
-  const inset = new THREE.Mesh(
-    new THREE.PlaneGeometry(GLASS_W + 0.04, GLASS_H + 0.04),
-    trimMat
-  );
-  inset.position.set(0, GLASS_CENTER_Y, GLASS_Z - 0.025);
-  wallGroup.add(inset);
+  // Ceiling (faces downward, slightly darker tint).
+  const ceil = makePlasterPlane(roomWidth, depth);
+  ceil.material.color = new THREE.Color(0x322c30);
+  ceil.rotation.x =  Math.PI / 2;
+  ceil.position.set(cx, ROOM_HEIGHT, midZ);
+  roomEnclosure.add(ceil);
 
-  // ---- 3D wooden window frame: four extruded boards bracketing the glass ----
-  const innerW = GLASS_W;
-  const innerH = GLASS_H;
+  // Back wall (faces -z, opposite the windows).
+  const back = makePlasterPlane(roomWidth, ROOM_HEIGHT);
+  back.rotation.y = Math.PI;
+  back.position.set(cx, ROOM_HEIGHT / 2, ROOM_DEPTH);
+  roomEnclosure.add(back);
+
+  // Left side wall (faces +x — toward the room center).
+  // Rotation about Y by +π/2 takes the plane's +Z normal to +X.
+  const left = makePlasterPlane(depth, ROOM_HEIGHT);
+  left.rotation.y = Math.PI / 2;
+  left.position.set(sideLeft, ROOM_HEIGHT / 2, midZ);
+  roomEnclosure.add(left);
+
+  // Right side wall (faces -x — toward the room center).
+  const right = makePlasterPlane(depth, ROOM_HEIGHT);
+  right.rotation.y = -Math.PI / 2;
+  right.position.set(sideRight, ROOM_HEIGHT / 2, midZ);
+  roomEnclosure.add(right);
+
+  // Stash bounds so the camera clamp can keep us inside the room.
+  roomBounds.sideLeft  = sideLeft;
+  roomBounds.sideRight = sideRight;
+  roomBounds.backZ     = ROOM_DEPTH;
+  roomBounds.ceilingY  = ROOM_HEIGHT;
+}
+
+const roomBounds = { sideLeft: -16, sideRight: 16, backZ: ROOM_DEPTH, ceilingY: ROOM_HEIGHT };
+
+function rebuildHallwayWall() {
+  while (hallwayWall.children.length) {
+    const c = hallwayWall.children.pop();
+    c.geometry?.dispose();
+    if (c.material?.map?.dispose) c.material.map.dispose();
+    if (c.material?.dispose) c.material.dispose();
+  }
+  if (windows.length === 0) {
+    // No windows yet — just one big plaster wall so the scene isn't empty.
+    addHallwayStrip(40, HALLWAY_TOP_Y - HALLWAY_BOT_Y, 0, (HALLWAY_TOP_Y + HALLWAY_BOT_Y) / 2);
+    return;
+  }
+  const first = windows[0];
+  const last  = windows[windows.length - 1];
+  const leftMost  = first.positionX - first.width / 2;
+  const rightMost = last.positionX  + last.width  / 2;
+  const extLeft  = leftMost  - HALLWAY_EXT_MARGIN;
+  const extRight = rightMost + HALLWAY_EXT_MARGIN;
+  const totalW   = extRight - extLeft;
+  const centerX  = (extLeft + extRight) / 2;
+
+  const maxTopY = windows.reduce((m, w) => Math.max(m, w.centerY + w.height / 2), -Infinity);
+  const minBotY = windows.reduce((m, w) => Math.min(m, w.centerY - w.height / 2),  Infinity);
+  addHallwayStrip(totalW, HALLWAY_TOP_Y - maxTopY, centerX, (HALLWAY_TOP_Y + maxTopY) / 2);
+  addHallwayStrip(totalW, minBotY - HALLWAY_BOT_Y, centerX, (minBotY + HALLWAY_BOT_Y) / 2);
+
+  // Left & right end caps spanning the heights of the outermost windows.
+  if (leftMost - extLeft > 0) {
+    addHallwayStrip(leftMost - extLeft, first.height, (extLeft + leftMost) / 2, first.centerY);
+  }
+  if (extRight - rightMost > 0) {
+    addHallwayStrip(extRight - rightMost, last.height, (rightMost + extRight) / 2, last.centerY);
+  }
+  // Plaster strips between consecutive windows.
+  for (let i = 0; i + 1 < windows.length; i++) {
+    const a = windows[i], b = windows[i + 1];
+    const gL = a.positionX + a.width / 2;
+    const gR = b.positionX - b.width / 2;
+    if (gR - gL <= 0.01) continue;
+    const bot = Math.min(a.centerY - a.height / 2, b.centerY - b.height / 2);
+    const top = Math.max(a.centerY + a.height / 2, b.centerY + b.height / 2);
+    addHallwayStrip(gR - gL, top - bot, (gL + gR) / 2, (top + bot) / 2);
+  }
+}
+
+function buildWindowFrame(group, innerW, innerH, centerY, posX) {
   const frameInnerHalfW = innerW / 2;
   const frameInnerHalfH = innerH / 2;
-  const boardZ = FRAME_DEPTH / 2; // frame extrudes from glass plane forward
+  const boardZ = FRAME_DEPTH / 2;
   const board = (w, h, x, y) => {
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(w, h, FRAME_DEPTH),
       [frameMatSide, frameMatSide, frameMatSide, frameMatSide, frameMatFront, frameMatBack]
     );
     m.position.set(x, y, boardZ);
-    frameGroup.add(m);
+    group.add(m);
   };
-  // Top + bottom span the full outer width; left/right slot between them.
   const outerW = innerW + 2 * FRAME_BOARD;
-  board(outerW, FRAME_BOARD, 0, GLASS_CENTER_Y + frameInnerHalfH + FRAME_BOARD / 2);
-  board(outerW, FRAME_BOARD, 0, GLASS_CENTER_Y - frameInnerHalfH - FRAME_BOARD / 2);
-  board(FRAME_BOARD, innerH, -frameInnerHalfW - FRAME_BOARD / 2, GLASS_CENTER_Y);
-  board(FRAME_BOARD, innerH,  frameInnerHalfW + FRAME_BOARD / 2, GLASS_CENTER_Y);
+  board(outerW, FRAME_BOARD, posX, centerY + frameInnerHalfH + FRAME_BOARD / 2);
+  board(outerW, FRAME_BOARD, posX, centerY - frameInnerHalfH - FRAME_BOARD / 2);
+  board(FRAME_BOARD, innerH, posX - frameInnerHalfW - FRAME_BOARD / 2, centerY);
+  board(FRAME_BOARD, innerH, posX + frameInnerHalfW + FRAME_BOARD / 2, centerY);
 
-  // ---- Windowsill: a horizontal wooden ledge below the bottom frame board,
-  // overhanging both sides and sticking out a bit beyond the frame's depth.
-  // Visually anchors the window as cut into the wall (the bottom frame "sits"
-  // on the sill, and the wall continues below the sill down to the floor).
   const sillW = outerW + 0.20;
   const sillD = FRAME_DEPTH + 0.10;
   const sillH = 0.10;
-  const sillY = GLASS_CENTER_Y - frameInnerHalfH - FRAME_BOARD - sillH / 2;
+  const sillY = centerY - frameInnerHalfH - FRAME_BOARD - sillH / 2;
   const sillZ = sillD / 2;
-  // Box face material order: +x, -x, +y(top), -y(bottom), +z(front), -z(back).
-  const sillMats = [
-    frameMatSide,  // right end of sill
-    frameMatSide,  // left end of sill
-    frameMatFront, // top of sill — visible from above
-    frameMatBack,  // underside (mostly hidden)
-    frameMatFront, // front face — visible from camera
-    frameMatBack,  // back (against wall)
-  ];
-  const sill = new THREE.Mesh(
-    new THREE.BoxGeometry(sillW, sillH, sillD),
-    sillMats
+  const sillMats = [frameMatSide, frameMatSide, frameMatFront, frameMatBack, frameMatFront, frameMatBack];
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(sillW, sillH, sillD), sillMats);
+  sill.position.set(posX, sillY, sillZ);
+  group.add(sill);
+
+  // Dark inset trim hides any sub-pixel seam between glass and frame.
+  const inset = new THREE.Mesh(
+    new THREE.PlaneGeometry(innerW + 0.04, innerH + 0.04),
+    trimMat
   );
-  sill.position.set(0, sillY, sillZ);
-  frameGroup.add(sill);
+  inset.position.set(posX, centerY, GLASS_Z - 0.025);
+  group.add(inset);
 }
-rebuildWall();
+
+// ---- Windows (one per uploaded image) ----
+const windows = [];
+let activeWindowIdx = 0;
+let useRaytracer = false;
+
+function setRenderMode(toRaytracer) {
+  useRaytracer = !!toRaytracer;
+  for (const w of windows) {
+    w.mesh.material = useRaytracer ? w.raytraceMat : w.shaderMat;
+    w.mat = w.mesh.material;
+  }
+  // Bump god-ray density + step count in raytracer mode so the beams read as
+  // physically integrated light volume rather than a faint atmospheric tint.
+  raysMat.uniforms.uRaytraceMode.value = useRaytracer ? 1.0 : 0.0;
+}
+
+function aspectToSize(aspect) {
+  const a = Math.max(0.35, Math.min(2.8, aspect));
+  const h = Math.sqrt(GLASS_AREA / a);
+  const w = h * a;
+  const centerY = GLASS_BOTTOM + h / 2;
+  return { w, h, centerY };
+}
+
+function createWindow({ sourceCanvas, aspect }) {
+  const { w, h, centerY } = aspectToSize(aspect);
+  // First window centered at x=0; each subsequent window slots to the right.
+  let positionX = 0;
+  if (windows.length > 0) {
+    const last = windows[windows.length - 1];
+    positionX = last.positionX + last.width / 2 + WINDOW_SPACING + w / 2;
+  }
+
+  // Each window gets its own material so it can hold its own texture/uniforms.
+  const initialTex = new THREE.CanvasTexture(makePlaceholderCanvas());
+  initialTex.colorSpace = THREE.SRGBColorSpace;
+  initialTex.minFilter = THREE.LinearFilter;
+  initialTex.magFilter = THREE.LinearFilter;
+  initialTex.generateMipmaps = false;
+  // Two materials per window: the custom shader (with bump-shaded lead,
+  // sky tinting, sun bleed) and a MeshPhysicalMaterial alternative with
+  // proper screen-space transmission + IBL. The render-mode toggle swaps
+  // `mesh.material` between them.
+  const shaderMat = makeGlassMaterial(initialTex);
+  const raytraceMat = makeRaytracedGlassMaterial(initialTex);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), useRaytracer ? raytraceMat : shaderMat);
+  mesh.position.set(positionX, centerY, GLASS_Z);
+  scene.add(mesh);
+
+  const frameGroup = new THREE.Group();
+  buildWindowFrame(frameGroup, w, h, centerY, positionX);
+  scene.add(frameGroup);
+
+  const win = {
+    mesh, mat: shaderMat, shaderMat, raytraceMat, frameGroup, sourceCanvas, aspect,
+    positionX, width: w, height: h, centerY,
+    seed: Math.random(),
+    leadR: 2.0, distMaxPx: 4.0, texture: initialTex,
+  };
+  windows.push(win);
+  rebuildHallwayWall();
+  rebuildRoomEnclosure();
+  return win;
+}
+
+function setActiveWindow(idx) {
+  if (idx < 0 || idx >= windows.length) return;
+  activeWindowIdx = idx;
+  const w = windows[idx];
+  if (!w.texture) return;
+  floorMat.uniforms.uGlassTex.value = w.texture;
+  floorMat.uniforms.uGlassPos.value.set(w.positionX, w.centerY, GLASS_Z);
+  floorMat.uniforms.uGlassSize.value.set(w.width, w.height);
+  floorMat.uniforms.uLeadR.value = w.leadR;
+  floorMat.uniforms.uDistMaxPx.value = w.distMaxPx;
+  raysMat.uniforms.uGlassTex.value = w.texture;
+  raysMat.uniforms.uGlassPos.value.set(w.positionX, w.centerY, GLASS_Z);
+  raysMat.uniforms.uGlassSize.value.set(w.width, w.height);
+  raysMat.uniforms.uLeadR.value = w.leadR;
+  raysMat.uniforms.uDistMaxPx.value = w.distMaxPx;
+}
+
+// ---- Smooth camera transition to a specific window ----
+const cameraTween = {
+  active: false,
+  pos: new THREE.Vector3(),
+  target: new THREE.Vector3(),
+};
+function startCameraTransition(win) {
+  // Same offset relative to the window's center as the default camera setup.
+  cameraTween.pos.set(win.positionX + 1.8, 2.9, 7.0);
+  cameraTween.target.set(win.positionX, 2.0, 1.4);
+  cameraTween.active = true;
+}
+function tickCameraTween(dt) {
+  if (!cameraTween.active) return;
+  const ease = 1 - Math.pow(0.001, dt); // ~3.5 1/s, smoothly decaying
+  camera.position.lerp(cameraTween.pos, ease);
+  controls.target.lerp(cameraTween.target, ease);
+  if (camera.position.distanceTo(cameraTween.pos) < 0.04 &&
+      controls.target.distanceTo(cameraTween.target) < 0.04) {
+    cameraTween.active = false;
+  }
+}
+
+// First scene fill — no windows yet, just empty plaster + a generic room.
+rebuildHallwayWall();
+rebuildRoomEnclosure();
 
 // ---------- Floor with light-projection shader ----------
 const sunDir = new THREE.Vector3(-0.22, -0.42, 0.92).normalize();
@@ -193,6 +611,8 @@ const floorMat = new THREE.ShaderMaterial({
     uSunDir:      { value: sunDir },
     uExposure:    { value: 1.15 },
     uPoolSoftness:{ value: 0.012 },
+    uLeadR:       { value: 2.0 },
+    uDistMaxPx:   { value: 4.0 },
   },
   vertexShader: /* glsl */`
     varying vec3 vWorldPos;
@@ -212,11 +632,14 @@ const floorMat = new THREE.ShaderMaterial({
     uniform vec3 uSunDir;
     uniform float uExposure;
     uniform float uPoolSoftness;
+    uniform float uLeadR;
+    uniform float uDistMaxPx;
 
     // Sample the glass texture where light reaching this floor point passed through.
     // Trace from worldPos backward along -uSunDir to the glass plane (z = uGlassPos.z),
     // then look up the glass UV at the hit. Returns vec3(0) if the trace misses the
     // glass rectangle or if the light direction can't reach this point physically.
+    // Lead (encoded in alpha as small distance) blocks transmission entirely.
     vec3 sampleGlassAt(vec3 worldPos) {
       vec3 toSun = -uSunDir;
       float denom = toSun.z;
@@ -226,7 +649,10 @@ const floorMat = new THREE.ShaderMaterial({
       vec3 hit = worldPos + toSun * t;
       vec2 uv = (hit.xy - (uGlassPos.xy - uGlassSize * 0.5)) / uGlassSize;
       if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec3(0.0);
-      return texture2D(uGlassTex, uv).rgb;
+      vec4 tex = texture2D(uGlassTex, uv);
+      float D = tex.a * uDistMaxPx;
+      float openness = smoothstep(uLeadR - 0.5, uLeadR + 0.5, D);
+      return tex.rgb * openness;
     }
 
     void main() {
@@ -246,7 +672,10 @@ const floorMat = new THREE.ShaderMaterial({
       float falloff = pow(cosI, 0.5);
 
       float r = length(vWorldPos.xz - vec2(0.0, 1.5));
-      float vignette = smoothstep(22.0, 3.0, r);
+      // Wider falloff so the colored pool reads farther across the floor as
+      // the indirect bounce contribution we're about to add to the wall is
+      // physically rooted in light covering a real area.
+      float vignette = smoothstep(34.0, 3.0, r);
 
       // Sample the wood plank albedo at this world-space (x, z) position so
       // the floor reads as actual material, not a flat color.
@@ -287,6 +716,9 @@ const raysMat = new THREE.ShaderMaterial({
     uCameraPos: { value: new THREE.Vector3() },
     uDensity:   { value: 0.30 },
     uExtinction:{ value: 0.05 },
+    uLeadR:     { value: 2.0 },
+    uDistMaxPx: { value: 4.0 },
+    uRaytraceMode: { value: 0.0 },     // 0 = standard, 1 = full-quality raytraced beams
   },
   vertexShader: /* glsl */`
     varying vec3 vWorldPos;
@@ -307,6 +739,9 @@ const raysMat = new THREE.ShaderMaterial({
     uniform vec3 uCameraPos;
     uniform float uDensity;
     uniform float uExtinction;
+    uniform float uLeadR;
+    uniform float uDistMaxPx;
+    uniform float uRaytraceMode;
 
     vec3 sampleGlassAt(vec3 worldPos) {
       vec3 toSun = -uSunDir;
@@ -317,7 +752,10 @@ const raysMat = new THREE.ShaderMaterial({
       vec3 hit = worldPos + toSun * t;
       vec2 uv = (hit.xy - (uGlassPos.xy - uGlassSize * 0.5)) / uGlassSize;
       if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec3(0.0);
-      return texture2D(uGlassTex, uv).rgb;
+      vec4 tex = texture2D(uGlassTex, uv);
+      float D = tex.a * uDistMaxPx;
+      float openness = smoothstep(uLeadR - 0.5, uLeadR + 0.5, D);
+      return tex.rgb * openness;
     }
 
     // Hash-based dither to mask banding from a low step count.
@@ -342,18 +780,24 @@ const raysMat = new THREE.ShaderMaterial({
       }
       if (tEntry >= tExit) discard;
 
-      const float STEPS = 28.0;
+      // Raytracer mode bumps the step count and the scattering density so
+      // beams render as integrated rays rather than a thin tint.
+      const float STEPS_STD = 28.0;
+      const float STEPS_RT  = 56.0;
+      bool rt = uRaytraceMode > 0.5;
+      float STEPS = rt ? STEPS_RT : STEPS_STD;
+      float densityScale = rt ? 1.9 : 1.0;
       float stepLen = (tExit - tEntry) / STEPS;
       float jitter = dither(gl_FragCoord.xy);
 
       vec3 accum = vec3(0.0);
       float trans = 1.0;
-      for (float i = 0.0; i < STEPS; i++) {
+      for (float i = 0.0; i < 64.0; i++) {
+        if (i >= STEPS) break;
         float t = tEntry + (i + jitter) * stepLen;
         vec3 p = uCameraPos + rayDir * t;
         vec3 light = sampleGlassAt(p);
-        // In-scattering with simple extinction so far rays softly attenuate.
-        accum += light * trans * stepLen;
+        accum += light * trans * stepLen * densityScale;
         trans *= exp(-uExtinction * stepLen);
       }
 
@@ -374,6 +818,54 @@ raysMesh.position.copy(rayBoxCenter);
 raysMesh.renderOrder = 1; // draw rays after the opaque scene
 scene.add(raysMesh);
 
+// ---------- Visible sun in the sky ----------
+// A camera-facing billboard parked far along -sunDir; its custom shader paints
+// a hot core + soft halo. The same uSunDir uniform drives the floor gobo and
+// the god rays, so when the user moves the elevation/azimuth sliders the sun
+// drifts across the sky AND the light pool on the floor moves with it.
+const SUN_DISTANCE = 200;
+const sunMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(46, 46),
+  new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(0xffe7b5) } },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      varying vec2 vUv;
+      uniform vec3 uColor;
+      void main() {
+        vec2 d = (vUv - 0.5) * 2.0;
+        float r = length(d);
+        float core = smoothstep(0.18, 0.03, r);
+        float halo = smoothstep(1.0, 0.18, r) * 0.45;
+        float a = clamp(core + halo, 0.0, 1.0);
+        if (a < 0.005) discard;
+        gl_FragColor = vec4(uColor * (core * 1.6 + halo), a);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide,
+  })
+);
+sunMesh.renderOrder = -1; // drawn before transparent stuff
+scene.add(sunMesh);
+
+const _sunOff = new THREE.Vector3();
+function updateSunMesh() {
+  // Sun position = camera + (-sunDir) * distance, so it stays at a fixed
+  // angle relative to the camera and tracks with sun-direction sliders.
+  _sunOff.copy(sunDir).multiplyScalar(-SUN_DISTANCE);
+  sunMesh.position.copy(camera.position).add(_sunOff);
+  sunMesh.lookAt(camera.position);
+}
+
 // ---------- Soft contact shadow under the wall (cheap baked vignette) ----------
 const shadowTex = makeContactShadowTexture();
 const shadowMat = new THREE.MeshBasicMaterial({
@@ -389,43 +881,21 @@ scene.add(shadow);
 
 // ---------- State and generation ----------
 const state = {
-  sourceCanvas: null,
+  // Per-window source canvas + seed live on `windows[i]`. Sliders below mutate
+  // these global params, which apply to the most-recently-uploaded window
+  // when regenerate runs.
   subdivCellRadius: 80,
   paletteSize: 12,
   minPieceRadius: 18,
   leadThickness: 2,
   warpAmp: 0.45,
+  maxElongation: 4.0,    // anisotropic stretch cap (1 = isotropic, 5 = ribbon-y)
   generating: false,
-  pendingPreview: false,
-  pendingFull: false,
-  seed: Math.random(),
+  currentGenId: 0,    // monotonically bumped; in-flight gens with stale ID self-cancel at checkpoints
   timeOfDay: 0.45,
   sunElev: 0.42,
   raysIntensity: 0.55,
 };
-
-function resizeGlassForAspect(aspect) {
-  // Pick W, H so glass area stays near GLASS_AREA — keeps the glass roughly
-  // the same visual size regardless of source orientation. Cap at sensible
-  // extremes so a panorama doesn't become a sliver.
-  const a = Math.max(0.35, Math.min(2.8, aspect));
-  const h = Math.sqrt(GLASS_AREA / a);
-  const w = h * a;
-  GLASS_W = w;
-  GLASS_H = h;
-  GLASS_CENTER_Y = GLASS_BOTTOM + GLASS_H / 2;
-
-  glassMesh.geometry.dispose();
-  glassMesh.geometry = new THREE.PlaneGeometry(GLASS_W, GLASS_H);
-  glassMesh.position.set(0, GLASS_CENTER_Y, GLASS_Z);
-
-  floorMat.uniforms.uGlassPos.value.set(0, GLASS_CENTER_Y, GLASS_Z);
-  floorMat.uniforms.uGlassSize.value.set(GLASS_W, GLASS_H);
-  raysMat.uniforms.uGlassPos.value.set(0, GLASS_CENTER_Y, GLASS_Z);
-  raysMat.uniforms.uGlassSize.value.set(GLASS_W, GLASS_H);
-
-  rebuildWall();
-}
 
 function setSunFromControls() {
   // azimuth: -55deg to +55deg as t goes 0..1
@@ -439,63 +909,89 @@ function setSunFromControls() {
   sunDir.set(dx, dy, dz).normalize();
   floorMat.uniforms.uSunDir.value.copy(sunDir);
   raysMat.uniforms.uSunDir.value.copy(sunDir);
+  // Both glass shaders (standard and raytraced) carry uSunDir for direct sun
+  // visibility tests; update them in lockstep.
+  for (const w of windows) {
+    w.shaderMat.uniforms.uSunDir.value.copy(sunDir);
+    w.raytraceMat.uniforms.uSunDir.value.copy(sunDir);
+  }
+  if (typeof updateSunMesh === 'function') updateSunMesh();
 }
 setSunFromControls();
 
-function regenerate(opts = {}) {
-  if (!state.sourceCanvas) return;
+// Regenerate the stained-glass texture for a specific window (default: the
+// most recently added one). Slider changes re-target the latest window. Each
+// call bumps a gen-id so in-flight gens self-cancel at their next yield.
+async function regenerate(opts = {}) {
+  const winIdx = opts.windowIdx ?? (windows.length - 1);
+  if (winIdx < 0 || winIdx >= windows.length) return;
+  const win = windows[winIdx];
+  if (!win.sourceCanvas) return;
   const wantPreview = opts.preview === true;
-  // While a generation is in flight, queue at most one pending request. If
-  // the user keeps dragging the slider, only the latest position will run
-  // next — we never stack a backlog.
-  if (state.generating) {
-    if (wantPreview) state.pendingPreview = true;
-    else state.pendingFull = true;
-    return;
-  }
+
+  const myGenId = ++state.currentGenId;
   state.generating = true;
   setStatus(wantPreview ? 'preview…' : 'Generating stained glass…');
-  requestAnimationFrame(() => requestAnimationFrame(() => {
+  try {
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (state.currentGenId !== myGenId) return;
+
     const t0 = performance.now();
-    const { canvas, pieceCount, paletteSize, aspect } = generateStainedGlass(state.sourceCanvas, {
+    const result = await generateStainedGlass(win.sourceCanvas, {
       resolution: wantPreview ? 384 : 1024,
       subdivCellRadius: state.subdivCellRadius,
       paletteSize: state.paletteSize,
       minPieceRadius: state.minPieceRadius,
       leadThickness: state.leadThickness,
       warpAmp: state.warpAmp,
+      maxElongation: state.maxElongation,
       previewMode: wantPreview,
-      seed: state.seed,
+      seed: win.seed,
+      shouldAbort: () => state.currentGenId !== myGenId,
     });
-    resizeGlassForAspect(aspect);
+    if (!result || state.currentGenId !== myGenId) return;
+
+    const { canvas, pieceCount, paletteSize, leadThickness: lt, distMaxPx, width: tw, height: th } = result;
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.minFilter = THREE.LinearFilter;
     tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
     tex.needsUpdate = true;
 
-    if (glassMat.uniforms.uMap.value) glassMat.uniforms.uMap.value.dispose?.();
-    glassMat.uniforms.uMap.value = tex;
-    floorMat.uniforms.uGlassTex.value = tex;
-    raysMat.uniforms.uGlassTex.value = tex;
+    if (win.shaderMat.uniforms.uMap.value && win.shaderMat.uniforms.uMap.value !== tex) {
+      win.shaderMat.uniforms.uMap.value.dispose?.();
+    }
+    win.shaderMat.uniforms.uMap.value = tex;
+    win.shaderMat.uniforms.uTexSize.value.set(tw, th);
+    win.shaderMat.uniforms.uLeadR.value = lt;
+    win.shaderMat.uniforms.uDistMaxPx.value = distMaxPx;
+    // Mirror the same texture + lead params onto the raytraced material so
+    // the toggle is instant without re-running the generator.
+    win.raytraceMat.uniforms.uMap.value = tex;
+    win.raytraceMat.uniforms.uTexSize.value.set(tw, th);
+    win.raytraceMat.uniforms.uLeadR.value = lt;
+    win.raytraceMat.uniforms.uDistMaxPx.value = distMaxPx;
+    win.texture = tex;
+    win.leadR = lt;
+    win.distMaxPx = distMaxPx;
+
+    // Route the floor + rays gobo to whichever window the camera last focused
+    // on. Newly generated windows become the active one (they're what the
+    // user just acted on).
+    setActiveWindow(winIdx);
+
+    // If this is a brand-new window and we just finished its FULL render,
+    // smoothly transition the camera to face it.
+    if (!wantPreview && opts.transitionCameraAfter) startCameraTransition(win);
 
     const ms = (performance.now() - t0) | 0;
-    setStatus(`${pieceCount} pieces · ${paletteSize}-color palette · ${ms} ms${wantPreview ? ' · preview' : ''}`);
-    state.generating = false;
-
-    // Drain the pending queue. Full-quality always wins over preview if both
-    // are queued (the user moved a slider that needs a final-quality render).
-    if (state.pendingFull) {
-      state.pendingFull = false;
-      state.pendingPreview = false;
-      regenerate({ preview: false });
-    } else if (state.pendingPreview) {
-      state.pendingPreview = false;
-      regenerate({ preview: true });
-    }
-  }));
+    setStatus(`#${winIdx + 1}: ${pieceCount} pieces · ${paletteSize}-color palette · ${ms} ms${wantPreview ? ' · preview' : ''}`);
+  } finally {
+    if (state.currentGenId === myGenId) state.generating = false;
+  }
 }
 
 // Slider input: render an immediate low-res preview, then a full-quality
@@ -520,25 +1016,31 @@ async function loadDefaultSource() {
   c.width = img.naturalWidth;
   c.height = img.naturalHeight;
   c.getContext('2d').drawImage(img, 0, 0);
-  state.sourceCanvas = c;
+  // First window — no camera tween (this IS the initial view).
+  const win = createWindow({ sourceCanvas: c, aspect: c.width / c.height });
   showSourceThumb(c);
-  regenerate();
+  await regenerate({ windowIdx: windows.indexOf(win), preview: false });
 }
 
 function loadFromFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
   const url = URL.createObjectURL(file);
   const img = new Image();
-  img.onload = () => {
+  img.onload = async () => {
     const c = document.createElement('canvas');
     c.width = img.naturalWidth;
     c.height = img.naturalHeight;
     c.getContext('2d').drawImage(img, 0, 0);
-    state.sourceCanvas = c;
-    state.seed = Math.random();
-    showSourceThumb(c);
     URL.revokeObjectURL(url);
-    regenerate();
+    // Append a new window to the hallway.
+    const win = createWindow({ sourceCanvas: c, aspect: c.width / c.height });
+    showSourceThumb(c);
+    // Generate at full quality, then transition camera to face it.
+    await regenerate({
+      windowIdx: windows.indexOf(win),
+      preview: false,
+      transitionCameraAfter: true,
+    });
   };
   img.src = url;
 }
@@ -552,6 +1054,7 @@ const ui = {
   edgeCurve:     document.getElementById('edgeCurve'),
   pieceMerge:    document.getElementById('pieceMerge'),
   minPiece:      document.getElementById('minPiece'),
+  flowAlign:     document.getElementById('flowAlign'),
   timeOfDay:     document.getElementById('timeOfDay'),
   sunElev:       document.getElementById('sunElev'),
   raysIntensity: document.getElementById('raysIntensity'),
@@ -572,8 +1075,10 @@ function showSourceThumb(srcCanvas) {
 }
 
 ui.regenerate.addEventListener('click', () => {
-  state.seed = Math.random();
-  regenerate();
+  const win = windows[windows.length - 1];
+  if (!win) return;
+  win.seed = Math.random();
+  regenerate({ preview: false });
 });
 
 const readouts = {
@@ -582,6 +1087,7 @@ const readouts = {
   edgeCurveVal:     document.getElementById('edgeCurveVal'),
   pieceMergeVal:    document.getElementById('pieceMergeVal'),
   minPieceVal:      document.getElementById('minPieceVal'),
+  flowAlignVal:     document.getElementById('flowAlignVal'),
   timeOfDayVal:     document.getElementById('timeOfDayVal'),
   sunElevVal:       document.getElementById('sunElevVal'),
   raysIntensityVal: document.getElementById('raysIntensityVal'),
@@ -594,6 +1100,9 @@ function updateReadouts() {
   readouts.minPieceVal.textContent      = state.minPieceRadius > 0
     ? `≥${state.minPieceRadius * state.minPieceRadius}px²`
     : `off`;
+  readouts.flowAlignVal.textContent     = state.maxElongation > 1.01
+    ? `max ${state.maxElongation.toFixed(1)}×`
+    : 'off';
   const az = Math.round((state.timeOfDay - 0.5) * 110);
   readouts.timeOfDayVal.textContent     = `${az >= 0 ? '+' : ''}${az}°`;
   const el = Math.round((0.09 + state.sunElev * 1.1) * 180 / Math.PI);
@@ -630,6 +1139,15 @@ ui.pieceMerge.addEventListener('input', (e) => {
 ui.minPiece.addEventListener('input', (e) => {
   const t = +e.target.value / 100;
   state.minPieceRadius = Math.round(t * 40);
+  updateReadouts();
+  scheduleLiveRegen();
+});
+
+ui.flowAlign.addEventListener('input', (e) => {
+  // slider 0..100 → max stretch 1×..5×. At 1× regions stay isotropic; at 5×
+  // an elongated region can run essentially as a single ribbon.
+  const t = +e.target.value / 100;
+  state.maxElongation = 1 + t * 4;
   updateReadouts();
   scheduleLiveRegen();
 });
@@ -672,6 +1190,28 @@ infoToggleEl?.addEventListener('click', () => {
   infoToggleEl.setAttribute('aria-pressed', willOpen ? 'true' : 'false');
 });
 
+// Mobile controls drawer — collapsed by default on narrow screens to free
+// up the viewport, expanded on desktop. Tap the chevron to toggle.
+const controlsEl = document.getElementById('controls');
+const controlsToggleEl = document.getElementById('controlsToggle');
+const MOBILE_BREAKPOINT = 720;
+function isMobileWidth() { return window.innerWidth <= MOBILE_BREAKPOINT; }
+if (isMobileWidth() && controlsEl) controlsEl.classList.add('is-collapsed');
+controlsToggleEl?.addEventListener('click', () => {
+  const collapsed = controlsEl.classList.toggle('is-collapsed');
+  controlsToggleEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+});
+
+// Raytracer toggle — switches all windows between the custom shader and the
+// MeshPhysicalMaterial alternative.
+const raytraceToggleEl = document.getElementById('raytraceToggle');
+raytraceToggleEl?.addEventListener('click', () => {
+  setRenderMode(!useRaytracer);
+  raytraceToggleEl.textContent = `Raytracer: ${useRaytracer ? 'on' : 'off'}`;
+  raytraceToggleEl.classList.toggle('primary', useRaytracer);
+  raytraceToggleEl.setAttribute('aria-pressed', useRaytracer ? 'true' : 'false');
+});
+
 // Drag-and-drop anywhere on the window.
 let dragDepth = 0;
 window.addEventListener('dragenter', (e) => {
@@ -697,15 +1237,30 @@ window.addEventListener('drop', (e) => {
 // wood frame protrudes to z ≈ 0.16. Keep the camera (and target) safely in
 // front of the wall and above the floor so neither WASD nor orbit can clip
 // through. Lateral / upper bounds are loose — only depth and floor matter.
-const BOUND_MIN_Z_CAM = 0.45;   // camera stays at least this far in front of the glass
-const BOUND_MIN_Z_TGT = 0.10;   // orbit target can sit slightly closer
-const BOUND_MIN_Y_CAM = 0.30;   // camera can't dip below the floor
-const BOUND_MIN_Y_TGT = 0.00;   // target can sit exactly on the floor
+const BOUND_MIN_Z_CAM = 0.45;
+const BOUND_MIN_Z_TGT = 0.10;
+const BOUND_MIN_Y_CAM = 0.30;
+const BOUND_MIN_Y_TGT = 0.00;
+const ROOM_MARGIN     = 0.4;  // keep camera off the room walls/ceiling
 function clampSceneBounds() {
+  // Window-wall front face + floor minimums.
   if (camera.position.z < BOUND_MIN_Z_CAM) camera.position.z = BOUND_MIN_Z_CAM;
   if (camera.position.y < BOUND_MIN_Y_CAM) camera.position.y = BOUND_MIN_Y_CAM;
   if (controls.target.z < BOUND_MIN_Z_TGT) controls.target.z = BOUND_MIN_Z_TGT;
   if (controls.target.y < BOUND_MIN_Y_TGT) controls.target.y = BOUND_MIN_Y_TGT;
+  // Room enclosure: back wall, ceiling, and side walls.
+  const xMin = roomBounds.sideLeft  + ROOM_MARGIN;
+  const xMax = roomBounds.sideRight - ROOM_MARGIN;
+  const zMax = roomBounds.backZ     - ROOM_MARGIN;
+  const yMax = roomBounds.ceilingY  - ROOM_MARGIN;
+  if (camera.position.x < xMin) camera.position.x = xMin;
+  if (camera.position.x > xMax) camera.position.x = xMax;
+  if (camera.position.z > zMax) camera.position.z = zMax;
+  if (camera.position.y > yMax) camera.position.y = yMax;
+  if (controls.target.x < xMin) controls.target.x = xMin;
+  if (controls.target.x > xMax) controls.target.x = xMax;
+  if (controls.target.z > zMax) controls.target.z = zMax;
+  if (controls.target.y > yMax) controls.target.y = yMax;
 }
 
 // ---------- WASD fly-around movement ----------
@@ -793,11 +1348,15 @@ function tick() {
   requestAnimationFrame(tick);
   const dt = clock.getDelta();
   applyMovement(dt);
+  tickCameraTween(dt);
   controls.update(dt);
-  // Backstop: orbit-around-target can also push the camera through the wall
-  // (when the user circles past the wall plane). Clamp every frame.
   clampSceneBounds();
   raysMat.uniforms.uCameraPos.value.copy(camera.position);
+  for (const w of windows) {
+    w.shaderMat.uniforms.uCameraPos.value.copy(camera.position);
+    w.raytraceMat.uniforms.uCameraPos.value.copy(camera.position);
+  }
+  updateSunMesh();
   renderer.render(scene, camera);
 }
 tick();

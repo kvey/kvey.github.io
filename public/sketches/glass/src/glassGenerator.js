@@ -4,9 +4,10 @@
 // Lead came runs along the merged boundaries — so cuts naturally snap to
 // content edges while flat regions get deliberate, bounded-complexity cuts.
 
-export function generateStainedGlass(sourceCanvas, options = {}) {
+export async function generateStainedGlass(sourceCanvas, options = {}) {
   const {
     resolution = 1024,
+    shouldAbort = null,          // optional () => bool; if returns true at a checkpoint, generator bails
     paletteSize = 12,            // K-means cluster count (palette = N glass colors)
     subdivCellRadius = 70,       // Poisson-disk spacing for sub-cells in large regions
     smoothingPasses = 4,         // median 3x3 passes on palette map
@@ -14,6 +15,7 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
     edgeSmoothPasses = 1,        // one pass is enough since vectorization does the rest
     vectorizeKernel = 6,         // gaussian half-width for vectorized boundary smoothing
     simplifyTolerance = 3.0,     // Douglas-Peucker tolerance in pixels — kills wobbles below this
+    maxElongation = 4.0,         // cap on per-region anisotropic stretch (1 = isotropic, 5 = ribbon)
     minPieceRadius = 18,         // pieces below ~radius² pixels merge into a neighbor
     leadThickness = 2,
     leadColor = [10, 8, 6],
@@ -35,6 +37,14 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
   const H = srcAspect >= 1 ? Math.max(1, Math.round(resolution / srcAspect)) : resolution;
   const N = W * H;
 
+  // Cancellation checkpoint: yields to the event loop and then asks
+  // shouldAbort whether this generation has been superseded. Returns true
+  // if the caller should bail. When shouldAbort is null (sync callers) it's
+  // a no-op fast path.
+  const checkpoint = shouldAbort
+    ? async () => { await yieldToTask(); return shouldAbort(); }
+    : async () => false;
+
   // ---- Source sampling buffer (matches aspect; small enough for fast K-means) ----
   // Preview mode shrinks the K-means workbuffer so live slider feedback stays snappy.
   const SRC_SHORT = previewMode ? 144 : 256;
@@ -51,6 +61,7 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
   // Output: srcAssignment[srcW*srcH] in [0..K-1]
   const K = Math.max(3, Math.min(32, Math.round(paletteSize)));
   const srcAssignment = kMeansQuantize(srcData, SRC_W, SRC_H, K, rng, previewMode ? 6 : 12);
+  if (await checkpoint()) return null;
 
   // ---- Step 2: Upsample palette assignment to output W×H.
   // The source is read straight — no warp here, so image content (silhouettes,
@@ -80,6 +91,7 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
   for (let pass = 0; pass < Math.max(0, smoothingPasses); pass++) {
     medianSmooth3x3(paletteOwner, W, H, K);
   }
+  if (await checkpoint()) return null;
 
   // ---- Step 4: Connected components on the palette map -> color regions.
   // A "region" is one contiguous blob of one palette color; subdivisions in
@@ -110,6 +122,8 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
     regionCount++;
   }
 
+  if (await checkpoint()) return null;
+
   // ---- Step 5: Poisson-disk sites + per-region site assignment ----
   // Generate sites globally, then map each to whichever region its position
   // falls into. Any region that didn't catch a site (small or thin) gets one
@@ -134,20 +148,152 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
     sitePositions.push([x + 0.5, y + 0.5]);
     siteRegionList.push(r);
   }
-  const siteCount = sitePositions.length;
-  const siteRegion = new Int32Array(siteRegionList);
 
-  // Spatial bins for nearest-site lookup.
+  // ---- Step 5.5: Per-region orientation + anisotropic site thinning.
+  // For each region, run PCA on its pixel positions to find the principal
+  // axis. Sites inside an elongated region get thinned with an ELLIPTIC
+  // rejection radius — axis-aligned with the region's major axis, stretched
+  // to `subdivCellRadius * elongation` along the major axis and clamped to
+  // `subdivCellRadius` perpendicular. The result: sites within a long region
+  // end up sparse along the long direction and at normal density across it,
+  // so Voronoi cells stretch ALONG the region's flow. A horizontal stripe
+  // gets horizontal-ribbon pieces; a vertical stem gets stem-length pieces;
+  // round regions are left untouched (elongation ≤ 1.3 → no thinning).
+  const regionPCount = new Uint32Array(regionCount);
+  const regSx  = new Float64Array(regionCount);
+  const regSy  = new Float64Array(regionCount);
+  const regSxx = new Float64Array(regionCount);
+  const regSyy = new Float64Array(regionCount);
+  const regSxy = new Float64Array(regionCount);
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const r = regionId[py * W + px];
+      regionPCount[r]++;
+      regSx[r]  += px;
+      regSy[r]  += py;
+      regSxx[r] += px * px;
+      regSyy[r] += py * py;
+      regSxy[r] += px * py;
+    }
+  }
+  const regionAngle      = new Float32Array(regionCount);
+  const regionElongation = new Float32Array(regionCount);
+  for (let r = 0; r < regionCount; r++) {
+    const n = regionPCount[r];
+    if (n < 60) { regionElongation[r] = 1; continue; }
+    const mx  = regSx[r]  / n;
+    const my  = regSy[r]  / n;
+    const cxx = regSxx[r] / n - mx * mx;
+    const cyy = regSyy[r] / n - my * my;
+    const cxy = regSxy[r] / n - mx * my;
+    // Eigenvalues of 2×2 covariance matrix → variance along principal axes.
+    const tr  = cxx + cyy;
+    const det = cxx * cyy - cxy * cxy;
+    const ht  = tr * 0.5;
+    const disc = Math.sqrt(Math.max(0, ht * ht - det));
+    const lambda1 = ht + disc; // variance along major axis
+    const lambda2 = ht - disc; // along minor
+    regionAngle[r] = 0.5 * Math.atan2(2 * cxy, cxx - cyy);
+    const ratio = lambda2 > 1 ? Math.sqrt(lambda1 / lambda2) : maxElongation;
+    regionElongation[r] = Math.min(maxElongation, Math.max(1, ratio));
+  }
+
+  // Build per-region site lists, then thin each anisotropically.
+  const sitesByRegion = new Array(regionCount);
+  for (let r = 0; r < regionCount; r++) sitesByRegion[r] = [];
+  for (let i = 0; i < sitePositions.length; i++) {
+    sitesByRegion[siteRegionList[i]].push(i);
+  }
+  const keptMask = new Uint8Array(sitePositions.length);
+  for (let r = 0; r < regionCount; r++) {
+    const cand = sitesByRegion[r];
+    if (cand.length === 0) continue;
+    const E = regionElongation[r];
+    if (E <= 1.15 || cand.length <= 1) {
+      // Roundish region, or single-site region — leave as-is.
+      for (const si of cand) keptMask[si] = 1;
+      continue;
+    }
+    const cosA = Math.cos(regionAngle[r]);
+    const sinA = Math.sin(regionAngle[r]);
+    const Rmaj = subdivCellRadius * E;
+    const Rmin = subdivCellRadius;
+    // Process sites by original (Poisson) order so the kept set is stable.
+    const kept = [];
+    for (const si of cand) {
+      const sx = sitePositions[si][0];
+      const sy = sitePositions[si][1];
+      let reject = false;
+      for (let k = 0; k < kept.length; k++) {
+        const ki = kept[k];
+        const dx = sx - sitePositions[ki][0];
+        const dy = sy - sitePositions[ki][1];
+        const lMaj = dx * cosA + dy * sinA;     // along major axis
+        const lMin = -dx * sinA + dy * cosA;    // along minor axis
+        const ratio2 = (lMaj / Rmaj) * (lMaj / Rmaj) + (lMin / Rmin) * (lMin / Rmin);
+        if (ratio2 < 1) { reject = true; break; }
+      }
+      if (!reject) {
+        kept.push(si);
+        keptMask[si] = 1;
+      }
+    }
+    // Safety net: every region must retain at least one site.
+    if (kept.length === 0 && cand.length > 0) keptMask[cand[0]] = 1;
+  }
+
+  // Compact: collapse to only the kept sites.
+  const culledPositions = [];
+  const culledRegionList = [];
+  for (let i = 0; i < sitePositions.length; i++) {
+    if (keptMask[i]) {
+      culledPositions.push(sitePositions[i]);
+      culledRegionList.push(siteRegionList[i]);
+    }
+  }
+  const siteCount = culledPositions.length;
+  const siteRegion = new Int32Array(culledRegionList);
+
+  // Flatten sites into typed arrays. The Voronoi inner loop reads these
+  // millions of times per pixel grid; using Float32Arrays here avoids the
+  // boxed array-of-arrays dereferencing path that V8 was deoptimizing.
+  const siteX = new Float32Array(siteCount);
+  const siteY = new Float32Array(siteCount);
+  for (let i = 0; i < siteCount; i++) {
+    siteX[i] = culledPositions[i][0];
+    siteY[i] = culledPositions[i][1];
+  }
+
+  // Spatial bins for nearest-site lookup. Bin size stays at the minor-axis
+  // scale (subdivCellRadius) so each bin holds ~1 site on average — keeping
+  // the per-pixel inner-loop cheap. Anisotropic lookups just walk a few more
+  // rings (see MIN_RINGS below).
   const binSize = subdivCellRadius;
   const binsW = Math.max(1, Math.ceil(W / binSize));
   const binsH = Math.max(1, Math.ceil(H / binSize));
   const bins = Array.from({ length: binsW * binsH }, () => []);
   for (let i = 0; i < siteCount; i++) {
-    const s = sitePositions[i];
-    const bx = Math.min(binsW - 1, Math.floor(s[0] / binSize));
-    const by = Math.min(binsH - 1, Math.floor(s[1] / binSize));
+    const bx = Math.min(binsW - 1, Math.floor(siteX[i] / binSize));
+    const by = Math.min(binsH - 1, Math.floor(siteY[i] / binSize));
     bins[by * binsW + bx].push(i);
   }
+
+  // Per-region anisotropic transform (cosA, sinA, 1/E²) for the distance
+  // metric used in the pixel-to-site nearest-neighbor search. The stretched
+  // metric is d² = (Δmaj / E)² + Δmin², which directly elongates Voronoi
+  // cells along the region's major axis — much more reliable than thinning
+  // alone for getting visible flow-aligned pieces.
+  const regCosA  = new Float32Array(regionCount);
+  const regSinA  = new Float32Array(regionCount);
+  const regInvE2 = new Float32Array(regionCount);
+  for (let r = 0; r < regionCount; r++) {
+    regCosA[r]  = Math.cos(regionAngle[r]);
+    regSinA[r]  = Math.sin(regionAngle[r]);
+    const e = Math.max(1, regionElongation[r]);
+    regInvE2[r] = 1 / (e * e);
+  }
+
+  if (await checkpoint()) return null;
 
   // ---- Step 6: For each pixel, find nearest site IN THE SAME REGION as the
   // pixel. The region filter means a sub-cell's boundary can never wander out
@@ -155,8 +301,12 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
   // region site is found, then go one extra ring to honor near-corner matches.
   const subOwner = new Int32Array(N);
   const extraRings = Math.ceil(warpPx / binSize);
+  // Floor on ring count just covers the warp displacement; adaptive
+  // termination below handles anisotropic reach without forcing redundant
+  // ring sweeps when a good match is already in hand.
   const MIN_RINGS = 1 + extraRings;
-  const MAX_RINGS = 16;
+  const MAX_RINGS = 20;
+  const binSize2 = binSize * binSize;
   for (let py = 0; py < H; py++) {
     for (let px = 0; px < W; px++) {
       const idx = py * W + px;
@@ -167,6 +317,11 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
       const wy = py + valueNoise2D(px * noiseScale, py * noiseScale, noiseSeedY) * warpPx;
       const bx = Math.min(binsW - 1, Math.max(0, Math.floor(wx / binSize)));
       const by = Math.min(binsH - 1, Math.max(0, Math.floor(wy / binSize)));
+      // Anisotropic metric for this region: distances along the major axis
+      // are scaled down by 1/E² so cells extend FARTHER in that direction.
+      const cosA = regCosA[myRegion];
+      const sinA = regSinA[myRegion];
+      const invE2 = regInvE2[myRegion];
       let bestD = Infinity;
       let bestI = -1;
       for (let ring = 0; ring <= MAX_RINGS; ring++) {
@@ -182,19 +337,29 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
             for (let k = 0; k < bucket.length; k++) {
               const si = bucket[k];
               if (siteRegion[si] !== myRegion) continue;
-              const s = sitePositions[si];
-              const ddx = s[0] - wx;
-              const ddy = s[1] - wy;
-              const d2 = ddx * ddx + ddy * ddy;
+              const ddx = siteX[si] - wx;
+              const ddy = siteY[si] - wy;
+              // Anisotropic metric in the region's local frame.
+              const dmaj = ddx * cosA + ddy * sinA;
+              const dmin = -ddx * sinA + ddy * cosA;
+              const d2 = invE2 * dmaj * dmaj + dmin * dmin;
               if (d2 < bestD) { bestD = d2; bestI = si; }
             }
           }
         }
-        if (bestI >= 0 && ring >= MIN_RINGS) break;
+        // Adaptive early termination: sites in ring R+1 have isotropic
+        // distance ≥ R · binSize; their *minimum* anisotropic distance² is
+        // therefore (R · binSize)² · invE2. If that already exceeds the
+        // best-found anisotropic d², no farther ring can improve.
+        if (bestI >= 0 && ring >= MIN_RINGS) {
+          if (ring * ring * binSize2 * invE2 >= bestD) break;
+        }
       }
       subOwner[idx] = bestI;
     }
   }
+
+  if (await checkpoint()) return null;
 
   // ---- Step 7: Connected components on subOwner. Site index uniquely
   // determines (region, sub-cell) because each site belongs to exactly one
@@ -229,7 +394,10 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
   // Voronoi boundaries leaves behind. We then re-run CC because mode filtering
   // can pinch off a thin "bridge" of a piece, leaving two same-ID blobs that
   // are no longer physically connected — those should become distinct pieces.
-  if (edgeSmoothPasses > 0 && edgeSmoothRadius > 0) {
+  // In preview mode, skip the expensive disk-filter smoothing pass and the
+  // re-CC that follows. The result is rougher edge pixels but still readable;
+  // the full-quality render after the slider settles will replace it.
+  if (!previewMode && edgeSmoothPasses > 0 && edgeSmoothRadius > 0) {
     smoothPieceEdges(pieceId, W, H, edgeSmoothRadius, edgeSmoothPasses);
 
     // Re-CC on the smoothed map. Reuse `subOwner` as a scratch label buffer
@@ -269,6 +437,8 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
     pieceCount = mergeTinyPieces(pieceId, pieceCount, pieceRegionList, W, H, minPixels);
   }
 
+  if (await checkpoint()) return null;
+
   // ---- Step 7.75: Vectorize each piece's boundary, smooth as analytic
   // curves, then re-rasterize. Real glass is cut by scoring continuous curves
   // along the boundary — there's no concept of "pixel". So we extract every
@@ -278,16 +448,25 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
   // cutter), and scan-line-fill the smoothed polygon back into a fresh map.
   // The resulting `pieceId` carries smooth boundaries that, when rasterized,
   // have only sub-pixel staircase error — invisible behind the AA lead.
-  vectorizeAndRerasterize(pieceId, pieceCount, W, H, vectorizeKernel, simplifyTolerance);
+  // Preview keeps vectorization (essential for non-jagged piece outlines) but
+  // uses cheaper params: smaller Gaussian kernel, coarser DP tolerance.
+  const vk = previewMode ? Math.max(2, vectorizeKernel - 2) : vectorizeKernel;
+  const vt = previewMode ? simplifyTolerance + 1.5         : simplifyTolerance;
+  vectorizeAndRerasterize(pieceId, pieceCount, W, H, vk, vt);
 
-  // ---- Step 7.9: Enforce the cuttability rule. A glass piece can't be fully
+  // ---- Step 7.9: Enforce the cuttability rule (skipped in preview — it
+  // does up to 8 full O(N) adjacency rebuilds and the visual difference is
+  // subtle while dragging a slider).
+  // ---- A glass piece can't be fully
   // surrounded by a single continuous piece — the score that would isolate it
   // is a closed loop, which doesn't separate inside from outside without a
   // second score. So any piece whose only neighbor is one other piece (and
   // which doesn't touch the panel boundary) gets merged into that surrounder.
   // Iterated until stable to handle cascades (newly-merged regions can expose
   // formerly-hidden enclosures).
-  pieceCount = enforceCuttability(pieceId, pieceCount, W, H);
+  if (!previewMode) {
+    pieceCount = enforceCuttability(pieceId, pieceCount, W, H);
+  }
 
   // ---- Step 8: Per-piece source color average + saturation/brightness boost.
   const pieceR = new Float32Array(pieceCount);
@@ -376,6 +555,8 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
     pieceStyleSeed[i] = Math.floor(rng() * 1e9);
   }
 
+  if (await checkpoint()) return null;
+
   // ---- Step 8: Chamfer 3-4 distance transform from piece boundaries.
   // A glazier draws a smooth curve and follows it with a glass cutter — the
   // resulting cut is sub-pixel smooth. We mimic that look by computing a
@@ -448,7 +629,13 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
     }
   }
 
-  // ---- Step 9: Compose the output with anti-aliased lead came ----
+  // ---- Step 9: Compose the output. RGB carries pure glass color (with the
+  // per-piece style modulation); ALPHA carries the chamfer distance to the
+  // nearest piece boundary, packed 0..255 over the range [0, distMax]. The
+  // glass plane shader uses the alpha to compute the lead's half-cylinder
+  // surface normal for bump-shaded metallic silver, so we keep the lead off
+  // the canvas entirely. The floor + rays shaders sample the same alpha to
+  // darken the projected light where lead blocks it.
   const outCanvas = document.createElement('canvas');
   outCanvas.width = W;
   outCanvas.height = H;
@@ -456,13 +643,10 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
   const outImg = outCtx.createImageData(W, H);
   const px = outImg.data;
 
-  // Soft falloff configured in pixel units. The transition band is wider than
-  // 1px so the lead's outer edge is properly anti-aliased, hiding the pixel
-  // jaggedness of the underlying boundary curve.
   const thickness = Math.max(1, leadThickness);
-  const innerChamfer = Math.max(0, (thickness - 0.5)) * CHAMFER_A;
-  const outerChamfer = (thickness + 0.6) * CHAMFER_A;
-  const transChamfer = Math.max(1, outerChamfer - innerChamfer);
+  // Range stored in alpha — generously wider than the lead radius so the
+  // shader has enough gradient outside the rope to do clean derivatives.
+  const distMaxStored = (thickness + 2.0) * CHAMFER_A;
 
   // Style amplitudes — kept modest so variation stays inside one palette family.
   const MARBLE_AMP = 0.22, MARBLE_FREQ = 0.028;
@@ -475,20 +659,19 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
     const cy = (i / W) | 0;
     const cx = i - cy * W;
 
-    // Compute per-pixel style modulation factor inside the piece's palette.
+    // Per-pixel style modulation factor inside the piece's palette.
     let factor;
     const style = pieceStyle[pid];
     if (style === STYLE_FLAT) {
       factor = 1;
     } else if (style === STYLE_MARBLED) {
       const n = valueNoise2D(cx * MARBLE_FREQ, cy * MARBLE_FREQ, pieceStyleSeed[pid]);
-      // Layered second octave for richer streaks.
       const n2 = valueNoise2D(cx * MARBLE_FREQ * 2.3, cy * MARBLE_FREQ * 2.3, pieceStyleSeed[pid] ^ 0x55aa);
       factor = 1 + (n * 0.7 + n2 * 0.3) * MARBLE_AMP;
     } else if (style === STYLE_TEXTURED) {
       const n = valueNoise2D(cx * TEXTURE_FREQ, cy * TEXTURE_FREQ, pieceStyleSeed[pid]);
       factor = 1 + n * TEXTURE_AMP;
-    } else { // STYLE_GRADIENT
+    } else {
       const dx = (cx - pieceCx2[pid]) * pieceSpanInv[pid];
       const dy = (cy - pieceCy2[pid]) * pieceSpanInv[pid];
       const t = dx * pieceGradX[pid] + dy * pieceGradY[pid];
@@ -499,33 +682,18 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
     let gG = clamp(finalG[pid] * factor, 0, 255);
     let gB = clamp(finalB[pid] * factor, 0, 255);
 
+    const noise = (rng() - 0.5) * glassNoise;
+    gR = clamp(gR + noise, 0, 255);
+    gG = clamp(gG + noise, 0, 255);
+    gB = clamp(gB + noise, 0, 255);
+
     const d = dist[i];
-    let alpha;
-    if (d <= innerChamfer) {
-      alpha = 1;
-    } else if (d >= outerChamfer) {
-      alpha = 0;
-    } else {
-      const t = (d - innerChamfer) / transChamfer;
-      alpha = 1 - t * t * (3 - 2 * t);
-    }
+    const dStored = Math.min(255, Math.round((d / distMaxStored) * 255));
 
-    if (alpha < 1) {
-      // Tiny per-pixel grain on top of the style — only outside the solid lead.
-      const n = (rng() - 0.5) * glassNoise * (1 - alpha);
-      gR = clamp(gR + n, 0, 255);
-      gG = clamp(gG + n, 0, 255);
-      gB = clamp(gB + n, 0, 255);
-    }
-    const leadShade = 1 - 0.18 * Math.min(1, (innerChamfer === 0 ? 0 : (1 - d / Math.max(1, innerChamfer))));
-    const lR = leadColor[0] * leadShade;
-    const lG = leadColor[1] * leadShade;
-    const lB = leadColor[2] * leadShade;
-
-    px[j]     = lR * alpha + gR * (1 - alpha);
-    px[j + 1] = lG * alpha + gG * (1 - alpha);
-    px[j + 2] = lB * alpha + gB * (1 - alpha);
-    px[j + 3] = 255;
+    px[j]     = gR;
+    px[j + 1] = gG;
+    px[j + 2] = gB;
+    px[j + 3] = dStored;
   }
 
   outCtx.putImageData(outImg, 0, 0);
@@ -537,12 +705,28 @@ export function generateStainedGlass(sourceCanvas, options = {}) {
     width: W,
     height: H,
     aspect: W / H,
+    leadThickness: thickness,
+    // Pixel-distance range encoded in the alpha channel; the shader divides
+    // alpha (0..1) by this to recover pixel-space distance for lead detection.
+    distMaxPx: distMaxStored / CHAMFER_A,
   };
 }
 
 // ---------------- helpers ----------------
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+// MessageChannel-based macrotask yield. Lets the browser process pending
+// input events (slider changes, key presses) between generator steps so the
+// abort signal can be observed. Much faster than setTimeout(r, 0), which is
+// clamped to ~4 ms in browsers.
+function yieldToTask() {
+  return new Promise((resolve) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => resolve();
+    ch.port2.postMessage(null);
+  });
+}
 function lerp(a, b, t) { return a + (b - a) * t; }
 
 function makeRng(seed) {
@@ -665,31 +849,50 @@ function kMeansQuantize(srcData, W, H, K, rng, maxIter = 12) {
 // most common value in its 3x3 neighborhood, breaking ties toward the pixel's
 // own current value (stable boundaries).
 function medianSmooth3x3(map, W, H, K) {
-  const out = new Uint8Array(W * H);
+  // Start with a copy; only edge pixels (with at least one differing 4-neighbor)
+  // need the actual mode computation. Interior pixels keep their own value.
+  // This was profiled as a major hotspot — natural images have ~10% edge
+  // pixels, so skipping the rest cuts most of the work per pass.
+  const out = new Uint8Array(map);
   const counts = new Uint8Array(K);
   for (let y = 0; y < H; y++) {
-    const y0 = y > 0 ? y - 1 : 0;
-    const y2 = y < H - 1 ? y + 1 : H - 1;
+    const yIn  = y > 0;
+    const yIn2 = y < H - 1;
+    const rowOff  = y * W;
+    const rowOff0 = yIn  ? rowOff - W : 0;
+    const rowOff2 = yIn2 ? rowOff + W : (H - 1) * W;
     for (let x = 0; x < W; x++) {
-      const x0 = x > 0 ? x - 1 : 0;
-      const x2 = x < W - 1 ? x + 1 : W - 1;
+      const idx = rowOff + x;
+      const own = map[idx];
+      const xIn  = x > 0;
+      const xIn2 = x < W - 1;
+      // Fast 4-neighbor edge test on the inputs; if all match we don't even
+      // need to read the diagonals, much less hit the mode filter.
+      const left  = xIn  ? map[idx - 1] : own;
+      const right = xIn2 ? map[idx + 1] : own;
+      const up    = yIn  ? map[idx - W] : own;
+      const down  = yIn2 ? map[idx + W] : own;
+      if (left === own && right === own && up === own && down === own) continue;
+
+      const x0 = xIn  ? x - 1 : 0;
+      const x2 = xIn2 ? x + 1 : W - 1;
       counts.fill(0);
-      counts[map[y0 * W + x0]]++;
-      counts[map[y0 * W + x]]++;
-      counts[map[y0 * W + x2]]++;
-      counts[map[y  * W + x0]]++;
-      counts[map[y  * W + x]]++;
-      counts[map[y  * W + x2]]++;
-      counts[map[y2 * W + x0]]++;
-      counts[map[y2 * W + x]]++;
-      counts[map[y2 * W + x2]]++;
-      const own = map[y * W + x];
+      counts[map[rowOff0 + x0]]++;
+      counts[up]++;                       // (rowOff0 + x)
+      counts[map[rowOff0 + x2]]++;
+      counts[left]++;                     // (rowOff + x0)
+      counts[own]++;
+      counts[right]++;                    // (rowOff + x2)
+      counts[map[rowOff2 + x0]]++;
+      counts[down]++;                     // (rowOff2 + x)
+      counts[map[rowOff2 + x2]]++;
+
       let bestK = own;
       let bestC = counts[own];
       for (let k = 0; k < K; k++) {
         if (counts[k] > bestC) { bestC = counts[k]; bestK = k; }
       }
-      out[y * W + x] = bestK;
+      out[idx] = bestK;
     }
   }
   map.set(out);
