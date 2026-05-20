@@ -300,13 +300,22 @@ const frameWoodTex   = makeWoodTexture({ W: 1024, H: 256,  plankH: 220, hueShift
 // Two groups so they rebuild together on aspect change.
 const WALL_W = 28, WALL_H = 18;
 const WALL_Z = GLASS_Z - 0.05;                // plaster sits behind the glass plane
-const FRAME_BOARD = 0.26;                     // wood molding width (inner edge → outer edge)
-const FRAME_DEPTH = 0.16;                     // depth of the frame protruding toward camera
 const wallMat = new THREE.MeshBasicMaterial({ map: wallPlasterTex, color: 0x4a4248 });
 const trimMat = new THREE.MeshBasicMaterial({ color: 0x05040a });
-const frameMatFront = new THREE.MeshBasicMaterial({ map: frameWoodTex });
-const frameMatSide  = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0x9a8270 });
-const frameMatBack  = new THREE.MeshBasicMaterial({ color: 0x1f140a });
+// Wood — multiple tints so layered mouldings catch light differently.
+const frameMatFront     = new THREE.MeshBasicMaterial({ map: frameWoodTex });
+const frameMatSide      = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0x9a8270 });
+const frameMatBack      = new THREE.MeshBasicMaterial({ color: 0x1f140a });
+const frameMatFrontDark = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0x5a3d28 });
+const frameMatFrontLight = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0xc4a585 });
+// Gilded accents (antique gold) — used for inner bead and keystone highlight.
+const goldFrontMat = new THREE.MeshBasicMaterial({ color: 0xb38a47 });
+const goldSideMat  = new THREE.MeshBasicMaterial({ color: 0x8a6730 });
+// Material arrays for BoxGeometry: [+x, -x, +y, -y, +z, -z]
+const WOOD_MATS       = [frameMatSide, frameMatSide, frameMatSide, frameMatSide, frameMatFront,      frameMatBack];
+const WOOD_DARK_MATS  = [frameMatSide, frameMatSide, frameMatSide, frameMatSide, frameMatFrontDark,  frameMatBack];
+const WOOD_LIGHT_MATS = [frameMatSide, frameMatSide, frameMatSide, frameMatSide, frameMatFrontLight, frameMatBack];
+const GOLD_MATS       = [goldSideMat,  goldSideMat,  goldSideMat,  goldSideMat,  goldFrontMat,       frameMatBack];
 // ---- Hallway wall (plaster strips around every window) and per-window frame.
 // As the user uploads more images, each becomes a new `window` object: its
 // own glass mesh + frame group + sill, all sitting at its own x offset along
@@ -453,34 +462,163 @@ function rebuildHallwayWall() {
 }
 
 function buildWindowFrame(group, innerW, innerH, centerY, posX) {
-  const frameInnerHalfW = innerW / 2;
-  const frameInnerHalfH = innerH / 2;
-  const boardZ = FRAME_DEPTH / 2;
-  const board = (w, h, x, y) => {
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(w, h, FRAME_DEPTH),
-      [frameMatSide, frameMatSide, frameMatSide, frameMatSide, frameMatFront, frameMatBack]
-    );
-    m.position.set(x, y, boardZ);
+  // Layered ornate frame: pilasters with capitals + bases, stepped cornice
+  // with keystone, sill with apron, gilded inner bead. All boxes so depth +
+  // overhang reads like real moulding from any angle in the room.
+  const PILASTER_W = 0.30;
+  const PILASTER_D = 0.16;
+  const BEAD_W     = 0.05;
+  const BEAD_D     = 0.20;   // protrudes past the pilaster face so it reads as a raised inner trim
+  const CAP_H      = 0.13;
+  const CAP_D      = 0.22;
+  const CAP_OVER   = 0.05;
+  const BASE_H     = 0.11;
+  const BASE_D     = 0.20;
+  const BASE_OVER  = 0.05;
+  const ARCH_H     = 0.09;
+  const ARCH_D     = 0.20;
+  const FRIEZE_H   = 0.20;
+  const FRIEZE_D   = 0.16;
+  const CORNICE_H  = 0.16;
+  const CORNICE_D  = 0.34;
+  const CORN_OVER  = 0.12;
+  const DENTIL_H   = 0.06;
+  const DENTIL_D   = 0.24;
+  const SILL_H     = 0.18;
+  const SILL_D     = 0.36;
+  const SILL_OVER  = 0.18;
+  const APRON_H    = 0.22;
+  const APRON_D    = 0.10;
+
+  const innerL = posX - innerW / 2;
+  const innerR = posX + innerW / 2;
+  const pilOutL = innerL - PILASTER_W;
+  const pilOutR = innerR + PILASTER_W;
+  const pilCxL  = (innerL + pilOutL) / 2;
+  const pilCxR  = (innerR + pilOutR) / 2;
+  const trunkTopY = centerY + innerH / 2;       // top of the pilaster trunk = top of glass
+  const trunkBotY = centerY - innerH / 2;
+
+  const box = (w, h, d, mats, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
+    m.position.set(x, y, z);
     group.add(m);
+    return m;
   };
-  const outerW = innerW + 2 * FRAME_BOARD;
-  board(outerW, FRAME_BOARD, posX, centerY + frameInnerHalfH + FRAME_BOARD / 2);
-  board(outerW, FRAME_BOARD, posX, centerY - frameInnerHalfH - FRAME_BOARD / 2);
-  board(FRAME_BOARD, innerH, posX - frameInnerHalfW - FRAME_BOARD / 2, centerY);
-  board(FRAME_BOARD, innerH, posX + frameInnerHalfW + FRAME_BOARD / 2, centerY);
 
-  const sillW = outerW + 0.20;
-  const sillD = FRAME_DEPTH + 0.10;
-  const sillH = 0.10;
-  const sillY = centerY - frameInnerHalfH - FRAME_BOARD - sillH / 2;
-  const sillZ = sillD / 2;
-  const sillMats = [frameMatSide, frameMatSide, frameMatFront, frameMatBack, frameMatFront, frameMatBack];
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(sillW, sillH, sillD), sillMats);
-  sill.position.set(posX, sillY, sillZ);
-  group.add(sill);
+  // --- Pilasters: vertical trunks beside the glass ---
+  box(PILASTER_W, innerH, PILASTER_D, WOOD_MATS, pilCxL, centerY, PILASTER_D / 2);
+  box(PILASTER_W, innerH, PILASTER_D, WOOD_MATS, pilCxR, centerY, PILASTER_D / 2);
 
-  // Dark inset trim hides any sub-pixel seam between glass and frame.
+  // EPS = small offset to keep adjacent faces from sharing a depth value and
+  // z-fighting. ~3mm is invisible at scene scale but more than enough headroom
+  // for the depth buffer at typical near/far ranges.
+  const EPS = 0.003;
+
+  // --- Capitals: decorative blocks above each pilaster ---
+  const capW = PILASTER_W + 2 * CAP_OVER;
+  const capY = trunkTopY + CAP_H / 2;
+  box(capW, CAP_H, CAP_D, WOOD_LIGHT_MATS, pilCxL, capY, CAP_D / 2);
+  box(capW, CAP_H, CAP_D, WOOD_LIGHT_MATS, pilCxR, capY, CAP_D / 2);
+  // Thin gold band sitting just inside the top of each capital. Sits flush with
+  // the capital sides (capW + 2*EPS so left/right faces don't coincide), top
+  // recessed by EPS so its top face isn't coplanar with the capital's, and
+  // pushed forward 2*EPS so its front face sticks out past the capital face.
+  const capBandH = 0.025;
+  const capBandCY = capY + CAP_H / 2 - capBandH / 2 - EPS;
+  const capBandCZ = CAP_D / 2 + EPS;          // back at z=2*EPS (inside capital), front at z=CAP_D+2*EPS
+  box(capW + 2 * EPS, capBandH, CAP_D, GOLD_MATS, pilCxL, capBandCY, capBandCZ);
+  box(capW + 2 * EPS, capBandH, CAP_D, GOLD_MATS, pilCxR, capBandCY, capBandCZ);
+
+  // --- Bases: matching blocks below each pilaster ---
+  const baseW = PILASTER_W + 2 * BASE_OVER;
+  const baseY = trunkBotY - BASE_H / 2;
+  box(baseW, BASE_H, BASE_D, WOOD_LIGHT_MATS, pilCxL, baseY, BASE_D / 2);
+  box(baseW, BASE_H, BASE_D, WOOD_LIGHT_MATS, pilCxR, baseY, BASE_D / 2);
+
+  // --- Architrave: thin band spanning across the top of the capitals ---
+  const archSpanW = pilOutR - pilOutL;
+  const archY = capY + CAP_H / 2 + ARCH_H / 2;
+  box(archSpanW, ARCH_H, ARCH_D, WOOD_DARK_MATS, posX, archY, ARCH_D / 2);
+
+  // --- Dentil row: small repeating teeth between architrave and frieze ---
+  const dentilY = archY + ARCH_H / 2 + DENTIL_H / 2;
+  const dentilTargetW = 0.10;
+  const dentilGap     = 0.06;
+  const dentilStride  = dentilTargetW + dentilGap;
+  const dentilCount   = Math.max(3, Math.floor((archSpanW - 0.10) / dentilStride));
+  const dentilSpan    = dentilCount * dentilStride - dentilGap;
+  const dentilStartX  = posX - dentilSpan / 2 + dentilTargetW / 2;
+  for (let i = 0; i < dentilCount; i++) {
+    box(dentilTargetW, DENTIL_H, DENTIL_D, WOOD_LIGHT_MATS, dentilStartX + i * dentilStride, dentilY, DENTIL_D / 2);
+  }
+
+  // --- Frieze: tall plain panel above the dentil row ---
+  const friezeY = dentilY + DENTIL_H / 2 + FRIEZE_H / 2;
+  box(archSpanW, FRIEZE_H, FRIEZE_D, WOOD_DARK_MATS, posX, friezeY, FRIEZE_D / 2);
+
+  // --- Keystone: protruding decorative block at center of frieze ---
+  const keystoneW = 0.34;
+  const keystoneH = FRIEZE_H + DENTIL_H + 0.04;
+  const keystoneD = CORNICE_D - 0.04;
+  const keystoneYc = dentilY + (FRIEZE_H + DENTIL_H) / 2 - DENTIL_H / 2;
+  box(keystoneW, keystoneH, keystoneD, WOOD_LIGHT_MATS, posX, keystoneYc, keystoneD / 2);
+  // Two stacked gilded rosette dots on the keystone face. Each layer sits a
+  // clear EPS in front of the layer behind it so no back face is coplanar.
+  const rosetteD = 0.025;
+  const rosette1Z = keystoneD + rosetteD / 2 + EPS;            // back at keystoneD + EPS
+  const rosette2D = rosetteD + 0.005;
+  const rosette2Z = keystoneD + rosetteD + EPS + rosette2D / 2 + EPS; // back at rosette1's front + EPS
+  box(0.10, 0.10, rosetteD,  GOLD_MATS, posX, keystoneYc, rosette1Z);
+  box(0.04, 0.04, rosette2D, GOLD_MATS, posX, keystoneYc, rosette2Z);
+
+  // --- Cornice: crown moulding extending past the pilasters ---
+  const corniceW = archSpanW + 2 * CORN_OVER;
+  const corniceY = friezeY + FRIEZE_H / 2 + CORNICE_H / 2;
+  box(corniceW, CORNICE_H, CORNICE_D, WOOD_MATS, posX, corniceY, CORNICE_D / 2);
+  // Cornice undershelf — thin lighter band along the bottom of the cornice.
+  // Bottom recessed by EPS so it doesn't share its bottom face with the cornice.
+  const corniceBandH = 0.04;
+  const corniceBandCY = corniceY - CORNICE_H / 2 + corniceBandH / 2 + EPS;
+  const corniceBandCZ = CORNICE_D / 2 + EPS;
+  box(corniceW + 2 * EPS, corniceBandH, CORNICE_D, WOOD_LIGHT_MATS,
+      posX, corniceBandCY, corniceBandCZ);
+
+  // --- Sill: stepped base extending past the pilasters ---
+  const sillW = archSpanW + 2 * SILL_OVER;
+  const sillY = baseY - BASE_H / 2 - SILL_H / 2;
+  box(sillW, SILL_H, SILL_D, WOOD_MATS, posX, sillY, SILL_D / 2);
+  // Light upper-step — top recessed by EPS so it doesn't share its top face
+  // with the sill; pushed forward so its front face protrudes.
+  const sillStepH = 0.045;
+  const sillStepCY = sillY + SILL_H / 2 - sillStepH / 2 - EPS;
+  const sillStepCZ = SILL_D / 2 + EPS;
+  box(sillW - 0.04, sillStepH, SILL_D, WOOD_LIGHT_MATS,
+      posX, sillStepCY, sillStepCZ);
+
+  // --- Apron: tapered decorative panel under the sill ---
+  const apronW = (pilOutR - pilOutL) * 0.62;
+  const apronY = sillY - SILL_H / 2 - APRON_H / 2;
+  box(apronW, APRON_H, APRON_D, WOOD_DARK_MATS, posX, apronY, APRON_D / 2);
+  // Decorative diamond carved into the apron (small protruding block).
+  const diamondS = 0.13;
+  box(diamondS, diamondS, APRON_D + 0.02, WOOD_LIGHT_MATS, posX, apronY, APRON_D + 0.01);
+
+  // --- Gilded inner bead: thin gold trim straddling the seam between glass and
+  // pilaster on all four sides, protruding past the pilaster face. Vertical
+  // and horizontal beads sit at slightly different z so their corner overlaps
+  // don't share planar faces. Both pushed back by EPS so they don't sit at
+  // exactly z=0 (pilaster back face). ---
+  const beadZVert  = BEAD_D / 2 + EPS;
+  const beadZHoriz = BEAD_D / 2 + EPS + 2 * EPS;   // 2*EPS forward of verticals
+  const beadVertH  = innerH;                       // verticals stop at glass top/bottom
+  const beadHorizW = innerW + 2 * BEAD_W;          // horizontals span past the verticals into the corner
+  box(BEAD_W,     beadVertH, BEAD_D, GOLD_MATS, innerL, centerY,   beadZVert);
+  box(BEAD_W,     beadVertH, BEAD_D, GOLD_MATS, innerR, centerY,   beadZVert);
+  box(beadHorizW, BEAD_W,    BEAD_D, GOLD_MATS, posX,   trunkTopY, beadZHoriz);
+  box(beadHorizW, BEAD_W,    BEAD_D, GOLD_MATS, posX,   trunkBotY, beadZHoriz);
+
+  // --- Dark inset behind the glass to hide any sub-pixel seam ---
   const inset = new THREE.Mesh(
     new THREE.PlaneGeometry(innerW + 0.04, innerH + 0.04),
     trimMat
