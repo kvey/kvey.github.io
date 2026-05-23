@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { generateStainedGlass } from './glassGenerator.js';
 
 // ---------- Scene constants ----------
@@ -15,7 +16,8 @@ let GLASS_CENTER_Y = GLASS_BOTTOM + GLASS_H / 2;
 // ---------- Renderer ----------
 const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio, 2);
+renderer.setPixelRatio(BASE_PIXEL_RATIO);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -95,6 +97,12 @@ const GLASS_FRAG_SRC = /* glsl */`
     return texture2D(uSkyTex, uv).rgb;
   }
 
+  float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+
   void main() {
     vec4 tex = texture2D(uMap, vUv);
     vec3 glassColor = tex.rgb * uBacklight;
@@ -115,11 +123,41 @@ const GLASS_FRAG_SRC = /* glsl */`
     float D = (Dc * 2.0 + Dxp + Dxm + Dyp + Dym) * 0.16666667;
 
     float leadAlpha = 1.0 - smoothstep(uLeadR - 0.75, uLeadR + 0.75, D);
+    vec2 glassSlope = vec2(
+      dot(texture2D(uMap, vUv + vec2( texel.x, 0.0)).rgb - texture2D(uMap, vUv + vec2(-texel.x, 0.0)).rgb, vec3(0.30, 0.59, 0.11)),
+      dot(texture2D(uMap, vUv + vec2(0.0,  texel.y)).rgb - texture2D(uMap, vUv + vec2(0.0, -texel.y)).rgb, vec3(0.30, 0.59, 0.11))
+    );
+    float paneSeed = hash12(tex.rg * 271.0 + tex.br * 97.0);
+    vec2 waveDirA = normalize(vec2(0.92 + paneSeed * 0.22, 0.28 - paneSeed * 0.18));
+    vec2 waveDirB = normalize(vec2(-0.18 - paneSeed * 0.26, 0.98));
+    float freqA = mix(18.0, 31.0, paneSeed);
+    float freqB = mix(10.0, 18.0, hash12(tex.gb * 193.0 + 5.1));
+    float phaseA = paneSeed * 37.0;
+    float phaseB = hash12(tex.br * 151.0 + 9.7) * 31.0;
+    float leadClear = smoothstep(uLeadR + 0.10, uLeadR + 1.80, D);
+    float waveA = sin(dot(vUv, waveDirA) * freqA + phaseA);
+    float waveB = sin(dot(vUv, waveDirB) * freqB + phaseB);
+    float textureSignal = smoothstep(0.006, 0.030, length(glassSlope));
+    vec3 colorBucket = floor(tex.rgb * 10.0) / 10.0;
+    float selectedPane = step(0.36, hash12(colorBucket.rg * 41.0 + colorBucket.br * 17.0));
+    float rippleStrength = leadClear * max(textureSignal, selectedPane * 0.90);
+    vec2 rippleSlope =
+      waveDirA * cos(dot(vUv, waveDirA) * freqA + phaseA) * freqA * 0.0084 +
+      waveDirB * cos(dot(vUv, waveDirB) * freqB + phaseB) * freqB * 0.0066;
+    float paneWarp = (hash12(vUv * 4096.0 + tex.rg * 37.0) - 0.5) * 0.014;
+    vec3 paneN = normalize(vec3(glassSlope * 0.22 + rippleSlope * rippleStrength + paneWarp, 1.0));
     if (leadAlpha < 0.001) {
       float lum = dot(tex.rgb, vec3(0.30, 0.59, 0.11));
       float translucency = smoothstep(0.08, 0.65, lum) * 0.55;
-      vec3 transmitted = (skyColor + sunGlow) * tex.rgb * 1.6;
+      float rippleBand = pow(clamp(0.5 + 0.5 * (waveA * 0.72 + waveB * 0.28), 0.0, 1.0), 2.4) * rippleStrength;
+      vec3 rippledView = normalize(viewThrough + vec3(paneN.xy * 0.48, 0.0));
+      vec3 reflectedSky = sampleSky(reflect(viewThrough, paneN));
+      float paneSun = pow(max(0.0, dot(reflect(normalize(uSunDir), paneN), -viewThrough)), 72.0);
+      vec3 transmitted = (sampleSky(rippledView) + sunGlow) * tex.rgb * 1.6;
       vec3 finalGlass = mix(glassColor, transmitted, translucency);
+      finalGlass *= 0.92 + rippleBand * 0.20;
+      finalGlass += reflectedSky * (0.035 + 0.13 * rippleStrength);
+      finalGlass += vec3(1.0, 0.92, 0.76) * (paneSun * 0.34 + rippleBand * 0.18);
       gl_FragColor = vec4(finalGlass, 1.0);
       return;
     }
@@ -148,128 +186,6 @@ const GLASS_FRAG_SRC = /* glsl */`
   }
 `;
 
-// Raytraced glass — a custom ShaderMaterial that traces rays through the
-// glass plane using real Snell-refraction, Schlick Fresnel, sky sampling in
-// both refracted and reflected directions, and direct sun visibility check
-// against the refracted ray. The lead came still gets bump shading. This is
-// the "raytracer" mode the toggle picks.
-const RAYTRACED_GLASS_FRAG_SRC = /* glsl */`
-  #define PI 3.14159265359
-  varying vec2 vUv;
-  varying vec3 vWorldPos;
-  uniform sampler2D uMap;
-  uniform vec2 uTexSize;
-  uniform float uBacklight;
-  uniform float uLeadR;
-  uniform float uDistMaxPx;
-  uniform vec3 uLeadTint;
-  uniform sampler2D uSkyTex;
-  uniform vec3 uSunDir;
-  uniform vec3 uCameraPos;
-  uniform float uIOR;
-
-  vec3 sampleSky(vec3 dir) {
-    float lon = atan(dir.z, dir.x);
-    float lat = asin(clamp(dir.y, -1.0, 1.0));
-    return texture2D(uSkyTex, vec2(lon / (2.0 * PI) + 0.5, lat / PI + 0.5)).rgb;
-  }
-
-  void main() {
-    vec4 tex = texture2D(uMap, vUv);
-    vec3 glassColor = tex.rgb;
-    vec2 texel = 1.0 / uTexSize;
-
-    // Glass plane normal is +Z in world (our windows all face +Z toward camera).
-    vec3 N = vec3(0.0, 0.0, 1.0);
-    vec3 V = normalize(vWorldPos - uCameraPos);
-
-    // Snell-refraction through the slab (a thin pane treated as one interface).
-    vec3 refracted = refract(V, N, 1.0 / uIOR);
-    if (dot(refracted, refracted) < 1e-4) refracted = V; // TIR fallback
-    vec3 reflected = reflect(V, N);
-
-    // Schlick Fresnel: how much of the view ray reflects vs. refracts.
-    float cosI = max(0.0, -dot(V, N));
-    float F0 = (uIOR - 1.0) / (uIOR + 1.0); F0 *= F0;
-    float fresnel = F0 + (1.0 - F0) * pow(1.0 - cosI, 5.0);
-
-    vec3 skyRef  = sampleSky(refracted);
-    vec3 skyRefl = sampleSky(reflected);
-
-    // Direct sun visibility along the REFRACTED ray (the ray that actually
-    // reaches the sky after passing through the pane).
-    float sunDot = dot(refracted, -normalize(uSunDir));
-    float sunCore = pow(max(0.0, sunDot), 280.0) * 9.0;
-    float sunHalo = pow(max(0.0, sunDot), 14.0) * 0.6;
-    vec3 sunGlow = vec3(1.0, 0.92, 0.78) * (sunCore + sunHalo);
-
-    // Lead detection / blur (same 5-tap distance field path as standard).
-    float Dc  = tex.a * uDistMaxPx;
-    float Dxp = texture2D(uMap, vUv + vec2( texel.x, 0.0)).a * uDistMaxPx;
-    float Dxm = texture2D(uMap, vUv + vec2(-texel.x, 0.0)).a * uDistMaxPx;
-    float Dyp = texture2D(uMap, vUv + vec2(0.0,  texel.y)).a * uDistMaxPx;
-    float Dym = texture2D(uMap, vUv + vec2(0.0, -texel.y)).a * uDistMaxPx;
-    float D = (Dc * 2.0 + Dxp + Dxm + Dyp + Dym) * 0.16666667;
-    float leadAlpha = 1.0 - smoothstep(uLeadR - 0.75, uLeadR + 0.75, D);
-
-    // Glass body: refracted sky tinted by glass color, plus a Fresnel-weighted
-    // reflection of the sky off the front face. Backlight boosts saturated
-    // cells so they still glow rather than going washed-out.
-    vec3 transmittedLight = (skyRef + sunGlow) * glassColor * 1.7 * uBacklight;
-    vec3 glassResult = mix(transmittedLight, skyRefl, fresnel * 0.42);
-
-    if (leadAlpha < 0.001) {
-      gl_FragColor = vec4(glassResult, 1.0);
-      return;
-    }
-
-    // Lead bump + specular + a tiny chromatic reflection of the actual sky.
-    vec2 grad = vec2(Dxp - Dxm, Dyp - Dym) * 0.5;
-    float gradLen = length(grad);
-    vec3 Nlead = vec3(0.0, 0.0, 1.0);
-    if (gradLen > 0.05) {
-      vec2 outDir = grad / gradLen;
-      float clampedD = min(D, uLeadR * 0.95);
-      float h = sqrt(max(0.001, uLeadR * uLeadR - clampedD * clampedD));
-      float hp = clampedD / h;
-      Nlead = normalize(vec3(outDir * hp, 1.0));
-    }
-    vec3 lightDir = normalize(vec3(0.45, -0.50, 0.78));
-    vec3 vDir = vec3(0.0, 0.0, 1.0);
-    float NdotL = max(0.0, dot(Nlead, lightDir));
-    vec3 H = normalize(lightDir + vDir);
-    float spec = pow(max(0.0, dot(Nlead, H)), 36.0);
-    vec3 leadSkyReflect = sampleSky(reflect(V, Nlead)) * 0.20;
-    vec3 silverLit = uLeadTint * (0.30 + 0.62 * NdotL)
-                     + vec3(0.85) * spec
-                     + leadSkyReflect
-                     + glassColor * 0.10;
-
-    vec3 finalColor = mix(glassResult, silverLit, leadAlpha);
-    gl_FragColor = vec4(finalColor, 1.0);
-  }
-`;
-
-function makeRaytracedGlassMaterial(initialTexture) {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uMap:        { value: initialTexture },
-      uTexSize:    { value: new THREE.Vector2(64, 64) },
-      uBacklight:  { value: 1.35 },
-      uLeadR:      { value: 2.0 },
-      uDistMaxPx:  { value: 4.0 },
-      uLeadTint:   { value: new THREE.Color(0x1f1f23) },
-      uSkyTex:     { value: skyTexture },
-      uSunDir:     { value: new THREE.Vector3(-0.22, -0.42, 0.92) },
-      uCameraPos:  { value: new THREE.Vector3() },
-      uIOR:        { value: 1.48 },
-    },
-    vertexShader: GLASS_VERT_SRC,
-    fragmentShader: RAYTRACED_GLASS_FRAG_SRC,
-    side: THREE.DoubleSide,
-  });
-}
-
 function makeGlassMaterial(initialTexture) {
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -278,7 +194,7 @@ function makeGlassMaterial(initialTexture) {
       uBacklight:  { value: 1.25 },
       uLeadR:      { value: 2.0 },
       uDistMaxPx:  { value: 4.0 },
-      uLeadTint:   { value: new THREE.Color(0x1f1f23) },
+      uLeadTint:   { value: new THREE.Color(0xb8b2aa) },
       uSkyTex:     { value: skyTexture },
       uSunDir:     { value: new THREE.Vector3(-0.22, -0.42, 0.92) },
       uCameraPos:  { value: new THREE.Vector3() },
@@ -294,7 +210,7 @@ function makeGlassMaterial(initialTexture) {
 // ---------- Procedural wood + plaster textures ----------
 const wallPlasterTex = makePlasterTexture();
 const floorWoodTex   = makeWoodTexture({ W: 1024, H: 1024, plankH: 110, hueShift: -8 });
-const frameWoodTex   = makeWoodTexture({ W: 1024, H: 256,  plankH: 220, hueShift: 6, dark: true });
+const frameWoodTex   = makeFrameWoodTexture();
 
 // ---------- Wall around the glass + 3D wooden window frame ----------
 // Two groups so they rebuild together on aspect change.
@@ -303,11 +219,11 @@ const WALL_Z = GLASS_Z - 0.05;                // plaster sits behind the glass p
 const wallMat = new THREE.MeshBasicMaterial({ map: wallPlasterTex, color: 0x4a4248 });
 const trimMat = new THREE.MeshBasicMaterial({ color: 0x05040a });
 // Wood — multiple tints so layered mouldings catch light differently.
-const frameMatFront     = new THREE.MeshBasicMaterial({ map: frameWoodTex });
-const frameMatSide      = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0x9a8270 });
+const frameMatFront     = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0x9a704d });
+const frameMatSide      = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0x80624d });
 const frameMatBack      = new THREE.MeshBasicMaterial({ color: 0x1f140a });
-const frameMatFrontDark = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0x5a3d28 });
-const frameMatFrontLight = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0xc4a585 });
+const frameMatFrontDark = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0x6a4328 });
+const frameMatFrontLight = new THREE.MeshBasicMaterial({ map: frameWoodTex, color: 0xc89d72 });
 // Gilded accents (antique gold) — used for inner bead and keystone highlight.
 const goldFrontMat = new THREE.MeshBasicMaterial({ color: 0xb38a47 });
 const goldSideMat  = new THREE.MeshBasicMaterial({ color: 0x8a6730 });
@@ -316,6 +232,10 @@ const WOOD_MATS       = [frameMatSide, frameMatSide, frameMatSide, frameMatSide,
 const WOOD_DARK_MATS  = [frameMatSide, frameMatSide, frameMatSide, frameMatSide, frameMatFrontDark,  frameMatBack];
 const WOOD_LIGHT_MATS = [frameMatSide, frameMatSide, frameMatSide, frameMatSide, frameMatFrontLight, frameMatBack];
 const GOLD_MATS       = [goldSideMat,  goldSideMat,  goldSideMat,  goldSideMat,  goldFrontMat,       frameMatBack];
+const RT_MAT_WOOD = 1;
+const RT_MAT_WOOD_DARK = 2;
+const RT_MAT_WOOD_LIGHT = 3;
+const RT_MAT_GOLD = 4;
 // ---- Hallway wall (plaster strips around every window) and per-window frame.
 // As the user uploads more images, each becomes a new `window` object: its
 // own glass mesh + frame group + sill, all sitting at its own x offset along
@@ -498,11 +418,26 @@ function buildWindowFrame(group, innerW, innerH, centerY, posX) {
   const pilCxR  = (innerR + pilOutR) / 2;
   const trunkTopY = centerY + innerH / 2;       // top of the pilaster trunk = top of glass
   const trunkBotY = centerY - innerH / 2;
+  const frameBoxes = [];
+
+  const rtMatFor = (mats) => {
+    if (mats === WOOD_DARK_MATS) return RT_MAT_WOOD_DARK;
+    if (mats === WOOD_LIGHT_MATS) return RT_MAT_WOOD_LIGHT;
+    if (mats === GOLD_MATS) return RT_MAT_GOLD;
+    return RT_MAT_WOOD;
+  };
 
   const box = (w, h, d, mats, x, y, z) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
+    const radius = Math.min(0.045, Math.max(0.006, Math.min(w, h, d) * 0.22));
+    const material = Array.isArray(mats) ? mats[4] : mats;
+    const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, radius), material);
     m.position.set(x, y, z);
     group.add(m);
+    frameBoxes.push({
+      min: new THREE.Vector3(x - w / 2, y - h / 2, z - d / 2),
+      max: new THREE.Vector3(x + w / 2, y + h / 2, z + d / 2),
+      mat: rtMatFor(mats),
+    });
     return m;
   };
 
@@ -625,22 +560,1199 @@ function buildWindowFrame(group, innerW, innerH, centerY, posX) {
   );
   inset.position.set(posX, centerY, GLASS_Z - 0.025);
   group.add(inset);
+  return frameBoxes;
 }
 
 // ---- Windows (one per uploaded image) ----
 const windows = [];
 let activeWindowIdx = 0;
 let useRaytracer = false;
+const sunDir = new THREE.Vector3(-0.22, -0.42, 0.92).normalize();
+
+const RT_MAX_WINDOWS = 6;
+const RT_MAX_BOXES = 128;
+const RT_POINT_LIGHTS = [
+  {
+    position: new THREE.Vector3(roomBounds.sideLeft + 1.1, roomBounds.ceilingY - 0.55, roomBounds.backZ - 0.85),
+    radius: 0.24,
+    color: new THREE.Color(0xffc07a),
+    power: 8.5,
+  },
+  {
+    position: new THREE.Vector3(roomBounds.sideRight - 1.1, roomBounds.ceilingY - 0.55, roomBounds.backZ - 0.85),
+    radius: 0.24,
+    color: new THREE.Color(0xffd2a0),
+    power: 6.2,
+  },
+];
+const RT_DEFAULT_POINT_LIGHT_BRIGHTNESS = 0.40;
+const RT_ATLAS_COLS = 3;
+const RT_ATLAS_ROWS = 2;
+const RT_ATLAS_TILE = 512;
+const rtAtlasCanvas = document.createElement('canvas');
+rtAtlasCanvas.width = RT_ATLAS_COLS * RT_ATLAS_TILE;
+rtAtlasCanvas.height = RT_ATLAS_ROWS * RT_ATLAS_TILE;
+const rtAtlasCtx = rtAtlasCanvas.getContext('2d');
+const rtGlassAtlasTex = new THREE.CanvasTexture(rtAtlasCanvas);
+rtGlassAtlasTex.colorSpace = THREE.SRGBColorSpace;
+rtGlassAtlasTex.minFilter = THREE.LinearFilter;
+rtGlassAtlasTex.magFilter = THREE.LinearFilter;
+rtGlassAtlasTex.generateMipmaps = false;
+
+const rtWindowRects = Array.from({ length: RT_MAX_WINDOWS }, () => new THREE.Vector4());
+const rtAtlasRects = Array.from({ length: RT_MAX_WINDOWS }, () => new THREE.Vector4());
+const rtWindowLead = Array.from({ length: RT_MAX_WINDOWS }, () => new THREE.Vector4(2.0, 4.0, 0, 0));
+const rtBoxMinMat = Array.from({ length: RT_MAX_BOXES }, () => new THREE.Vector4());
+const rtBoxMax = Array.from({ length: RT_MAX_BOXES }, () => new THREE.Vector4());
+const rtPointLightPosRad = RT_POINT_LIGHTS.map((l) => new THREE.Vector4(l.position.x, l.position.y, l.position.z, l.radius));
+const rtPointLightColorPower = RT_POINT_LIGHTS.map((l) => new THREE.Vector4(
+  l.color.r,
+  l.color.g,
+  l.color.b,
+  l.power * RT_DEFAULT_POINT_LIGHT_BRIGHTNESS
+));
+const roomPointLights = [];
+const roomPointLightGlows = [];
+
+for (const l of RT_POINT_LIGHTS) {
+  const light = new THREE.PointLight(l.color, l.power * 3.2 * RT_DEFAULT_POINT_LIGHT_BRIGHTNESS, 10.0, 1.85);
+  light.position.copy(l.position);
+  scene.add(light);
+  roomPointLights.push(light);
+
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(l.radius * 0.45, 16, 8),
+    new THREE.MeshBasicMaterial({ color: l.color, transparent: true, opacity: 0.72 * RT_DEFAULT_POINT_LIGHT_BRIGHTNESS })
+  );
+  glow.position.copy(l.position);
+  scene.add(glow);
+  roomPointLightGlows.push(glow);
+}
+
+const RAYTRACED_SCENE_VERT_SRC = /* glsl */`
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`;
+
+const RAYTRACED_SCENE_FRAG_SRC = /* glsl */`
+  precision highp float;
+  #define PI 3.14159265359
+  #define MAX_WINDOWS ${RT_MAX_WINDOWS}
+  #define MAX_BOXES ${RT_MAX_BOXES}
+  #define MAX_POINT_LIGHTS ${RT_POINT_LIGHTS.length}
+  #define ATLAS_TILE ${RT_ATLAS_TILE}.0
+
+  varying vec2 vUv;
+  uniform vec2 uResolution;
+  uniform mat4 uCameraWorld;
+  uniform mat4 uInvProjection;
+  uniform sampler2D uSkyTex;
+  uniform sampler2D uFloorTex;
+  uniform sampler2D uWallTex;
+  uniform sampler2D uFrameWoodTex;
+  uniform sampler2D uPrimaryGlassTex;
+  uniform sampler2D uGlassAtlas;
+  uniform vec3 uSunDir;
+  uniform vec2 uPrimaryTexSize;
+  uniform vec4 uRoomBounds; // left, right, backZ, ceilingY
+  uniform float uWallZ;
+  uniform float uRaysDensity;
+  uniform float uRtExposure;
+  uniform float uGlassSurface;
+  uniform float uGlassTransmission;
+  uniform float uGlassReflection;
+  uniform float uSolidSpecular;
+  uniform float uSunDiffusion;
+  uniform float uVolumeSteps;
+  uniform sampler2D uPreviousFrame;
+  uniform float uFrame;
+  uniform vec2 uJitter;
+  uniform int uPrimaryWindowIndex;
+  uniform int uWindowCount;
+  uniform int uBoxCount;
+  uniform vec4 uWindowRect[MAX_WINDOWS]; // centerX, centerY, width, height
+  uniform vec4 uAtlasRect[MAX_WINDOWS];  // u0, v0, du, dv
+  uniform vec4 uWindowLead[MAX_WINDOWS]; // leadR, distMaxPx, unused, unused
+  uniform vec4 uBoxMinMat[MAX_BOXES];    // min.xyz, material id
+  uniform vec4 uBoxMax[MAX_BOXES];       // max.xyz, unused
+  uniform vec4 uPointLightPosRad[MAX_POINT_LIGHTS];   // xyz, source radius
+  uniform vec4 uPointLightColorPower[MAX_POINT_LIGHTS]; // rgb, power
+
+  struct Hit {
+    float t;
+    vec3 p;
+    vec3 n;
+    float mat;
+    float windowIdx;
+    int boxIdx;
+  };
+
+  vec3 sampleSky(vec3 dir) {
+    float lon = atan(dir.z, dir.x);
+    float lat = asin(clamp(dir.y, -1.0, 1.0));
+    return texture2D(uSkyTex, vec2(lon / (2.0 * PI) + 0.5, lat / PI + 0.5)).rgb;
+  }
+
+  vec3 sampleSunSky(vec3 dir) {
+    vec3 sky = sampleSky(dir);
+    float sunDot = max(0.0, dot(normalize(dir), -normalize(uSunDir)));
+    float diffusion = clamp(uSunDiffusion, 0.0, 1.0);
+    vec3 sun = vec3(1.0, 0.91, 0.74) *
+      (pow(sunDot, mix(950.0, 120.0, diffusion)) * mix(22.0, 8.5, diffusion) +
+       pow(sunDot, mix(90.0, 10.0, diffusion)) * mix(1.75, 0.85, diffusion) +
+       pow(sunDot, 8.0) * 0.06 * diffusion);
+    return sky + sun;
+  }
+
+  vec3 aces(vec3 x) {
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+  }
+
+  float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+
+  float rand(inout vec2 seed) {
+    seed = fract(seed * mat2(127.1, 311.7, 269.5, 183.3));
+    return fract(sin(dot(seed, vec2(12.9898, 78.233))) * 43758.5453);
+  }
+
+  vec3 cosineHemisphere(vec3 n, inout vec2 seed) {
+    float r1 = rand(seed);
+    float r2 = rand(seed);
+    float phi = 2.0 * PI * r1;
+    float r = sqrt(r2);
+    vec3 u = normalize(abs(n.y) < 0.99 ? cross(vec3(0.0, 1.0, 0.0), n) : cross(vec3(1.0, 0.0, 0.0), n));
+    vec3 v = cross(n, u);
+    return normalize(u * cos(phi) * r + v * sin(phi) * r + n * sqrt(max(0.0, 1.0 - r2)));
+  }
+
+  vec3 sunRayDirection(inout vec2 seed) {
+    vec3 center = -normalize(uSunDir);
+    vec3 u = normalize(abs(center.y) < 0.99 ? cross(vec3(0.0, 1.0, 0.0), center) : cross(vec3(1.0, 0.0, 0.0), center));
+    vec3 v = cross(center, u);
+    float r = sqrt(rand(seed)) * mix(0.0025, 0.060, clamp(uSunDiffusion, 0.0, 1.0));
+    float a = 2.0 * PI * rand(seed);
+    return normalize(center + u * cos(a) * r + v * sin(a) * r);
+  }
+
+  bool pointInWindow(vec3 p, int i) {
+    vec4 r = uWindowRect[i];
+    vec2 lo = r.xy - r.zw * 0.5;
+    vec2 hi = r.xy + r.zw * 0.5;
+    return p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
+  }
+
+  vec2 windowUv(vec3 p, int i) {
+    vec4 r = uWindowRect[i];
+    return (p.xy - (r.xy - r.zw * 0.5)) / r.zw;
+  }
+
+  vec4 sampleGlass(int i, vec2 uv) {
+    if (i == uPrimaryWindowIndex) {
+      return texture2D(uPrimaryGlassTex, clamp(uv, 0.0, 1.0));
+    }
+    vec4 a = uAtlasRect[i];
+    return texture2D(uGlassAtlas, a.xy + clamp(uv, 0.0, 1.0) * a.zw);
+  }
+
+  vec4 sampleGlassOffset(int i, vec2 uv, vec2 px) {
+    if (i == uPrimaryWindowIndex) {
+      return texture2D(uPrimaryGlassTex, clamp(uv + px / uPrimaryTexSize, 0.0, 1.0));
+    }
+    vec4 a = uAtlasRect[i];
+    return texture2D(uGlassAtlas, a.xy + clamp(uv, 0.0, 1.0) * a.zw + px * a.zw / ATLAS_TILE);
+  }
+
+  struct GlassInfo {
+    vec3 color;
+    vec3 paneNormal;
+    vec3 leadNormal;
+    float leadAlpha;
+    float open;
+    float rippleStrength;
+    float rippleBand;
+  };
+
+  GlassInfo readGlassInfo(int wi, vec2 uv) {
+    vec4 tex = sampleGlass(wi, uv);
+    vec4 txp = sampleGlassOffset(wi, uv, vec2( 1.0, 0.0));
+    vec4 txm = sampleGlassOffset(wi, uv, vec2(-1.0, 0.0));
+    vec4 typ = sampleGlassOffset(wi, uv, vec2(0.0,  1.0));
+    vec4 tym = sampleGlassOffset(wi, uv, vec2(0.0, -1.0));
+    vec4 lead = uWindowLead[wi];
+    float dc = tex.a * lead.y;
+    float dxp = txp.a * lead.y;
+    float dxm = txm.a * lead.y;
+    float dyp = typ.a * lead.y;
+    float dym = tym.a * lead.y;
+    float d = (dc * 2.0 + dxp + dxm + dyp + dym) * 0.16666667;
+    float leadAlpha = 1.0 - smoothstep(lead.x - 0.75, lead.x + 0.75, d);
+
+    vec3 nlead = vec3(0.0, 0.0, 1.0);
+    vec2 grad = vec2(dxp - dxm, dyp - dym) * 0.5;
+    float glen = length(grad);
+    if (glen > 0.05) {
+      vec2 outDir = grad / glen;
+      float clampedD = min(d, lead.x * 0.95);
+      float hh = sqrt(max(0.001, lead.x * lead.x - clampedD * clampedD));
+      nlead = normalize(vec3(outDir * (clampedD / hh), 1.0));
+    }
+
+    GlassInfo gi;
+    gi.color = max(tex.rgb, vec3(0.001));
+    vec2 glassSlope = vec2(
+      dot(txp.rgb - txm.rgb, vec3(0.30, 0.59, 0.11)),
+      dot(typ.rgb - tym.rgb, vec3(0.30, 0.59, 0.11))
+    );
+    float paneSeed = hash12(gi.color.rg * 271.0 + gi.color.br * 97.0);
+    vec2 waveDirA = normalize(vec2(0.92 + paneSeed * 0.22, 0.28 - paneSeed * 0.18));
+    vec2 waveDirB = normalize(vec2(-0.18 - paneSeed * 0.26, 0.98));
+    float freqA = mix(18.0, 31.0, paneSeed);
+    float freqB = mix(10.0, 18.0, hash12(gi.color.gb * 193.0 + 5.1));
+    float phaseA = paneSeed * 37.0;
+    float phaseB = hash12(gi.color.br * 151.0 + 9.7) * 31.0;
+    float leadClear = smoothstep(lead.x + 0.10, lead.x + 1.80, d);
+    float waveA = sin(dot(uv, waveDirA) * freqA + phaseA);
+    float waveB = sin(dot(uv, waveDirB) * freqB + phaseB);
+    float textureSignal = smoothstep(0.006, 0.030, length(glassSlope));
+    vec3 colorBucket = floor(gi.color * 10.0) / 10.0;
+    float selectedPane = step(0.36, hash12(colorBucket.rg * 41.0 + colorBucket.br * 17.0));
+    float rippleStrength = leadClear * max(textureSignal, selectedPane * 0.90);
+    vec2 rippleSlope =
+      waveDirA * cos(dot(uv, waveDirA) * freqA + phaseA) * freqA * 0.0084 +
+      waveDirB * cos(dot(uv, waveDirB) * freqB + phaseB) * freqB * 0.0066;
+    float paneWarp = (hash12(uv * 4096.0 + gi.color.rg * 37.0) - 0.5) * 0.014;
+    gi.paneNormal = normalize(vec3(glassSlope * 0.22 + rippleSlope * rippleStrength + paneWarp, 1.0));
+    gi.leadNormal = nlead;
+    gi.leadAlpha = clamp(leadAlpha, 0.0, 1.0);
+    gi.open = 1.0 - gi.leadAlpha;
+    gi.rippleStrength = rippleStrength;
+    gi.rippleBand = pow(clamp(0.5 + 0.5 * (waveA * 0.72 + waveB * 0.28), 0.0, 1.0), 2.4) * rippleStrength;
+    return gi;
+  }
+
+  bool windowAtPoint(vec3 p, out int idx) {
+    for (int i = 0; i < MAX_WINDOWS; i++) {
+      if (i >= uWindowCount) break;
+      if (pointInWindow(p, i)) {
+        idx = i;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool intersectAabb(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t, out vec3 n) {
+    vec3 safeRd = vec3(
+      abs(rd.x) < 1e-5 ? (rd.x < 0.0 ? -1e-5 : 1e-5) : rd.x,
+      abs(rd.y) < 1e-5 ? (rd.y < 0.0 ? -1e-5 : 1e-5) : rd.y,
+      abs(rd.z) < 1e-5 ? (rd.z < 0.0 ? -1e-5 : 1e-5) : rd.z
+    );
+    vec3 inv = 1.0 / safeRd;
+    vec3 t0 = (bmin - ro) * inv;
+    vec3 t1 = (bmax - ro) * inv;
+    vec3 tn = min(t0, t1);
+    vec3 tf = max(t0, t1);
+    float tNear = max(max(tn.x, tn.y), tn.z);
+    float tFar = min(min(tf.x, tf.y), tf.z);
+    if (tNear > tFar || tFar < 0.001) return false;
+    t = tNear > 0.001 ? tNear : tFar;
+    vec3 p = ro + rd * t;
+    vec3 d0 = abs(p - bmin);
+    vec3 d1 = abs(p - bmax);
+    float m = min(min(min(d0.x, d1.x), min(d0.y, d1.y)), min(d0.z, d1.z));
+    if (m == d0.x) n = vec3(-1.0, 0.0, 0.0);
+    else if (m == d1.x) n = vec3(1.0, 0.0, 0.0);
+    else if (m == d0.y) n = vec3(0.0, -1.0, 0.0);
+    else if (m == d1.y) n = vec3(0.0, 1.0, 0.0);
+    else if (m == d0.z) n = vec3(0.0, 0.0, -1.0);
+    else n = vec3(0.0, 0.0, 1.0);
+    return true;
+  }
+
+  bool intersectSphere(vec3 ro, vec3 rd, vec3 center, float radius, out float t, out vec3 n) {
+    vec3 oc = ro - center;
+    float b = dot(oc, rd);
+    float c = dot(oc, oc) - radius * radius;
+    float h = b * b - c;
+    if (h < 0.0) return false;
+    h = sqrt(h);
+    float tNear = -b - h;
+    float tFar = -b + h;
+    t = tNear > 0.001 ? tNear : tFar;
+    if (t <= 0.001) return false;
+    vec3 p = ro + rd * t;
+    n = normalize(p - center);
+    return true;
+  }
+
+  vec3 bevelBoxNormal(int idx, vec3 p, vec3 faceN) {
+    vec3 bmin = uBoxMinMat[idx].xyz;
+    vec3 bmax = uBoxMax[idx].xyz;
+    float bevel = 0.035;
+    vec3 n = faceN * 1.8;
+    n += vec3(-1.0, 0.0, 0.0) * smoothstep(bevel, 0.0, p.x - bmin.x);
+    n += vec3( 1.0, 0.0, 0.0) * smoothstep(bevel, 0.0, bmax.x - p.x);
+    n += vec3(0.0, -1.0, 0.0) * smoothstep(bevel, 0.0, p.y - bmin.y);
+    n += vec3(0.0,  1.0, 0.0) * smoothstep(bevel, 0.0, bmax.y - p.y);
+    n += vec3(0.0, 0.0, -1.0) * smoothstep(bevel, 0.0, p.z - bmin.z);
+    n += vec3(0.0, 0.0,  1.0) * smoothstep(bevel, 0.0, bmax.z - p.z);
+    return normalize(n);
+  }
+
+  bool occludedBySolid(vec3 ro, vec3 rd, float maxT) {
+    float t;
+    vec3 n;
+    for (int i = 0; i < MAX_BOXES; i++) {
+      if (i >= uBoxCount) break;
+      if (intersectAabb(ro, rd, uBoxMinMat[i].xyz, uBoxMax[i].xyz, t, n) && t < maxT) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Hit noHit() {
+    Hit h;
+    h.t = 1.0e20;
+    h.p = vec3(0.0);
+    h.n = vec3(0.0, 1.0, 0.0);
+    h.mat = 0.0;
+    h.windowIdx = -1.0;
+    h.boxIdx = -1;
+    return h;
+  }
+
+  bool inRoomBounds(vec3 p) {
+    return p.x >= uRoomBounds.x - 0.002 && p.x <= uRoomBounds.y + 0.002 &&
+           p.y >= -0.002 && p.y <= uRoomBounds.w + 0.002 &&
+           p.z >= uWallZ - 0.002 && p.z <= uRoomBounds.z + 0.002;
+  }
+
+  void considerRoomPlane(
+    vec3 ro,
+    vec3 rd,
+    float candT,
+    vec3 candN,
+    float candMat,
+    int frontWall,
+    inout float bestT,
+    inout vec3 bestN,
+    inout float bestMat
+  ) {
+    if (candT <= 0.001 || candT >= bestT) return;
+    vec3 p = ro + rd * candT;
+    if (!inRoomBounds(p)) return;
+    if (frontWall == 1) {
+      int holeIdx = -1;
+      if (windowAtPoint(p, holeIdx)) return;
+    }
+    bestT = candT;
+    bestN = candN;
+    bestMat = candMat;
+  }
+
+  bool traceRoomSurface(vec3 ro, vec3 rd, out float t, out vec3 n, out float mat) {
+    float bestT = 1.0e20;
+    vec3 bestN = vec3(0.0, 1.0, 0.0);
+    float bestMat = 6.0;
+
+    if (abs(rd.y) > 1e-5) {
+      considerRoomPlane(ro, rd, (0.0 - ro.y) / rd.y, vec3(0.0, 1.0, 0.0), 7.0, 0, bestT, bestN, bestMat);
+      considerRoomPlane(ro, rd, (uRoomBounds.w - ro.y) / rd.y, vec3(0.0, -1.0, 0.0), 6.0, 0, bestT, bestN, bestMat);
+    }
+    if (abs(rd.x) > 1e-5) {
+      considerRoomPlane(ro, rd, (uRoomBounds.x - ro.x) / rd.x, vec3(1.0, 0.0, 0.0), 6.0, 0, bestT, bestN, bestMat);
+      considerRoomPlane(ro, rd, (uRoomBounds.y - ro.x) / rd.x, vec3(-1.0, 0.0, 0.0), 6.0, 0, bestT, bestN, bestMat);
+    }
+    if (abs(rd.z) > 1e-5) {
+      considerRoomPlane(ro, rd, (uWallZ - ro.z) / rd.z, vec3(0.0, 0.0, 1.0), 6.0, 1, bestT, bestN, bestMat);
+      considerRoomPlane(ro, rd, (uRoomBounds.z - ro.z) / rd.z, vec3(0.0, 0.0, -1.0), 6.0, 0, bestT, bestN, bestMat);
+    }
+
+    if (bestT >= 1.0e19) return false;
+    t = bestT;
+    n = bestN;
+    mat = bestMat;
+    return true;
+  }
+
+  Hit traceScene(vec3 ro, vec3 rd) {
+    Hit h = noHit();
+    float t;
+    vec3 n;
+
+    if (abs(rd.z) > 1e-5) {
+      t = (0.0 - ro.z) / rd.z;
+      if (t > 0.001) {
+        vec3 p = ro + rd * t;
+        int wi = -1;
+        if (windowAtPoint(p, wi)) {
+          h.t = t;
+          h.p = p;
+          h.n = vec3(0.0, 0.0, 1.0);
+          h.mat = 5.0;
+          h.windowIdx = float(wi);
+          h.boxIdx = -1;
+        }
+      }
+    }
+
+    for (int i = 0; i < MAX_BOXES; i++) {
+      if (i >= uBoxCount) break;
+      if (intersectAabb(ro, rd, uBoxMinMat[i].xyz, uBoxMax[i].xyz, t, n) && t < h.t) {
+        h.t = t;
+        h.p = ro + rd * t;
+        h.n = bevelBoxNormal(i, h.p, n);
+        h.mat = uBoxMinMat[i].w;
+        h.windowIdx = -1.0;
+        h.boxIdx = i;
+      }
+    }
+
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
+      vec4 lp = uPointLightPosRad[i];
+      if (intersectSphere(ro, rd, lp.xyz, lp.w, t, n) && t < h.t) {
+        h.t = t;
+        h.p = ro + rd * t;
+        h.n = n;
+        h.mat = 8.0 + float(i);
+        h.windowIdx = -1.0;
+        h.boxIdx = -1;
+      }
+    }
+
+    float roomMat;
+    if (traceRoomSurface(ro, rd, t, n, roomMat) && t < h.t) {
+      h.t = t;
+      h.p = ro + rd * t;
+      h.n = n;
+      h.mat = roomMat;
+      h.windowIdx = -1.0;
+      h.boxIdx = -1;
+    }
+
+    return h;
+  }
+
+  vec2 woodUv(vec3 p, vec3 n) {
+    vec3 an = abs(n);
+    if (an.z > an.x && an.z > an.y) return p.xy * vec2(0.55, 1.15);
+    if (an.x > an.y) return p.zy * vec2(1.15, 1.2);
+    return p.xz * vec2(0.55, 1.4);
+  }
+
+  vec3 materialAlbedo(float mat, vec3 p, vec3 n) {
+    if (mat < 1.5) {
+      vec3 w = texture2D(uFrameWoodTex, woodUv(p, n)).rgb;
+      return w * vec3(0.96, 0.70, 0.48) + vec3(0.055, 0.030, 0.014);
+    }
+    if (mat < 2.5) {
+      vec3 w = texture2D(uFrameWoodTex, woodUv(p, n)).rgb;
+      return w * vec3(0.58, 0.39, 0.25) + vec3(0.030, 0.018, 0.009);
+    }
+    if (mat < 3.5) {
+      vec3 w = texture2D(uFrameWoodTex, woodUv(p, n)).rgb;
+      return w * vec3(1.08, 0.82, 0.58) + vec3(0.070, 0.044, 0.022);
+    }
+    if (mat < 4.5) return vec3(1.0, 0.72, 0.30);
+    if (mat < 6.5) return texture2D(uWallTex, p.xy * 0.18 + p.zy * 0.08).rgb * vec3(0.62, 0.57, 0.62);
+    return texture2D(uFloorTex, p.xz * 0.32).rgb;
+  }
+
+  vec3 traceSunThroughGlassRay(vec3 p, vec3 normal, vec3 toSun) {
+    float transmission = clamp(uGlassTransmission, 0.0, 1.0);
+    float denom = toSun.z;
+    if (abs(denom) < 0.0001) return vec3(0.0);
+    float tGlass = (0.0 - p.z) / denom;
+    if (tGlass <= 0.001) return vec3(0.0);
+    vec3 shadowOrigin = p + normal * 0.004 + toSun * 0.020;
+    if (occludedBySolid(shadowOrigin, toSun, max(0.0, tGlass - 0.018))) return vec3(0.0);
+    vec3 q = p + toSun * tGlass;
+    for (int i = 0; i < MAX_WINDOWS; i++) {
+      if (i >= uWindowCount) break;
+      if (pointInWindow(q, i)) {
+        vec2 uv = windowUv(q, i);
+        GlassInfo gi = readGlassInfo(i, uv);
+        vec3 absorption = mix(vec3(1.0), gi.color, transmission);
+        float aperture = gi.open * max(0.0, normalize(uSunDir).z);
+        return vec3(1.0, 0.86, 0.62) * absorption * aperture * transmission * 5.2;
+      }
+    }
+    return vec3(0.0);
+  }
+
+  vec3 sampleSunThroughGlass(vec3 p, vec3 normal, inout vec2 seed, int sampleCount) {
+    vec3 acc = vec3(0.0);
+    float count = 0.0;
+    for (int i = 0; i < 4; i++) {
+      if (i >= sampleCount) break;
+      acc += traceSunThroughGlassRay(p, normal, sunRayDirection(seed));
+      count += 1.0;
+    }
+    return count > 0.5 ? acc / count : vec3(0.0);
+  }
+
+  vec3 sampleWindowEnvironment(vec3 p, vec3 normal, inout vec2 seed) {
+    vec3 acc = vec3(0.0);
+    float transmission = clamp(uGlassTransmission, 0.0, 1.0);
+    for (int i = 0; i < MAX_WINDOWS; i++) {
+      if (i >= uWindowCount) break;
+      vec4 r = uWindowRect[i];
+      vec2 uv = vec2(rand(seed), rand(seed));
+      vec3 q = vec3(r.xy - r.zw * 0.5 + uv * r.zw, 0.0);
+      vec3 toWindow = q - p;
+      float dist = length(toWindow);
+      if (dist <= 0.001) continue;
+      vec3 wi = toWindow / dist;
+      float ndl = max(0.0, dot(normal, wi));
+      if (ndl <= 0.0) continue;
+      if (occludedBySolid(p + normal * 0.006 + wi * 0.006, wi, max(0.0, dist - 0.018))) continue;
+
+      GlassInfo gi = readGlassInfo(i, uv);
+      float area = r.z * r.w;
+      float apertureCos = max(0.08, -wi.z);
+      float solidAngle = area * apertureCos / max(0.25, dist * dist);
+      vec3 tint = mix(vec3(1.0), gi.color, transmission);
+      acc += sampleSunSky(wi) * tint * gi.open * ndl * solidAngle * transmission;
+    }
+    return acc;
+  }
+
+  vec3 samplePointLights(vec3 p, vec3 normal, inout vec2 seed) {
+    vec3 acc = vec3(0.0);
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
+      vec4 lp = uPointLightPosRad[i];
+      vec3 toCenter = lp.xyz - p;
+      float centerDist = length(toCenter);
+      if (centerDist <= 0.001) continue;
+      vec3 centerDir = toCenter / centerDist;
+      vec3 tangent = normalize(abs(centerDir.y) < 0.99 ? cross(vec3(0.0, 1.0, 0.0), centerDir) : cross(vec3(1.0, 0.0, 0.0), centerDir));
+      vec3 bitangent = cross(centerDir, tangent);
+      float r = sqrt(rand(seed)) * lp.w;
+      float a = 2.0 * PI * rand(seed);
+      vec3 lightPos = lp.xyz + tangent * cos(a) * r + bitangent * sin(a) * r;
+      vec3 toLight = lightPos - p;
+      float dist2 = max(0.04, dot(toLight, toLight));
+      float dist = sqrt(dist2);
+      vec3 wi = toLight / dist;
+      float ndl = max(0.0, dot(normal, wi));
+      if (ndl <= 0.0) continue;
+      if (occludedBySolid(p + normal * 0.008 + wi * 0.006, wi, max(0.0, dist - lp.w - 0.018))) continue;
+      vec4 cp = uPointLightColorPower[i];
+      float falloff = 1.0 / (1.0 + dist2 * 0.55);
+      acc += cp.rgb * cp.a * ndl * falloff;
+    }
+    return acc;
+  }
+
+  vec3 samplePointLightSpecular(vec3 p, vec3 normal, vec3 viewDir, float shininess, inout vec2 seed) {
+    vec3 acc = vec3(0.0);
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
+      vec4 lp = uPointLightPosRad[i];
+      vec3 toCenter = lp.xyz - p;
+      float centerDist = length(toCenter);
+      if (centerDist <= 0.001) continue;
+      vec3 centerDir = toCenter / centerDist;
+      vec3 tangent = normalize(abs(centerDir.y) < 0.99 ? cross(vec3(0.0, 1.0, 0.0), centerDir) : cross(vec3(1.0, 0.0, 0.0), centerDir));
+      vec3 bitangent = cross(centerDir, tangent);
+      float r = sqrt(rand(seed)) * lp.w;
+      float a = 2.0 * PI * rand(seed);
+      vec3 lightPos = lp.xyz + tangent * cos(a) * r + bitangent * sin(a) * r;
+      vec3 toLight = lightPos - p;
+      float dist2 = max(0.04, dot(toLight, toLight));
+      float dist = sqrt(dist2);
+      vec3 wi = toLight / dist;
+      float ndl = max(0.0, dot(normal, wi));
+      if (ndl <= 0.0) continue;
+      if (occludedBySolid(p + normal * 0.008 + wi * 0.006, wi, max(0.0, dist - lp.w - 0.018))) continue;
+      vec4 cp = uPointLightColorPower[i];
+      vec3 halfDir = normalize(wi + viewDir);
+      float spec = pow(max(0.0, dot(normal, halfDir)), shininess);
+      float falloff = 1.0 / (1.0 + dist2 * 0.55);
+      acc += cp.rgb * cp.a * spec * ndl * falloff;
+    }
+    return acc;
+  }
+
+  vec3 samplePointLightsVolume(vec3 p, inout vec2 seed) {
+    vec3 acc = vec3(0.0);
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
+      vec4 lp = uPointLightPosRad[i];
+      vec3 toLight = lp.xyz - p;
+      float dist2 = max(0.04, dot(toLight, toLight));
+      float dist = sqrt(dist2);
+      vec3 wi = toLight / dist;
+      if (occludedBySolid(p + wi * 0.012, wi, max(0.0, dist - lp.w - 0.018))) continue;
+      vec4 cp = uPointLightColorPower[i];
+      float falloff = 1.0 / (1.0 + dist2 * 0.65);
+      acc += cp.rgb * cp.a * falloff;
+    }
+    return acc;
+  }
+
+  vec3 glassSlabScatter(GlassInfo gi, vec3 rd, vec3 paneN, vec3 p, inout vec2 seed) {
+    float transmission = clamp(uGlassTransmission, 0.0, 1.0);
+    float surface = clamp(uGlassSurface, 0.0, 1.8);
+    float viewGrazing = pow(1.0 - max(0.0, dot(abs(paneN), abs(-rd))), 2.0);
+    float bubbles = hash12(p.xy * 155.0 + gi.color.rb * 41.0);
+    float fine = hash12(p.xy * 690.0 + gi.color.gr * 23.0);
+    float inclusions = 0.72 + 0.18 * bubbles + 0.10 * fine;
+    float edgeCatch = gi.open * (1.0 - gi.open) * 4.0;
+    vec3 towardSun = sampleSunThroughGlass(p + paneN * 0.006, paneN, seed, 1);
+    vec3 sideSky = sampleWindowEnvironment(p + paneN * 0.006, paneN, seed);
+    vec3 stainedBody = gi.color * (0.08 + 0.18 * surface + 0.22 * viewGrazing + 0.20 * edgeCatch) * inclusions;
+    vec3 trappedLight = gi.color * (towardSun * 0.32 + sideSky * 0.85) * (0.16 + 0.38 * surface);
+    vec3 rippleSheen = mix(vec3(1.0, 0.92, 0.76), gi.color, 0.42) *
+      gi.rippleBand * (0.10 + 0.24 * surface) * (0.55 + 0.45 * viewGrazing);
+    stainedBody *= 0.88 + gi.rippleBand * 0.32;
+    trappedLight += gi.color * gi.rippleStrength * gi.rippleBand * (towardSun * 0.22 + sideSky * 0.30);
+    return gi.open * (stainedBody + trappedLight + rippleSheen) * (0.35 + 0.65 * transmission);
+  }
+
+  vec3 pathTrace(vec3 ro, vec3 rd) {
+    vec3 radiance = vec3(0.0);
+    vec3 throughput = vec3(1.0);
+    vec2 seed = gl_FragCoord.xy + vec2(uFrame * 19.19 + 3.7, uFrame * 7.13 + 11.0);
+    int maxBounces = int(clamp(floor(uVolumeSteps), 1.0, 80.0));
+
+    for (int bounce = 0; bounce < 80; bounce++) {
+      if (bounce >= maxBounces) break;
+      Hit h = traceScene(ro, rd);
+      if (h.t >= 1.0e19) {
+        bool outsideRoom = ro.z <= uWallZ + 0.01 || ro.z >= uRoomBounds.z + 0.01 ||
+                           ro.x <= uRoomBounds.x - 0.01 || ro.x >= uRoomBounds.y + 0.01 ||
+                           ro.y <= -0.01 || ro.y >= uRoomBounds.w + 0.01;
+        radiance += throughput * (outsideRoom ? sampleSunSky(rd) : vec3(0.006, 0.005, 0.006));
+        break;
+      }
+
+      if (h.mat > 7.5) {
+        vec3 emit = vec3(0.0);
+        for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
+          if (h.mat > 7.5 + float(i) && h.mat < 8.5 + float(i)) {
+            vec4 cp = uPointLightColorPower[i];
+            emit = cp.rgb * cp.a * 1.8;
+          }
+        }
+        radiance += throughput * emit;
+        break;
+      }
+
+      if (h.mat > 4.5 && h.mat < 5.5) {
+        int wi = int(h.windowIdx + 0.5);
+        GlassInfo gi = readGlassInfo(wi, windowUv(h.p, wi));
+        vec3 paneN = gi.paneNormal;
+        if (dot(paneN, -rd) < 0.0) paneN = -paneN;
+
+        if (rand(seed) < gi.leadAlpha) {
+          vec3 leadN = gi.leadNormal;
+          if (dot(leadN, -rd) < 0.0) leadN = -leadN;
+          vec3 viewDir = normalize(-rd);
+          vec3 leadMetal = vec3(0.82, 0.80, 0.76);
+          float leadFresnel = 0.48 + 0.52 * pow(1.0 - max(0.0, dot(leadN, viewDir)), 5.0);
+          vec3 glassLight = sampleSunThroughGlass(h.p, leadN, seed, 2);
+          vec3 roomLight = samplePointLights(h.p, leadN, seed);
+          vec3 roomSpec = samplePointLightSpecular(h.p, leadN, viewDir, 118.0, seed);
+          float directNdl = max(0.0, dot(leadN, -normalize(uSunDir)));
+          float facing = 0.28 + 0.72 * max(0.0, dot(leadN, viewDir));
+          float sunGlint = pow(max(0.0, dot(reflect(normalize(uSunDir), leadN), viewDir)), 150.0);
+          radiance += throughput * leadMetal * roomLight * 0.32 * facing;
+          radiance += throughput * leadMetal * glassLight * directNdl * 0.08;
+          radiance += throughput * (roomSpec * 1.85 + glassLight * sunGlint * 2.4) * leadMetal;
+
+          if (rand(seed) < clamp((0.84 + 0.12 * leadFresnel) * uSolidSpecular, 0.20, 0.96)) {
+            vec3 refl = reflect(rd, leadN);
+            rd = normalize(mix(refl, cosineHemisphere(refl, seed), 0.07));
+            throughput *= leadMetal * (0.74 + 0.22 * leadFresnel);
+          } else {
+            rd = cosineHemisphere(leadN, seed);
+            throughput *= leadMetal * 0.16;
+          }
+          ro = h.p + leadN * 0.016;
+          continue;
+        }
+
+        float cosI = max(0.0, dot(paneN, -rd));
+        float fresnel = 0.038 + (1.0 - 0.038) * pow(1.0 - cosI, 5.0);
+        float reflectChance = clamp(fresnel * max(0.0, uGlassReflection), 0.0, 0.82);
+        if (rand(seed) < reflectChance) {
+          rd = reflect(rd, paneN);
+          throughput *= vec3(0.90) * max(0.15, uGlassReflection);
+          ro = h.p + paneN * 0.020;
+          continue;
+        }
+
+        radiance += throughput * glassSlabScatter(gi, rd, paneN, h.p, seed);
+
+        vec3 refr = refract(rd, paneN, 1.0 / 1.48);
+        if (dot(refr, refr) < 0.0001) refr = rd;
+        vec3 microWarp = normalize(paneN + vec3((rand(seed) - 0.5) * 0.022, (rand(seed) - 0.5) * 0.022, 0.0));
+        vec3 warpedRefr = refract(rd, microWarp, 1.0 / 1.48);
+        if (dot(warpedRefr, warpedRefr) < 0.0001) warpedRefr = refr;
+        rd = normalize(mix(rd, warpedRefr, 0.20 + 0.35 * gi.rippleStrength));
+        float transmission = clamp(uGlassTransmission, 0.0, 1.0);
+        float surface = clamp(uGlassSurface, 0.0, 1.8);
+        throughput *= mix(vec3(1.0), gi.color, transmission) *
+                      transmission *
+                      mix(0.97, 0.82, min(surface / 1.8, 1.0));
+        ro = h.p + rd * 0.030;
+        continue;
+      }
+
+      vec3 n = normalize(h.n);
+      if (dot(n, -rd) < 0.0) n = -n;
+      vec3 albedo = materialAlbedo(h.mat, h.p, n);
+      int sunSamples = bounce == 0 ? 4 : 1;
+      vec3 glassLight = sampleSunThroughGlass(h.p, n, seed, sunSamples);
+      vec3 windowEnv = sampleWindowEnvironment(h.p, n, seed);
+      vec3 roomLight = samplePointLights(h.p, n, seed);
+      float directNdl = max(0.0, dot(n, -normalize(uSunDir)));
+      float firstBounce = bounce == 0 ? 1.0 : 0.0;
+      radiance += throughput * albedo * glassLight * directNdl * (1.45 * firstBounce + 0.08 * (1.0 - firstBounce));
+      radiance += throughput * albedo * windowEnv * (0.95 * firstBounce + 0.20 * (1.0 - firstBounce));
+      radiance += throughput * albedo * roomLight * (0.80 * firstBounce + 0.18 * (1.0 - firstBounce));
+
+      float isWood = step(0.5, h.mat) * step(h.mat, 3.5);
+      float isGold = step(3.5, h.mat) * step(h.mat, 4.5);
+      float specProb = clamp(isGold * 0.62 + isWood * 0.075, 0.0, 0.70) * uSolidSpecular;
+      float pick = rand(seed);
+      if (pick < specProb) {
+        vec3 refl = reflect(rd, n);
+        rd = normalize(mix(refl, cosineHemisphere(refl, seed), isGold > 0.5 ? 0.10 : 0.28));
+        throughput *= mix(vec3(0.62), albedo, isGold) * 0.62;
+      } else {
+        rd = cosineHemisphere(n, seed);
+        throughput *= albedo * 0.55;
+      }
+
+      ro = h.p + n * 0.012;
+      if (bounce > 2) {
+        float p = clamp(max(throughput.r, max(throughput.g, throughput.b)), 0.08, 0.95);
+        if (rand(seed) > p) break;
+        throughput /= p;
+      }
+    }
+    return radiance;
+  }
+
+  vec3 volumeAlong(vec3 ro, vec3 rd, float maxT) {
+    if (uRaysDensity <= 0.001) return vec3(0.0);
+    float tExit = min(maxT, 24.0);
+    float tEntry = 0.0;
+    if (rd.y < -0.0001) {
+      float tf = -ro.y / rd.y;
+      if (tf > 0.0) tExit = min(tExit, tf);
+    }
+    if (tExit <= tEntry) return vec3(0.0);
+    float jitter = hash12(gl_FragCoord.xy + vec2(uFrame * 17.13, uFrame * 3.71));
+    float steps = clamp(uVolumeSteps, 8.0, 80.0);
+    float stepLen = (tExit - tEntry) / steps;
+    vec3 acc = vec3(0.0);
+    float trans = 1.0;
+    for (float i = 0.0; i < 80.0; i++) {
+      if (i >= steps) break;
+      vec3 p = ro + rd * (tEntry + (i + jitter) * stepLen);
+      if (p.y < 0.0 || p.y > uRoomBounds.w || p.z < uWallZ || p.z > uRoomBounds.z) continue;
+      vec2 seed = gl_FragCoord.xy + p.xy * 17.0 + vec2(i * 13.1, uFrame * 5.7);
+      vec3 light = sampleSunThroughGlass(p, vec3(0.0, 1.0, 0.0), seed, 2);
+      vec3 warmLight = samplePointLightsVolume(p, seed);
+      acc += (light + warmLight * 0.14) * trans * stepLen;
+      trans *= exp(-0.04 * stepLen);
+    }
+    return acc * uRaysDensity * 0.36;
+  }
+
+  vec3 rayDirFromCamera(vec2 uv) {
+    vec2 jitteredUv = uv + uJitter / uResolution;
+    vec2 ndc = jitteredUv * 2.0 - 1.0;
+    vec4 view = uInvProjection * vec4(ndc, 1.0, 1.0);
+    view /= view.w;
+    return normalize((uCameraWorld * vec4(view.xyz, 0.0)).xyz);
+  }
+
+  void main() {
+    vec3 ro = uCameraWorld[3].xyz;
+    vec3 rd = rayDirFromCamera(vUv);
+    Hit h = traceScene(ro, rd);
+    vec3 col = pathTrace(ro, rd);
+    float maxT = 24.0;
+    if (h.t < 1.0e19) {
+      maxT = h.t;
+      float fog = smoothstep(12.0, 36.0, h.t);
+      vec3 roomHaze = vec3(0.010, 0.008, 0.010);
+      col = mix(col, roomHaze, fog * 0.45);
+    } else if (ro.z > uWallZ - 0.25 && ro.z < uRoomBounds.z + 0.25 &&
+               ro.x > uRoomBounds.x - 0.25 && ro.x < uRoomBounds.y + 0.25 &&
+               ro.y > -0.25 && ro.y < uRoomBounds.w + 0.25) {
+      col = texture2D(uWallTex, rd.xy * 0.2 + rd.zy * 0.11).rgb * vec3(0.05, 0.045, 0.05);
+    }
+    col += volumeAlong(ro, rd, maxT);
+    vec3 current = aces(col * uRtExposure);
+    vec3 previous = texture2D(uPreviousFrame, vUv).rgb;
+    float blend = uFrame < 0.5 ? 1.0 : 1.0 / (uFrame + 1.0);
+    gl_FragColor = vec4(mix(previous, current, blend), 1.0);
+  }
+`;
+
+const raytraceScene = new THREE.Scene();
+const raytraceCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+raytraceCamera.position.z = 1;
+const raytracedSceneMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+    uCameraWorld: { value: new THREE.Matrix4() },
+    uInvProjection: { value: new THREE.Matrix4() },
+    uSkyTex: { value: skyTexture },
+    uFloorTex: { value: floorWoodTex },
+    uWallTex: { value: wallPlasterTex },
+    uFrameWoodTex: { value: frameWoodTex },
+    uPrimaryGlassTex: { value: glassTexture },
+    uGlassAtlas: { value: rtGlassAtlasTex },
+    uSunDir: { value: sunDir },
+    uPrimaryTexSize: { value: new THREE.Vector2(64, 64) },
+    uRoomBounds: { value: new THREE.Vector4(roomBounds.sideLeft, roomBounds.sideRight, roomBounds.backZ, roomBounds.ceilingY) },
+    uWallZ: { value: WALL_Z },
+    uRaysDensity: { value: 0.55 * 0.55 * 0.7 },
+    uRtExposure: { value: 1.18 },
+    uGlassSurface: { value: 1.0 },
+    uGlassTransmission: { value: 0.72 },
+    uGlassReflection: { value: 0.18 },
+    uSolidSpecular: { value: 1.0 },
+    uSunDiffusion: { value: 0.22 },
+    uVolumeSteps: { value: 34.0 },
+    uPreviousFrame: { value: null },
+    uFrame: { value: 0.0 },
+    uJitter: { value: new THREE.Vector2() },
+    uPrimaryWindowIndex: { value: 0 },
+    uWindowCount: { value: 0 },
+    uBoxCount: { value: 0 },
+    uWindowRect: { value: rtWindowRects },
+    uAtlasRect: { value: rtAtlasRects },
+    uWindowLead: { value: rtWindowLead },
+    uBoxMinMat: { value: rtBoxMinMat },
+    uBoxMax: { value: rtBoxMax },
+    uPointLightPosRad: { value: rtPointLightPosRad },
+    uPointLightColorPower: { value: rtPointLightColorPower },
+  },
+  vertexShader: RAYTRACED_SCENE_VERT_SRC,
+  fragmentShader: RAYTRACED_SCENE_FRAG_SRC,
+  depthWrite: false,
+  depthTest: false,
+});
+raytraceScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), raytracedSceneMat));
+
+const raytraceDisplayScene = new THREE.Scene();
+const raytraceDisplayMat = new THREE.MeshBasicMaterial({ map: null, depthWrite: false, depthTest: false });
+raytraceDisplayScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), raytraceDisplayMat));
+
+function makeRaytraceTarget() {
+  const target = new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    depthBuffer: false,
+    stencilBuffer: false,
+  });
+  target.texture.colorSpace = THREE.NoColorSpace;
+  target.texture.minFilter = THREE.LinearFilter;
+  target.texture.magFilter = THREE.LinearFilter;
+  target.texture.generateMipmaps = false;
+  return target;
+}
+
+const raytraceTargets = [makeRaytraceTarget(), makeRaytraceTarget()];
+let raytraceReadTarget = raytraceTargets[0];
+let raytraceWriteTarget = raytraceTargets[1];
+let raytraceSampleFrame = 0;
+let raytraceFirstFramePending = false;
+let raytracePreviewFramePending = false;
+let raytraceSamplingStartPending = false;
+let raytraceStatusOverride = '';
+let raytraceWarmupState = 'cold';
+let raytraceLastCameraChangeTime = 0;
+const _raytraceBufferSize = new THREE.Vector2();
+const _lastRaytraceCameraMatrix = new THREE.Matrix4();
+const _lastRaytraceProjectionMatrix = new THREE.Matrix4();
+const RAYTRACE_STABLE_DELAY_MS = 80;
+const RAYTRACE_MATRIX_EPSILON = 0.00001;
+
+function matrixChangedEnough(a, b, epsilon = RAYTRACE_MATRIX_EPSILON) {
+  const ae = a.elements;
+  const be = b.elements;
+  for (let i = 0; i < 16; i++) {
+    if (Math.abs(ae[i] - be[i]) > epsilon) return true;
+  }
+  return false;
+}
+
+function resizeRaytraceTargets() {
+  renderer.getDrawingBufferSize(_raytraceBufferSize);
+  const w = Math.max(1, _raytraceBufferSize.x);
+  const h = Math.max(1, _raytraceBufferSize.y);
+  raytracedSceneMat.uniforms.uResolution.value.set(w, h);
+  for (const target of raytraceTargets) {
+    if (target.width !== w || target.height !== h) target.setSize(w, h);
+  }
+}
+
+function resetRaytraceAccumulation() {
+  raytraceSampleFrame = 0;
+  _lastRaytraceCameraMatrix.copy(camera.matrixWorld);
+  _lastRaytraceProjectionMatrix.copy(camera.projectionMatrix);
+}
+
+function renderRaytracePass({ preview = false, accumulate = true } = {}) {
+  const actualSteps = raytracedSceneMat.uniforms.uVolumeSteps.value;
+  if (preview) raytracedSceneMat.uniforms.uVolumeSteps.value = Math.min(actualSteps, 12);
+
+  const jitterScale = accumulate && raytraceSampleFrame > 0 ? 1.0 : 0.0;
+  raytracedSceneMat.uniforms.uPreviousFrame.value = raytraceReadTarget.texture;
+  raytracedSceneMat.uniforms.uFrame.value = accumulate ? raytraceSampleFrame : 0.0;
+  raytracedSceneMat.uniforms.uJitter.value.set(
+    (Math.random() - 0.5) * jitterScale,
+    (Math.random() - 0.5) * jitterScale
+  );
+
+  renderer.setRenderTarget(raytraceWriteTarget);
+  renderer.render(raytraceScene, raytraceCamera);
+  renderer.setRenderTarget(null);
+
+  raytraceDisplayMat.map = raytraceWriteTarget.texture;
+  renderer.render(raytraceDisplayScene, raytraceCamera);
+
+  if (preview) raytracedSceneMat.uniforms.uVolumeSteps.value = actualSteps;
+  if (!accumulate) return;
+
+  const tmp = raytraceReadTarget;
+  raytraceReadTarget = raytraceWriteTarget;
+  raytraceWriteTarget = tmp;
+  raytraceSampleFrame = Math.min(raytraceSampleFrame + 1, 4096);
+}
+
+function renderCustomRaytracer() {
+  resizeRaytraceTargets();
+  const now = performance.now();
+  if (
+    matrixChangedEnough(_lastRaytraceCameraMatrix, camera.matrixWorld) ||
+    matrixChangedEnough(_lastRaytraceProjectionMatrix, camera.projectionMatrix)
+  ) {
+    resetRaytraceAccumulation();
+    raytracePreviewFramePending = true;
+    raytraceSamplingStartPending = false;
+    raytraceLastCameraChangeTime = now;
+  }
+
+  if (raytraceFirstFramePending) {
+    raytraceFirstFramePending = false;
+    raytraceStatusOverride = 'Raytracer starting...';
+    raytraceDisplayMat.map = raytraceReadTarget.texture;
+    renderer.render(raytraceDisplayScene, raytraceCamera);
+    return;
+  }
+
+  if (raytracePreviewFramePending) {
+    raytracePreviewFramePending = false;
+    raytraceSamplingStartPending = true;
+    raytraceStatusOverride = 'Raytracer preview...';
+    renderRaytracePass({ preview: true, accumulate: false });
+    return;
+  }
+
+  const waitingForStableCamera = now - raytraceLastCameraChangeTime < RAYTRACE_STABLE_DELAY_MS;
+  if (waitingForStableCamera) {
+    raytraceStatusOverride = 'Raytracer waiting for camera...';
+    renderer.render(raytraceDisplayScene, raytraceCamera);
+    return;
+  }
+
+  const maxSamples = Math.max(1, Math.min(4096, Math.round(state?.rtMaxSamples ?? 512)));
+  if (raytraceSampleFrame >= maxSamples) {
+    raytraceStatusOverride = '';
+    raytraceDisplayMat.map = raytraceReadTarget.texture;
+    renderer.render(raytraceDisplayScene, raytraceCamera);
+    return;
+  }
+
+  if (raytraceSamplingStartPending && raytraceSampleFrame === 0) {
+    raytraceSamplingStartPending = false;
+    raytraceStatusOverride = 'Raytracer sampling...';
+    updateRaytraceStatus();
+    renderer.render(raytraceDisplayScene, raytraceCamera);
+    return;
+  }
+
+  raytraceStatusOverride = '';
+  renderRaytracePass();
+}
+
+let lastRaytraceStatusText = '';
+function updateRaytraceStatus() {
+  if (!ui?.rtStatus) return;
+  const maxSamples = Math.max(1, Math.min(4096, Math.round(state?.rtMaxSamples ?? 512)));
+  const scale = Math.round((state?.rtResolution ?? 1) * 100);
+  const steps = Math.round(state?.rtVolumeSteps ?? 0);
+  const text = raytraceStatusOverride || (useRaytracer
+    ? `Raytracer ${Math.min(raytraceSampleFrame, maxSamples)}/${maxSamples} samples · ${scale}% res · ${steps} steps`
+    : 'Raytracer off');
+  if (text !== lastRaytraceStatusText) {
+    ui.rtStatus.textContent = text;
+    lastRaytraceStatusText = text;
+  }
+}
+
+function scheduleRaytraceWarmup() {
+  if (raytraceWarmupState !== 'cold') return;
+  raytraceWarmupState = 'scheduled';
+  const warm = () => {
+    if (raytraceWarmupState === 'warm') return;
+    raytraceWarmupState = 'warming';
+    try {
+      raytracedSceneMat.uniforms.uPreviousFrame.value = raytraceReadTarget.texture;
+      raytracedSceneMat.uniforms.uFrame.value = 0.0;
+      raytracedSceneMat.uniforms.uJitter.value.set(0, 0);
+      raytracedSceneMat.uniforms.uCameraWorld.value.copy(camera.matrixWorld);
+      raytracedSceneMat.uniforms.uInvProjection.value.copy(camera.projectionMatrixInverse);
+      renderer.compile(raytraceScene, raytraceCamera);
+      raytraceWarmupState = 'warm';
+    } catch (err) {
+      raytraceWarmupState = 'cold';
+      console.warn('Raytracer warmup failed; will compile on first use.', err);
+    }
+  };
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(warm, { timeout: 250 });
+  } else {
+    window.setTimeout(warm, 80);
+  }
+}
+
+function updateRaytraceSceneData({ rebuildAtlas = true } = {}) {
+  const rtWindows = windows.slice(0, RT_MAX_WINDOWS);
+  raytracedSceneMat.uniforms.uWindowCount.value = rtWindows.length;
+  raytracedSceneMat.uniforms.uRoomBounds.value.set(
+    roomBounds.sideLeft,
+    roomBounds.sideRight,
+    roomBounds.backZ,
+    roomBounds.ceilingY
+  );
+  if (rebuildAtlas) {
+    rtAtlasCtx.fillStyle = '#05040a';
+    rtAtlasCtx.fillRect(0, 0, rtAtlasCanvas.width, rtAtlasCanvas.height);
+  }
+  for (let i = 0; i < RT_MAX_WINDOWS; i++) {
+    const win = rtWindows[i];
+    const col = i % RT_ATLAS_COLS;
+    const row = Math.floor(i / RT_ATLAS_COLS);
+    rtAtlasRects[i].set(col / RT_ATLAS_COLS, row / RT_ATLAS_ROWS, 1 / RT_ATLAS_COLS, 1 / RT_ATLAS_ROWS);
+    if (!win) {
+      rtWindowRects[i].set(0, 0, 0, 0);
+      rtWindowLead[i].set(2.0, 4.0, 0, 0);
+      continue;
+    }
+    rtWindowRects[i].set(win.positionX, win.centerY, win.width, win.height);
+    rtWindowLead[i].set(win.leadR, win.distMaxPx, 0, 0);
+    if (rebuildAtlas) {
+      const img = win.texture?.image || glassTexture.image;
+      rtAtlasCtx.drawImage(img, col * RT_ATLAS_TILE, row * RT_ATLAS_TILE, RT_ATLAS_TILE, RT_ATLAS_TILE);
+    }
+  }
+  if (rebuildAtlas) rtGlassAtlasTex.needsUpdate = true;
+
+  let boxCount = 0;
+  const pushRtBox = (minX, minY, minZ, maxX, maxY, maxZ, mat) => {
+    if (boxCount >= RT_MAX_BOXES) return;
+    rtBoxMinMat[boxCount].set(minX, minY, minZ, mat);
+    rtBoxMax[boxCount].set(maxX, maxY, maxZ, 0);
+    boxCount++;
+  };
+
+  const wallT = 0.18;
+  pushRtBox(roomBounds.sideLeft, -wallT, WALL_Z, roomBounds.sideRight, 0, roomBounds.backZ, 7);
+  pushRtBox(roomBounds.sideLeft, roomBounds.ceilingY, WALL_Z, roomBounds.sideRight, roomBounds.ceilingY + wallT, roomBounds.backZ, 6);
+  pushRtBox(roomBounds.sideLeft, 0, roomBounds.backZ, roomBounds.sideRight, roomBounds.ceilingY, roomBounds.backZ + wallT, 6);
+  pushRtBox(roomBounds.sideLeft - wallT, 0, WALL_Z, roomBounds.sideLeft, roomBounds.ceilingY, roomBounds.backZ, 6);
+  pushRtBox(roomBounds.sideRight, 0, WALL_Z, roomBounds.sideRight + wallT, roomBounds.ceilingY, roomBounds.backZ, 6);
+  for (const strip of hallwayWall.children) {
+    strip.geometry.computeBoundingBox();
+    const box = strip.geometry.boundingBox;
+    const w = (box.max.x - box.min.x) * strip.scale.x;
+    const h = (box.max.y - box.min.y) * strip.scale.y;
+    if (w <= 0.001 || h <= 0.001) continue;
+    pushRtBox(
+      strip.position.x - w * 0.5,
+      strip.position.y - h * 0.5,
+      WALL_Z - wallT,
+      strip.position.x + w * 0.5,
+      strip.position.y + h * 0.5,
+      WALL_Z,
+      6
+    );
+  }
+
+  for (const win of rtWindows) {
+    for (const b of win.frameBoxes || []) {
+      if (boxCount >= RT_MAX_BOXES) break;
+      rtBoxMinMat[boxCount].set(b.min.x, b.min.y, b.min.z, b.mat);
+      rtBoxMax[boxCount].set(b.max.x, b.max.y, b.max.z, 0);
+      boxCount++;
+    }
+    if (boxCount >= RT_MAX_BOXES) break;
+  }
+  for (let i = boxCount; i < RT_MAX_BOXES; i++) {
+    rtBoxMinMat[i].set(0, 0, 0, 0);
+    rtBoxMax[i].set(0, 0, 0, 0);
+  }
+  raytracedSceneMat.uniforms.uBoxCount.value = boxCount;
+  scheduleRaytraceWarmup();
+}
+
+function applyRendererResolution() {
+  const scale = useRaytracer ? Math.max(0.25, Math.min(1.0, state.rtResolution)) : 1.0;
+  renderer.setPixelRatio(BASE_PIXEL_RATIO * scale);
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  raytracedSceneMat.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+  if (useRaytracer) resizeRaytraceTargets();
+  resetRaytraceAccumulation();
+}
+
+function markPathTraceDirty() {
+  resetRaytraceAccumulation();
+}
 
 function setRenderMode(toRaytracer) {
   useRaytracer = !!toRaytracer;
-  for (const w of windows) {
-    w.mesh.material = useRaytracer ? w.raytraceMat : w.shaderMat;
-    w.mat = w.mesh.material;
-  }
+  for (const w of windows) w.mesh.visible = !useRaytracer;
+  hallwayWall.visible = !useRaytracer;
+  roomEnclosure.visible = !useRaytracer;
+  floor.visible = !useRaytracer;
+  raysMesh.visible = !useRaytracer && state.raysIntensity > 0.01;
   // Bump god-ray density + step count in raytracer mode so the beams read as
   // physically integrated light volume rather than a faint atmospheric tint.
   raysMat.uniforms.uRaytraceMode.value = useRaytracer ? 1.0 : 0.0;
+  renderer.toneMappingExposure = useRaytracer ? state.rtExposure : 1.0;
+  applyRendererResolution();
+  resetRaytraceAccumulation();
+  if (useRaytracer) {
+    raytraceFirstFramePending = true;
+    raytracePreviewFramePending = true;
+    raytraceSamplingStartPending = false;
+    raytraceLastCameraChangeTime = performance.now();
+    raytraceStatusOverride = 'Raytracer starting...';
+    applyRaytraceSettings();
+    updateRaytraceStatus();
+    scheduleRaytraceWarmup();
+  } else {
+    raytraceFirstFramePending = false;
+    raytracePreviewFramePending = false;
+    raytraceSamplingStartPending = false;
+    raytraceStatusOverride = '';
+  }
 }
 
 function aspectToSize(aspect) {
@@ -666,29 +1778,27 @@ function createWindow({ sourceCanvas, aspect }) {
   initialTex.minFilter = THREE.LinearFilter;
   initialTex.magFilter = THREE.LinearFilter;
   initialTex.generateMipmaps = false;
-  // Two materials per window: the custom shader (with bump-shaded lead,
-  // sky tinting, sun bleed) and a MeshPhysicalMaterial alternative with
-  // proper screen-space transmission + IBL. The render-mode toggle swaps
-  // `mesh.material` between them.
   const shaderMat = makeGlassMaterial(initialTex);
-  const raytraceMat = makeRaytracedGlassMaterial(initialTex);
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), useRaytracer ? raytraceMat : shaderMat);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), shaderMat);
   mesh.position.set(positionX, centerY, GLASS_Z);
   scene.add(mesh);
 
   const frameGroup = new THREE.Group();
-  buildWindowFrame(frameGroup, w, h, centerY, positionX);
+  const frameBoxes = buildWindowFrame(frameGroup, w, h, centerY, positionX);
   scene.add(frameGroup);
 
   const win = {
-    mesh, mat: shaderMat, shaderMat, raytraceMat, frameGroup, sourceCanvas, aspect,
+    mesh, mat: shaderMat, shaderMat, frameGroup, frameBoxes, sourceCanvas, aspect,
     positionX, width: w, height: h, centerY,
     seed: Math.random(),
     leadR: 2.0, distMaxPx: 4.0, texture: initialTex,
+    texWidth: 64, texHeight: 64,
   };
   windows.push(win);
   rebuildHallwayWall();
   rebuildRoomEnclosure();
+  updateRaytraceSceneData();
+  markPathTraceDirty();
   return win;
 }
 
@@ -697,6 +1807,9 @@ function setActiveWindow(idx) {
   activeWindowIdx = idx;
   const w = windows[idx];
   if (!w.texture) return;
+  raytracedSceneMat.uniforms.uPrimaryWindowIndex.value = idx;
+  raytracedSceneMat.uniforms.uPrimaryGlassTex.value = w.texture;
+  raytracedSceneMat.uniforms.uPrimaryTexSize.value.set(w.texWidth || 64, w.texHeight || 64);
   floorMat.uniforms.uGlassTex.value = w.texture;
   floorMat.uniforms.uGlassPos.value.set(w.positionX, w.centerY, GLASS_Z);
   floorMat.uniforms.uGlassSize.value.set(w.width, w.height);
@@ -737,8 +1850,6 @@ rebuildHallwayWall();
 rebuildRoomEnclosure();
 
 // ---------- Floor with light-projection shader ----------
-const sunDir = new THREE.Vector3(-0.22, -0.42, 0.92).normalize();
-
 const floorMat = new THREE.ShaderMaterial({
   uniforms: {
     uGlassTex:    { value: glassTexture },
@@ -1033,6 +2144,16 @@ const state = {
   timeOfDay: 0.45,
   sunElev: 0.42,
   raysIntensity: 0.55,
+  rtExposure: 1.18,
+  rtGlassSurface: 1.0,
+  rtGlassTransmission: 0.72,
+  rtReflection: 0.18,
+  rtSpecular: 1.0,
+  rtSunDiffusion: 0.22,
+  rtPointLightBrightness: RT_DEFAULT_POINT_LIGHT_BRIGHTNESS,
+  rtVolumeSteps: 34,
+  rtMaxSamples: 512,
+  rtResolution: 0.55,
 };
 
 function setSunFromControls() {
@@ -1047,12 +2168,11 @@ function setSunFromControls() {
   sunDir.set(dx, dy, dz).normalize();
   floorMat.uniforms.uSunDir.value.copy(sunDir);
   raysMat.uniforms.uSunDir.value.copy(sunDir);
-  // Both glass shaders (standard and raytraced) carry uSunDir for direct sun
-  // visibility tests; update them in lockstep.
+  raytracedSceneMat.uniforms.uSunDir.value.copy(sunDir);
   for (const w of windows) {
     w.shaderMat.uniforms.uSunDir.value.copy(sunDir);
-    w.raytraceMat.uniforms.uSunDir.value.copy(sunDir);
   }
+  markPathTraceDirty();
   if (typeof updateSunMesh === 'function') updateSunMesh();
 }
 setSunFromControls();
@@ -1106,15 +2226,13 @@ async function regenerate(opts = {}) {
     win.shaderMat.uniforms.uTexSize.value.set(tw, th);
     win.shaderMat.uniforms.uLeadR.value = lt;
     win.shaderMat.uniforms.uDistMaxPx.value = distMaxPx;
-    // Mirror the same texture + lead params onto the raytraced material so
-    // the toggle is instant without re-running the generator.
-    win.raytraceMat.uniforms.uMap.value = tex;
-    win.raytraceMat.uniforms.uTexSize.value.set(tw, th);
-    win.raytraceMat.uniforms.uLeadR.value = lt;
-    win.raytraceMat.uniforms.uDistMaxPx.value = distMaxPx;
     win.texture = tex;
     win.leadR = lt;
     win.distMaxPx = distMaxPx;
+    win.texWidth = tw;
+    win.texHeight = th;
+    updateRaytraceSceneData();
+    markPathTraceDirty();
 
     // Route the floor + rays gobo to whichever window the camera last focused
     // on. Newly generated windows become the active one (they're what the
@@ -1186,6 +2304,7 @@ function loadFromFile(file) {
 // ---------- UI wiring ----------
 const ui = {
   status:        document.getElementById('status'),
+  rtStatus:      document.getElementById('rtStatus'),
   regenerate:    document.getElementById('regenerate'),
   cellDensity:   document.getElementById('cellDensity'),
   leadThickness: document.getElementById('leadThickness'),
@@ -1196,21 +2315,73 @@ const ui = {
   timeOfDay:     document.getElementById('timeOfDay'),
   sunElev:       document.getElementById('sunElev'),
   raysIntensity: document.getElementById('raysIntensity'),
+  raytraceSettings: document.getElementById('raytraceSettings'),
+  rtExposure:    document.getElementById('rtExposure'),
+  rtGlassSurface: document.getElementById('rtGlassSurface'),
+  rtGlassTransmission: document.getElementById('rtGlassTransmission'),
+  rtReflection:  document.getElementById('rtReflection'),
+  rtSpecular:    document.getElementById('rtSpecular'),
+  rtSunDiffusion: document.getElementById('rtSunDiffusion'),
+  rtPointLightBrightness: document.getElementById('rtPointLightBrightness'),
+  rtVolumeSteps: document.getElementById('rtVolumeSteps'),
+  rtMaxSamples: document.getElementById('rtMaxSamples'),
+  rtResolution:  document.getElementById('rtResolution'),
   fileInput:     document.getElementById('fileInput'),
   pickFile:      document.getElementById('pickFile'),
   thumb:         document.getElementById('thumb'),
+  sourceHud:     document.querySelector('.source'),
   dropOverlay:   document.getElementById('dropOverlay'),
 };
 
 function setStatus(text) { if (ui.status) ui.status.textContent = text; }
 function showSourceThumb(srcCanvas) {
-  const w = 80;
+  const displayW = 80;
+  const backingScale = 3;
+  const w = displayW * backingScale;
   const h = Math.round((srcCanvas.height / srcCanvas.width) * w);
   ui.thumb.width = w;
   ui.thumb.height = h;
   ui.thumb.getContext('2d').drawImage(srcCanvas, 0, 0, w, h);
   ui.thumb.style.display = 'block';
+  updateSourceCenterTransform();
 }
+
+function updateSourceCenterTransform() {
+  if (!ui.sourceHud) return;
+  const rect = ui.sourceHud.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const dx = window.innerWidth * 0.5 - (rect.left + rect.width * 0.5);
+  const dy = window.innerHeight * 0.5 - (rect.top + rect.height * 0.5);
+  ui.sourceHud.style.setProperty('--source-center-x', `${dx.toFixed(1)}px`);
+  ui.sourceHud.style.setProperty('--source-center-y', `${dy.toFixed(1)}px`);
+}
+
+function pointerInSourceCorner(clientX, clientY) {
+  if (!ui.sourceHud) return false;
+  const rect = ui.sourceHud.getBoundingClientRect();
+  const pad = 14;
+  return (
+    clientX >= rect.left - pad &&
+    clientX <= rect.right + pad &&
+    clientY >= rect.top - pad &&
+    clientY <= rect.bottom + pad
+  );
+}
+
+function setSourceCentered(centered) {
+  if (!ui.sourceHud) return;
+  if (centered) updateSourceCenterTransform();
+  ui.sourceHud.classList.toggle('is-centered', centered);
+}
+
+ui.sourceHud?.addEventListener('pointerenter', (e) => {
+  if (pointerInSourceCorner(e.clientX, e.clientY)) setSourceCentered(true);
+});
+document.addEventListener('pointermove', (e) => {
+  if (!ui.sourceHud?.classList.contains('is-centered')) return;
+  if (!pointerInSourceCorner(e.clientX, e.clientY)) setSourceCentered(false);
+}, { passive: true });
+window.addEventListener('blur', () => setSourceCentered(false));
 
 ui.regenerate.addEventListener('click', () => {
   const win = windows[windows.length - 1];
@@ -1229,6 +2400,16 @@ const readouts = {
   timeOfDayVal:     document.getElementById('timeOfDayVal'),
   sunElevVal:       document.getElementById('sunElevVal'),
   raysIntensityVal: document.getElementById('raysIntensityVal'),
+  rtExposureVal:    document.getElementById('rtExposureVal'),
+  rtGlassSurfaceVal: document.getElementById('rtGlassSurfaceVal'),
+  rtGlassTransmissionVal: document.getElementById('rtGlassTransmissionVal'),
+  rtReflectionVal:  document.getElementById('rtReflectionVal'),
+  rtSpecularVal:    document.getElementById('rtSpecularVal'),
+  rtSunDiffusionVal: document.getElementById('rtSunDiffusionVal'),
+  rtPointLightBrightnessVal: document.getElementById('rtPointLightBrightnessVal'),
+  rtVolumeStepsVal: document.getElementById('rtVolumeStepsVal'),
+  rtMaxSamplesVal: document.getElementById('rtMaxSamplesVal'),
+  rtResolutionVal:  document.getElementById('rtResolutionVal'),
 };
 function updateReadouts() {
   readouts.cellDensityVal.textContent   = `r=${state.subdivCellRadius}px`;
@@ -1246,6 +2427,47 @@ function updateReadouts() {
   const el = Math.round((0.09 + state.sunElev * 1.1) * 180 / Math.PI);
   readouts.sunElevVal.textContent       = `${el}°`;
   readouts.raysIntensityVal.textContent = `${Math.round(state.raysIntensity * 100)}%`;
+  readouts.rtExposureVal.textContent = `${Math.round(state.rtExposure * 100)}%`;
+  readouts.rtGlassSurfaceVal.textContent = `${Math.round(state.rtGlassSurface * 100)}%`;
+  readouts.rtGlassTransmissionVal.textContent = `${Math.round(state.rtGlassTransmission * 100)}%`;
+  readouts.rtReflectionVal.textContent = `${Math.round(state.rtReflection * 100)}%`;
+  readouts.rtSpecularVal.textContent = `${Math.round(state.rtSpecular * 100)}%`;
+  readouts.rtSunDiffusionVal.textContent = `${Math.round(state.rtSunDiffusion * 100)}%`;
+  readouts.rtPointLightBrightnessVal.textContent = `${Math.round(state.rtPointLightBrightness * 100)}%`;
+  readouts.rtVolumeStepsVal.textContent = `${state.rtVolumeSteps}`;
+  readouts.rtMaxSamplesVal.textContent = `${state.rtMaxSamples}`;
+  readouts.rtResolutionVal.textContent = `${Math.round(state.rtResolution * 100)}%`;
+}
+
+function applyRaytraceSettings() {
+  raytracedSceneMat.uniforms.uRtExposure.value = state.rtExposure;
+  raytracedSceneMat.uniforms.uGlassSurface.value = state.rtGlassSurface;
+  raytracedSceneMat.uniforms.uGlassTransmission.value = state.rtGlassTransmission;
+  raytracedSceneMat.uniforms.uGlassReflection.value = state.rtReflection;
+  raytracedSceneMat.uniforms.uSolidSpecular.value = state.rtSpecular;
+  raytracedSceneMat.uniforms.uSunDiffusion.value = state.rtSunDiffusion;
+  raytracedSceneMat.uniforms.uVolumeSteps.value = state.rtVolumeSteps;
+  applyPointLightBrightness();
+  renderer.toneMappingExposure = useRaytracer ? state.rtExposure : 1.0;
+  markPathTraceDirty();
+}
+
+function applyPointLightBrightness() {
+  const brightness = Math.max(0, Math.min(1.5, state.rtPointLightBrightness));
+  for (let i = 0; i < RT_POINT_LIGHTS.length; i++) {
+    const cfg = RT_POINT_LIGHTS[i];
+    rtPointLightColorPower[i].set(cfg.color.r, cfg.color.g, cfg.color.b, cfg.power * brightness);
+    const light = roomPointLights[i];
+    if (light) {
+      light.intensity = cfg.power * 3.2 * brightness;
+      light.visible = brightness > 0.01;
+    }
+    const glow = roomPointLightGlows[i];
+    if (glow) {
+      glow.material.opacity = Math.min(0.82, 0.72 * brightness);
+      glow.visible = brightness > 0.01;
+    }
+  }
 }
 
 ui.cellDensity.addEventListener('input', (e) => {
@@ -1304,11 +2526,65 @@ ui.raysIntensity.addEventListener('input', (e) => {
   state.raysIntensity = +e.target.value / 100;
   // map slider 0..1 → density 0..0.7 with mild ease so the high end isn't flat
   raysMat.uniforms.uDensity.value = state.raysIntensity * state.raysIntensity * 0.7;
-  raysMesh.visible = state.raysIntensity > 0.01;
+  raytracedSceneMat.uniforms.uRaysDensity.value = state.raysIntensity * state.raysIntensity * 0.7;
+  raysMesh.visible = !useRaytracer && state.raysIntensity > 0.01;
+  if (useRaytracer) markPathTraceDirty();
+  updateReadouts();
+});
+ui.rtExposure.addEventListener('input', (e) => {
+  state.rtExposure = +e.target.value / 100;
+  applyRaytraceSettings();
+  updateReadouts();
+});
+ui.rtGlassSurface.addEventListener('input', (e) => {
+  state.rtGlassSurface = +e.target.value / 100;
+  applyRaytraceSettings();
+  updateReadouts();
+});
+ui.rtGlassTransmission.addEventListener('input', (e) => {
+  state.rtGlassTransmission = +e.target.value / 100;
+  applyRaytraceSettings();
+  updateReadouts();
+});
+ui.rtReflection.addEventListener('input', (e) => {
+  state.rtReflection = +e.target.value / 100;
+  applyRaytraceSettings();
+  updateReadouts();
+});
+ui.rtSpecular.addEventListener('input', (e) => {
+  state.rtSpecular = +e.target.value / 100;
+  applyRaytraceSettings();
+  updateReadouts();
+});
+ui.rtSunDiffusion.addEventListener('input', (e) => {
+  state.rtSunDiffusion = +e.target.value / 100;
+  applyRaytraceSettings();
+  updateReadouts();
+});
+ui.rtPointLightBrightness.addEventListener('input', (e) => {
+  state.rtPointLightBrightness = +e.target.value / 100;
+  applyRaytraceSettings();
+  updateReadouts();
+});
+ui.rtVolumeSteps.addEventListener('input', (e) => {
+  state.rtVolumeSteps = Math.round(+e.target.value);
+  raytracedSceneMat.uniforms.uVolumeSteps.value = state.rtVolumeSteps;
+  resetRaytraceAccumulation();
+  updateReadouts();
+});
+ui.rtMaxSamples.addEventListener('input', (e) => {
+  state.rtMaxSamples = Math.round(+e.target.value);
+  updateReadouts();
+});
+ui.rtResolution.addEventListener('input', (e) => {
+  state.rtResolution = +e.target.value / 100;
+  applyRendererResolution();
   updateReadouts();
 });
 // Initialize rays density from default state.
 raysMat.uniforms.uDensity.value = state.raysIntensity * state.raysIntensity * 0.7;
+raytracedSceneMat.uniforms.uRaysDensity.value = state.raysIntensity * state.raysIntensity * 0.7;
+applyRaytraceSettings();
 updateReadouts();
 
 ui.pickFile.addEventListener('click', () => ui.fileInput.click());
@@ -1340,15 +2616,24 @@ controlsToggleEl?.addEventListener('click', () => {
   controlsToggleEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
 });
 
-// Raytracer toggle — switches all windows between the custom shader and the
-// MeshPhysicalMaterial alternative.
+// Raytracer toggle — switches from the live Three scene to the fullscreen
+// scene tracer, with the button state mirrored for deep links/tests.
 const raytraceToggleEl = document.getElementById('raytraceToggle');
-raytraceToggleEl?.addEventListener('click', () => {
-  setRenderMode(!useRaytracer);
+function syncRaytraceToggleButton() {
+  if (!raytraceToggleEl) return;
   raytraceToggleEl.textContent = `Raytracer: ${useRaytracer ? 'on' : 'off'}`;
   raytraceToggleEl.classList.toggle('primary', useRaytracer);
   raytraceToggleEl.setAttribute('aria-pressed', useRaytracer ? 'true' : 'false');
+  if (ui.raytraceSettings) ui.raytraceSettings.hidden = !useRaytracer;
+}
+raytraceToggleEl?.addEventListener('click', () => {
+  setRenderMode(!useRaytracer);
+  syncRaytraceToggleButton();
 });
+if (new URLSearchParams(window.location.search).get('raytrace') === '1') {
+  setRenderMode(true);
+  syncRaytraceToggleButton();
+}
 
 // Drag-and-drop anywhere on the window.
 let dragDepth = 0;
@@ -1404,20 +2689,24 @@ function clampSceneBounds() {
 // ---------- WASD fly-around movement ----------
 // Pan the camera + orbit target in lockstep so orbit/zoom keep working from
 // wherever you've moved to. W/S go along the camera's horizontal forward axis,
-// A/D strafe along the right axis, Q/E shift vertically. Shift multiplies
-// speed. Movement applied per-frame from a held-keys map so motion is smooth.
-const moveKeys = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false };
+// A/D strafe along the right axis, Q/E shift vertically. Space rises, and
+// Shift+Space descends. Shift also multiplies speed for all movement.
+// Movement applied per-frame from a held-keys map so motion is smooth.
+const moveKeys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false, shift: false };
+function moveKeyFromEvent(e) {
+  return e.code === 'Space' ? 'space' : e.key.toLowerCase();
+}
 window.addEventListener('keydown', (e) => {
-  if (e.repeat) return;
   // Ignore when typing into an input or contenteditable.
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-  const k = e.key.toLowerCase();
+  const k = moveKeyFromEvent(e);
+  if (e.repeat && k !== 'space') return;
   if (k === 'shift') { moveKeys.shift = true; return; }
   if (k in moveKeys) { moveKeys[k] = true; e.preventDefault(); }
 });
 window.addEventListener('keyup', (e) => {
-  const k = e.key.toLowerCase();
+  const k = moveKeyFromEvent(e);
   if (k === 'shift') { moveKeys.shift = false; return; }
   if (k in moveKeys) moveKeys[k] = false;
 });
@@ -1450,6 +2739,7 @@ function applyMovement(dt) {
   // Vertical motion is independent of horizontal speed/normalization.
   if (moveKeys.e) _moveDelta.y += vertSpeed * dt;
   if (moveKeys.q) _moveDelta.y -= vertSpeed * dt;
+  if (moveKeys.space) _moveDelta.y += (moveKeys.shift ? -1 : 1) * vertSpeed * dt;
 
   // Clamp the delta so neither the camera nor the target can be pushed past
   // the wall or below the floor. We tighten the most-restrictive of the two
@@ -1477,14 +2767,17 @@ function applyMovement(dt) {
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  applyRendererResolution();
+  updateSourceCenterTransform();
 });
 
 // ---------- Loop ----------
-const clock = new THREE.Clock();
+let lastFrameTime = performance.now();
 function tick() {
   requestAnimationFrame(tick);
-  const dt = clock.getDelta();
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+  lastFrameTime = now;
   applyMovement(dt);
   tickCameraTween(dt);
   controls.update(dt);
@@ -1492,10 +2785,16 @@ function tick() {
   raysMat.uniforms.uCameraPos.value.copy(camera.position);
   for (const w of windows) {
     w.shaderMat.uniforms.uCameraPos.value.copy(camera.position);
-    w.raytraceMat.uniforms.uCameraPos.value.copy(camera.position);
   }
+  raytracedSceneMat.uniforms.uCameraWorld.value.copy(camera.matrixWorld);
+  raytracedSceneMat.uniforms.uInvProjection.value.copy(camera.projectionMatrixInverse);
   updateSunMesh();
-  renderer.render(scene, camera);
+  if (useRaytracer) {
+    renderCustomRaytracer();
+  } else {
+    renderer.render(scene, camera);
+  }
+  updateRaytraceStatus();
 }
 tick();
 
@@ -1535,6 +2834,27 @@ function makeContactShadowTexture() {
 // Procedural wood texture: horizontal planks with staggered seams, grain lines,
 // occasional knots, and per-plank tonal variation. Returns a CanvasTexture
 // already configured for sRGB color space and seamless repeat tiling.
+function makeFrameWoodTexture() {
+  const fallback = makeWoodTexture({ W: 1024, H: 512, plankH: 155, hueShift: -2, dark: false });
+  const tex = new THREE.TextureLoader().load('./wood-frame.jpg', (loaded) => {
+    configureFrameWoodTexture(loaded);
+    loaded.needsUpdate = true;
+  });
+  tex.image = fallback.image;
+  configureFrameWoodTexture(tex);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function configureFrameWoodTexture(tex) {
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities?.getMaxAnisotropy?.() || 8;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.repeat.set(1.08, 0.92);
+}
+
 function makeWoodTexture({ W = 1024, H = 1024, plankH = 96, hueShift = 0, dark = false } = {}) {
   const c = document.createElement('canvas');
   c.width = W; c.height = H;

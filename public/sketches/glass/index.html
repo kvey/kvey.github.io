@@ -140,7 +140,19 @@
       right: 16px;
       width: min(300px, calc(100vw - 32px));
     }
-    .controls .panel { padding: 14px 16px 16px; }
+    .controls .panel {
+      padding: 14px 16px 16px;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .controls.is-collapsed .panel {
+      max-height: 48px;
+      padding: 8px 12px;
+      overflow: hidden;
+    }
+    .controls.is-collapsed .panel > :not(.controls-head) { display: none; }
+    .controls.is-collapsed .controls-head { margin-bottom: 0; }
     .controls h2 {
       margin: 0 0 10px;
       font-size: 11px;
@@ -235,14 +247,37 @@
     .button.primary:hover { filter: brightness(1.06); }
 
     /* ---- Source thumb (top-right) ---- */
-    .source { top: 16px; right: 16px; }
+    .source {
+      top: 16px;
+      right: 16px;
+      --source-center-x: 0px;
+      --source-center-y: 0px;
+      --source-center-scale: 2.55;
+      z-index: 30;
+    }
     .source .panel {
       padding: 8px;
       display: grid;
       gap: 6px;
       justify-items: end;
+      transform-origin: center;
+      transition:
+        transform 420ms cubic-bezier(0.2, 0.8, 0.18, 1),
+        box-shadow 260ms ease,
+        border-color 260ms ease,
+        background 260ms ease;
+      will-change: transform;
     }
-    .source canvas { display: block; border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+    .source.is-centered .panel {
+      transform: translate3d(var(--source-center-x), var(--source-center-y), 0) scale(var(--source-center-scale));
+      border-color: rgba(255, 244, 216, 0.38);
+      background: linear-gradient(135deg, rgba(255, 230, 190, 0.10), rgba(20, 12, 5, 0.42));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 244, 216, 0.52),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+        0 26px 70px -12px rgba(0, 0, 0, 0.68);
+    }
+    .source canvas { display: block; width: 80px; height: auto; border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
     .source .label {
       font-size: 9.5px;
       font-weight: 700;
@@ -253,7 +288,20 @@
 
     /* ---- Status (bottom-left) ---- */
     .status { bottom: 16px; left: 16px; }
-    .status .panel { padding: 7px 12px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .status .panel {
+      padding: 7px 12px;
+      display: grid;
+      gap: 3px;
+      font-size: 11px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .status .rt-status {
+      color: var(--faint);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
 
     /* ---- Drop overlay ---- */
     .drop-overlay {
@@ -277,9 +325,9 @@
       border-color: var(--accent);
     }
 
-    /* ---- Mobile: collapsible controls drawer + tighter chrome ---- */
+    /* ---- Collapsible controls drawer + tighter mobile chrome ---- */
     .controls-toggle {
-      display: none;
+      display: inline-flex;
       appearance: none;
       border: 0;
       cursor: pointer;
@@ -296,7 +344,7 @@
     .controls-toggle svg { transition: transform 200ms ease; }
     .controls.is-collapsed .controls-toggle svg { transform: rotate(180deg); }
     .controls-head {
-      display: none;
+      display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
@@ -324,6 +372,7 @@
 
       /* Smaller source thumb */
       .source { top: 10px; right: 10px; }
+      .source { --source-center-scale: 3.2; }
       .source .panel { padding: 5px; }
       .source canvas { width: 44px !important; height: auto !important; }
       .source .label { display: none; }
@@ -422,7 +471,10 @@
   </div>
 
   <div class="hud status">
-    <div class="panel"><span id="status">Loading…</span></div>
+    <div class="panel">
+      <span id="status">Loading…</span>
+      <span class="rt-status" id="rtStatus">Raytracer off</span>
+    </div>
   </div>
 
   <div class="hud controls" id="controls">
@@ -519,6 +571,90 @@
       <div class="row">
         <button class="button" id="raytraceToggle" aria-pressed="false">Raytracer: off</button>
       </div>
+
+      <div id="raytraceSettings" hidden>
+        <h2 style="margin-top: 14px">Raytracer</h2>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Exposure</span>
+            <span class="accent" id="rtExposureVal">—</span>
+          </div>
+          <input id="rtExposure" type="range" min="50" max="170" value="118">
+        </div>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Internal scatter</span>
+            <span class="accent" id="rtGlassSurfaceVal">—</span>
+          </div>
+          <input id="rtGlassSurface" type="range" min="20" max="180" value="100">
+        </div>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Transmission</span>
+            <span class="accent" id="rtGlassTransmissionVal">—</span>
+          </div>
+          <input id="rtGlassTransmission" type="range" min="0" max="100" value="72">
+        </div>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Reflections</span>
+            <span class="accent" id="rtReflectionVal">—</span>
+          </div>
+          <input id="rtReflection" type="range" min="0" max="120" value="18">
+        </div>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Frame sheen</span>
+            <span class="accent" id="rtSpecularVal">—</span>
+          </div>
+          <input id="rtSpecular" type="range" min="0" max="160" value="100">
+        </div>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Sun diffusion</span>
+            <span class="accent" id="rtSunDiffusionVal">—</span>
+          </div>
+          <input id="rtSunDiffusion" type="range" min="0" max="100" value="22">
+        </div>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Warm lights</span>
+            <span class="accent" id="rtPointLightBrightnessVal">—</span>
+          </div>
+          <input id="rtPointLightBrightness" type="range" min="0" max="150" value="40">
+        </div>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Ray steps</span>
+            <span class="accent" id="rtVolumeStepsVal">—</span>
+          </div>
+          <input id="rtVolumeSteps" type="range" min="1" max="80" value="34">
+        </div>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Resolve samples</span>
+            <span class="accent" id="rtMaxSamplesVal">—</span>
+          </div>
+          <input id="rtMaxSamples" type="range" min="16" max="4096" step="16" value="512">
+        </div>
+
+        <div class="slider">
+          <div class="slider-label">
+            <span>Resolution</span>
+            <span class="accent" id="rtResolutionVal">—</span>
+          </div>
+          <input id="rtResolution" type="range" min="25" max="100" value="55">
+        </div>
+      </div>
     </div>
   </div>
 
@@ -529,8 +665,10 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/",
+      "three/examples/jsm/": "https://unpkg.com/three@0.184.0/examples/jsm/",
+      "three/tsl": "https://unpkg.com/three@0.184.0/build/three.tsl.js"
     }
   }
   </script>
