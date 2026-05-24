@@ -99,6 +99,7 @@ const PLAYER_HIT_ROTATION_DAMPING = 6.5;
 const AFTERBURNER_MAX = 100;
 const AFTERBURNER_DRAIN = 34;
 const AFTERBURNER_RECHARGE = 18;
+const AFTERBURNER_RECHARGE_DELAY = 1.15;
 const AFTERBURNER_ACCEL_MULT = 1.65;
 const AFTERBURNER_MAX_SPEED_MULT = 1.28;
 const AFTERBURNER_SHOCKWAVE_FADE_RATE = 8.5;
@@ -334,6 +335,7 @@ const state = {
   flareRecharge: 0,
   afterburner: AFTERBURNER_MAX,
   afterburnerActive: false,
+  afterburnerRechargeDelay: 0,
   waveTimer: 1.2,
   runTime: 0,
   wallRunTime: 0,
@@ -432,6 +434,7 @@ function startRun() {
   state.flareRecharge = 0;
   state.afterburner = AFTERBURNER_MAX;
   state.afterburnerActive = false;
+  state.afterburnerRechargeDelay = 0;
   state.waveTimer = 0.35;
   state.runTime = 0;
   state.wallRunTime = 0;
@@ -739,10 +742,16 @@ function updatePlayer(dt) {
   const rollInput = introActive ? 0 : getRollInput();
   const accelerating = !introActive && (keys.has('KeyW') || keys.has('ArrowUp'));
   const braking = !introActive && (keys.has('KeyS') || keys.has('ArrowDown'));
-  const wantsAfterburner = !introActive && accelerating && (keys.has('ShiftLeft') || keys.has('ShiftRight')) && state.afterburner > 0;
+  const requestingAfterburner = !introActive && accelerating && (keys.has('ShiftLeft') || keys.has('ShiftRight'));
+  const wantsAfterburner = requestingAfterburner && state.afterburner > 0;
   state.afterburnerActive = wantsAfterburner;
   if (wantsAfterburner) {
     state.afterburner = Math.max(0, state.afterburner - AFTERBURNER_DRAIN * dt);
+    state.afterburnerRechargeDelay = AFTERBURNER_RECHARGE_DELAY;
+  } else if (requestingAfterburner) {
+    state.afterburnerRechargeDelay = AFTERBURNER_RECHARGE_DELAY;
+  } else if (state.afterburnerRechargeDelay > 0) {
+    state.afterburnerRechargeDelay = Math.max(0, state.afterburnerRechargeDelay - dt);
   } else {
     state.afterburner = Math.min(AFTERBURNER_MAX, state.afterburner + AFTERBURNER_RECHARGE * dt);
   }
