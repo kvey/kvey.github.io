@@ -38,6 +38,11 @@ const MISSILE_TRAIL_MIN_DISTANCE = 0.32;
 const PLAYER_ENGINE_TRAIL_POINTS = 48;
 const PLAYER_ENGINE_TRAIL_MIN_DISTANCE = 0.18;
 const FLARE_TRAIL_POINTS = 18;
+const FLARE_DECOY_RADIUS = 62;
+const FLARE_DECOY_LOCK_BIAS = 0.55;
+const FLARE_DECOY_GUIDANCE_NOISE = 0.34;
+const FLARE_INITIAL_FALL_SPEED = 0.35;
+const FLARE_GRAVITY = 2.6;
 const HUD_UPDATE_INTERVAL = 0.1;
 const FLARE_BURST_SIZE = 8;
 const FLARE_BURST_INTERVAL = 0.075;
@@ -160,6 +165,7 @@ const LAUNCHER_ANGLE_SPREAD = 0.42;
 const REPLAY_DURATION = 15;
 const REPLAY_SAMPLE_INTERVAL = 0.055;
 const REPLAY_MAX_MISSILES = 70;
+const REPLAY_MAX_FLARES = 32;
 const REPLAY_TRAIL_POINTS = 128;
 const REPLAY_TRAIL_MIN_DISTANCE = 0.14;
 const REPLAY_TRAIL_RESET_DISTANCE = 18;
@@ -298,7 +304,11 @@ const replay = {
   cameraLookAt: new THREE.Vector3(),
   player: null,
   missiles: [],
+  flares: [],
+  shieldEvents: [],
   missileSlots: new Map(),
+  flareSlots: new Map(),
+  shieldEventIndex: 0,
   frameIndex: 0,
   idScratch: new Set(),
 };
@@ -310,8 +320,10 @@ for (let i = 0; i < REPLAY_MAX_MISSILES; i += 1) {
   const mesh = makeMissileMesh();
   const trailRawPositions = new Float32Array(REPLAY_TRAIL_POINTS * 3);
   const trailPositions = new Float32Array(REPLAY_TRAIL_POINTS * 3);
+  const trailColors = new Float32Array(REPLAY_TRAIL_POINTS * 3);
   const trailGeometry = new THREE.BufferGeometry();
   trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+  trailGeometry.setAttribute('color', new THREE.BufferAttribute(trailColors, 3));
   trailGeometry.setDrawRange(0, 0);
   const trail = new THREE.Line(
     trailGeometry,
@@ -319,6 +331,7 @@ for (let i = 0; i < REPLAY_MAX_MISSILES; i += 1) {
       color: 0xfff2d0,
       transparent: true,
       opacity: 0.72,
+      vertexColors: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     })
@@ -332,6 +345,7 @@ for (let i = 0; i < REPLAY_MAX_MISSILES; i += 1) {
     trail,
     trailRawPositions,
     trailPositions,
+    trailColors,
     trailLimit: REPLAY_TRAIL_POINTS,
     trailCursor: 0,
     trailCount: 0,
@@ -346,10 +360,50 @@ for (let i = 0; i < REPLAY_MAX_MISSILES; i += 1) {
     crashing: false,
   });
 }
+for (let i = 0; i < REPLAY_MAX_FLARES; i += 1) {
+  const mesh = makeFlareMesh();
+  const trailRawPositions = new Float32Array(FLARE_TRAIL_POINTS * 3);
+  const trailPositions = new Float32Array(FLARE_TRAIL_POINTS * 3);
+  const trailGeometry = new THREE.BufferGeometry();
+  trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+  trailGeometry.setDrawRange(0, 0);
+  const trail = new THREE.Line(
+    trailGeometry,
+    new THREE.LineBasicMaterial({
+      color: 0xffe66d,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
+  );
+  mesh.visible = false;
+  trail.visible = false;
+  trail.frustumCulled = false;
+  scene.add(mesh, trail);
+  replay.flares.push({
+    mesh,
+    trail,
+    trailRawPositions,
+    trailPositions,
+    trailLimit: FLARE_TRAIL_POINTS,
+    trailCursor: 0,
+    trailCount: 0,
+    hasTrailPoint: false,
+    lastTrailX: 0,
+    lastTrailY: 0,
+    lastTrailZ: 0,
+    renderPosition: new THREE.Vector3(),
+    hasRenderPosition: false,
+    activeId: null,
+  });
+}
 
 const missiles = [];
 let nextMissileId = 1;
 const flares = [];
+let nextFlareId = 1;
+const shieldReplayEvents = [];
 const particles = [];
 const keys = new Set();
 const flareBurst = {
@@ -483,8 +537,10 @@ function startRun() {
   clearRun();
   stopReplayPlayback();
   replayBuffer.length = 0;
+  shieldReplayEvents.length = 0;
   replay.sampleTimer = 0;
   nextMissileId = 1;
+  nextFlareId = 1;
   state.mode = 'playing';
   state.score = 0;
   state.wave = 1;
@@ -743,6 +799,21 @@ function recordReplayFrame(dt) {
       crashing: missile.crashing,
     });
   }
+  const flareFrames = [];
+  const flareCount = Math.min(REPLAY_MAX_FLARES, flares.length);
+  for (let i = 0; i < flareCount; i += 1) {
+    const flare = flares[i];
+    flareFrames.push({
+      id: flare.id,
+      x: flare.pos.x,
+      y: flare.pos.y,
+      z: flare.altitude,
+      vx: flare.vel.x,
+      vy: flare.vel.y,
+      life: flare.life,
+      phase: flare.phase,
+    });
+  }
   replayBuffer.push({
     t: state.wallRunTime,
     player: {
@@ -755,9 +826,11 @@ function recordReplayFrame(dt) {
       afterburner: state.afterburnerActive,
     },
     missiles: missileFrames,
+    flares: flareFrames,
   });
   const cutoff = state.wallRunTime - REPLAY_DURATION;
   while (replayBuffer.length > 2 && replayBuffer[0].t < cutoff) replayBuffer.shift();
+  while (shieldReplayEvents.length > 0 && shieldReplayEvents[0].t < cutoff) shieldReplayEvents.shift();
 }
 
 function startReplayPlayback() {
@@ -767,14 +840,22 @@ function startReplayPlayback() {
     t: frame.t,
     player: { ...frame.player },
     missiles: frame.missiles.map((missile) => ({ ...missile })),
+    flares: (frame.flares || []).map((flare) => ({ ...flare })),
   }));
   for (const frame of replay.frames) {
     frame.missileById = new Map(frame.missiles.map((missile) => [missile.id, missile]));
+    frame.flareById = new Map(frame.flares.map((flare) => [flare.id, flare]));
   }
+  const firstReplayTime = replay.frames[0].t;
+  const lastReplayTime = replay.frames[replay.frames.length - 1].t;
+  replay.shieldEvents = shieldReplayEvents
+    .filter((event) => event.t >= firstReplayTime && event.t <= lastReplayTime)
+    .map((event) => ({ ...event }));
   const lastFrame = replay.frames[replay.frames.length - 1];
   replay.sideSign = lastFrame.player.bank >= 0 ? 1 : -1;
   replay.elapsed = 0;
   replay.frameIndex = 0;
+  replay.shieldEventIndex = 0;
   replay.duration = Math.max(0.1, replay.frames[replay.frames.length - 1].t - replay.frames[0].t);
   const firstFrame = replay.frames[0];
   const replayStartZ = getPlayerFlightZ(firstFrame.player.x, firstFrame.player.y, 0, Math.hypot(firstFrame.player.vx, firstFrame.player.vy), firstFrame.player.bank);
@@ -789,11 +870,14 @@ function startReplayPlayback() {
 function stopReplayPlayback() {
   replay.active = false;
   replay.frames.length = 0;
+  replay.shieldEvents.length = 0;
   replay.elapsed = 0;
   replay.duration = 0;
   replay.frameIndex = 0;
+  replay.shieldEventIndex = 0;
   replay.player.visible = false;
   replay.missileSlots.clear();
+  replay.flareSlots.clear();
   for (const missile of replay.missiles) {
     missile.activeId = null;
     missile.hasRenderPosition = false;
@@ -801,15 +885,28 @@ function stopReplayPlayback() {
     missile.trail.visible = false;
     resetTrailBuffer(missile);
   }
+  for (const flare of replay.flares) {
+    flare.activeId = null;
+    flare.hasRenderPosition = false;
+    flare.mesh.visible = false;
+    flare.trail.visible = false;
+    resetTrailBuffer(flare);
+  }
   setLiveSceneVisible(true);
 }
 
 function resetReplayTrails() {
   replay.missileSlots.clear();
+  replay.flareSlots.clear();
   for (const missile of replay.missiles) {
     missile.activeId = null;
     missile.hasRenderPosition = false;
     resetTrailBuffer(missile);
+  }
+  for (const flare of replay.flares) {
+    flare.activeId = null;
+    flare.hasRenderPosition = false;
+    resetTrailBuffer(flare);
   }
 }
 
@@ -1110,13 +1207,14 @@ function updateFlares(dt) {
     flare.life -= dt;
     flare.pos.addScaledVector(flare.vel, dt);
     flare.vel.multiplyScalar(Math.pow(0.16, dt));
-    const flareZ = getMissileFlightZ(flare.pos.x, flare.pos.y) - 0.18;
-    flare.mesh.position.set(flare.pos.x, flare.pos.y, flareZ);
+    flare.fallSpeed += FLARE_GRAVITY * dt;
+    flare.altitude -= flare.fallSpeed * dt;
+    flare.mesh.position.set(flare.pos.x, flare.pos.y, flare.altitude);
     flare.mesh.scale.setScalar(0.85 + Math.sin(state.runTime * 16 + flare.phase) * 0.18);
     flare.mesh.material.opacity = Math.max(0, Math.min(1, flare.life / 2.4));
-    updateEntityTrail(flare, flareZ - 0.1);
+    updateEntityTrail(flare, flare.altitude - 0.1);
     flare.trail.material.opacity = Math.max(0, Math.min(0.72, flare.life / 2.9));
-    if (flare.life <= 0) {
+    if (flare.life <= 0 || flare.altitude <= getTerrainZ(flare.pos.x, flare.pos.y) + 0.12) {
       scene.remove(flare.mesh, flare.trail);
       flare.mesh.material.dispose();
       flare.trail.geometry.dispose();
@@ -1171,7 +1269,7 @@ function launchFlare(spread, speedBoost) {
     backY * backSpeed + sideY * sideSpeed + player.vel.y * 0.14
   );
   const mesh = makeFlareMesh();
-  const flareZ = getMissileFlightZ(pos.x, pos.y) - 0.18;
+  const flareZ = player.altitude - 0.18;
   mesh.position.set(pos.x, pos.y, flareZ);
   const trailRawPositions = new Float32Array(FLARE_TRAIL_POINTS * 3);
   const trailPositions = new Float32Array(FLARE_TRAIL_POINTS * 3);
@@ -1185,8 +1283,11 @@ function launchFlare(spread, speedBoost) {
   trail.frustumCulled = false;
   scene.add(mesh, trail);
   flares.push({
+    id: nextFlareId,
     pos,
     vel,
+    altitude: flareZ,
+    fallSpeed: FLARE_INITIAL_FALL_SPEED + Math.random() * 0.45,
     mesh,
     trail,
     trailRawPositions,
@@ -1195,8 +1296,10 @@ function launchFlare(spread, speedBoost) {
     trailCount: 0,
     trailLimit: FLARE_TRAIL_POINTS,
     life: 3.15,
+    isFlare: true,
     phase: Math.random() * Math.PI * 2,
   });
+  nextFlareId += 1;
 }
 
 function updateSpawns(dt) {
@@ -1317,8 +1420,10 @@ function addMissile(pos, vel) {
   const mesh = makeMissileMesh();
   const trailRawPositions = new Float32Array(MISSILE_TRAIL_POINTS * 3);
   const trailPositions = new Float32Array(MISSILE_TRAIL_POINTS * 3);
+  const trailColors = new Float32Array(MISSILE_TRAIL_POINTS * 3);
   const trailGeometry = new THREE.BufferGeometry();
   trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+  trailGeometry.setAttribute('color', new THREE.BufferAttribute(trailColors, 3));
   trailGeometry.setDrawRange(0, 1);
   const trail = new THREE.Line(
     trailGeometry,
@@ -1326,6 +1431,7 @@ function addMissile(pos, vel) {
       color: 0xfff2d0,
       transparent: true,
       opacity: 0.92,
+      vertexColors: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     })
@@ -1340,6 +1446,7 @@ function addMissile(pos, vel) {
     trail,
     trailRawPositions,
     trailPositions,
+    trailColors,
     trailLimit: MISSILE_TRAIL_POINTS,
     trailCursor: 1,
     trailCount: 1,
@@ -1352,6 +1459,7 @@ function addMissile(pos, vel) {
     age: 0,
     spiralPhase: Math.random() * Math.PI * 2,
     verticalSpiralPhase: Math.random() * Math.PI * 2,
+    decoyed: false,
     spiralFrequency: MISSILE_SPIRAL_FREQUENCY_MIN + Math.random() * (MISSILE_SPIRAL_FREQUENCY_MAX - MISSILE_SPIRAL_FREQUENCY_MIN),
     spiralSide: Math.random() < 0.5 ? -1 : 1,
     spiralStrength: MISSILE_SPIRAL_STRENGTH * (0.72 + Math.random() * 0.56),
@@ -1390,7 +1498,11 @@ function updateMissiles(dt) {
       const weave = 0.35 + Math.min(0.65, missile.age * 1.8);
       getMissileInterceptDirection(missile, scratchV2);
       if (scratchV2.lengthSq() > 0.0001) {
-        const lateral = Math.sin(spiralPhase) * missile.spiralStrength * missile.spiralSide;
+        const seekerNoise = missile.decoyed ? FLARE_DECOY_GUIDANCE_NOISE : 0;
+        const lateral = (
+          Math.sin(spiralPhase) * missile.spiralStrength * missile.spiralSide +
+          Math.sin(missile.age * 13.7 + missile.verticalSpiralPhase) * seekerNoise
+        );
         const targetX = scratchV2.x;
         const targetY = scratchV2.y;
         scratchV2.set(targetX - targetY * lateral * weave, targetY + targetX * lateral * weave).normalize();
@@ -1421,6 +1533,7 @@ function updateMissiles(dt) {
       placeMissileAtShieldImpact(missile);
       triggerCameraShake(missile);
       applyShipExplosionImpulse(missile);
+      recordShieldReplayEvent(missile.pos);
       shieldImpactVisual(missile.pos);
       if (state.shield > 0) {
         state.score += SHIELD_DEFENSE_SCORE;
@@ -1459,13 +1572,18 @@ function updateMissiles(dt) {
   }
 }
 
-function chooseMissileTarget(pos) {
+function chooseMissileTarget(missile) {
   let best = player;
-  let bestD = Infinity;
+  let bestScore = Infinity;
+  const decoyRadiusSq = FLARE_DECOY_RADIUS * FLARE_DECOY_RADIUS;
+  const playerD = missile.pos.distanceToSquared(player.pos);
   for (const flare of flares) {
-    const d = flare.pos.distanceToSquared(pos);
-    if (d < bestD && d < 115) {
-      bestD = d;
+    const d = flare.pos.distanceToSquared(missile.pos);
+    if (d > decoyRadiusSq && d > playerD * 1.35) continue;
+    const flareLifeStrength = THREE.MathUtils.clamp(flare.life / 2.2, 0.25, 1);
+    const score = d * (1 - FLARE_DECOY_LOCK_BIAS * flareLifeStrength);
+    if (score < bestScore) {
+      bestScore = score;
       best = flare;
     }
   }
@@ -1473,7 +1591,8 @@ function chooseMissileTarget(pos) {
 }
 
 function getMissileInterceptDirection(missile, out) {
-  const target = chooseMissileTarget(missile.pos);
+  const target = chooseMissileTarget(missile);
+  missile.decoyed = target.isFlare === true;
   const targetPos = target.pos;
   const targetVel = target.vel || scratchV2b.set(0, 0);
   const relX = targetPos.x - missile.pos.x;
@@ -1534,6 +1653,14 @@ function placeMissileAtShieldImpact(missile) {
   missile.pos.copy(player.pos).addScaledVector(scratchV2, SHIELD_RADIUS);
   missile.altitude = player.altitude - 0.08;
   missile.mesh.position.set(missile.pos.x, missile.pos.y, missile.altitude);
+}
+
+function recordShieldReplayEvent(impactPos) {
+  shieldReplayEvents.push({
+    t: state.wallRunTime,
+    x: impactPos.x,
+    y: impactPos.y,
+  });
 }
 
 function shieldImpactVisual(impactPos) {
@@ -1638,6 +1765,7 @@ function updateTrail(missile) {
     missile.lastTrailY = missile.pos.y;
   }
   refreshTrailGeometry(missile);
+  updateMissileTrailFade(missile);
   missile.trail.material.opacity = THREE.MathUtils.clamp(missile.vel.length() / MISSILE_MAX_SPEED, 0.62, 0.92);
 }
 
@@ -1689,6 +1817,18 @@ function refreshTrailGeometry(entity) {
   }
   trailObject.geometry.attributes.position.needsUpdate = true;
   trailObject.geometry.setDrawRange(0, entity.trailCount);
+}
+
+function updateMissileTrailFade(missile) {
+  if (!missile.trailColors) return;
+  for (let i = 0; i < missile.trailCount; i += 1) {
+    const t = missile.trailCount <= 1 ? 1 : i / (missile.trailCount - 1);
+    const intensity = THREE.MathUtils.clamp(t * t, 0, 1);
+    missile.trailColors[i * 3] = intensity;
+    missile.trailColors[i * 3 + 1] = intensity;
+    missile.trailColors[i * 3 + 2] = intensity;
+  }
+  missile.trail.geometry.attributes.color.needsUpdate = true;
 }
 
 function explodeMissile(index, color, amount) {
@@ -2165,10 +2305,12 @@ function renderReplay(dt) {
 
   replay.player.visible = true;
   const replayPlayerZ = getPlayerFlightZ(frame.player.x, frame.player.y, replay.elapsed, Math.hypot(frame.player.vx, frame.player.vy), frame.player.bank);
+  player.altitude = replayPlayerZ;
   replay.player.position.set(frame.player.x, frame.player.y, replayPlayerZ);
   scratchQuatA.setFromAxisAngle(yawAxis, frame.player.heading);
   scratchQuatB.setFromAxisAngle(rollAxis, frame.player.bank);
   replay.player.quaternion.copy(scratchQuatA).multiply(scratchQuatB);
+  triggerReplayShieldEvents(replay.frames[0].t + replay.elapsed);
 
   for (const replayMissile of replay.missiles) {
     replayMissile._seen = false;
@@ -2215,6 +2357,41 @@ function renderReplay(dt) {
     replayMissile.mesh.visible = false;
     replayMissile.trail.visible = false;
     resetTrailBuffer(replayMissile);
+  }
+  for (const replayFlare of replay.flares) {
+    replayFlare._seen = false;
+  }
+  for (const flare of frame.flares) {
+    const replayFlare = getReplayFlareSlot(flare.id);
+    if (!replayFlare) continue;
+    replayFlare._seen = true;
+    replayFlare.mesh.visible = true;
+    replayFlare.trail.visible = true;
+    const flareZ = flare.z;
+    scratchV3.set(flare.x, flare.y, flareZ);
+    if (
+      !replayFlare.hasRenderPosition ||
+      replayFlare.renderPosition.distanceToSquared(scratchV3) > REPLAY_TRAIL_RESET_DISTANCE * REPLAY_TRAIL_RESET_DISTANCE
+    ) {
+      replayFlare.renderPosition.copy(scratchV3);
+      replayFlare.hasRenderPosition = true;
+    } else {
+      replayFlare.renderPosition.lerp(scratchV3, getDampingFactor(REPLAY_MISSILE_SMOOTHING, dt));
+    }
+    replayFlare.mesh.position.copy(replayFlare.renderPosition);
+    replayFlare.mesh.scale.setScalar(0.85 + Math.sin(replay.elapsed * 16 + flare.phase) * 0.18);
+    replayFlare.mesh.material.opacity = Math.max(0, Math.min(1, flare.life / 2.4));
+    replayFlare.trail.material.opacity = Math.max(0, Math.min(0.72, flare.life / 2.9));
+    updateReplayFlareTrail(replayFlare);
+  }
+  for (const replayFlare of replay.flares) {
+    if (replayFlare._seen) continue;
+    if (replayFlare.activeId !== null) replay.flareSlots.delete(replayFlare.activeId);
+    replayFlare.activeId = null;
+    replayFlare.hasRenderPosition = false;
+    replayFlare.mesh.visible = false;
+    replayFlare.trail.visible = false;
+    resetTrailBuffer(replayFlare);
   }
 
   const forward = scratchV2.set(frame.player.vx, frame.player.vy);
@@ -2266,12 +2443,38 @@ function getReplayMissileSlot(id) {
   return slot;
 }
 
+function triggerReplayShieldEvents(currentTime) {
+  while (
+    replay.shieldEventIndex < replay.shieldEvents.length &&
+    replay.shieldEvents[replay.shieldEventIndex].t <= currentTime
+  ) {
+    const event = replay.shieldEvents[replay.shieldEventIndex];
+    shieldImpactVisual(scratchV2.set(event.x, event.y));
+    replay.shieldEventIndex += 1;
+  }
+}
+
+function getReplayFlareSlot(id) {
+  let slot = replay.flareSlots.get(id);
+  if (slot) return slot;
+  slot = replay.flares.find((flare) => flare.activeId === null);
+  if (!slot) return null;
+  slot.activeId = id;
+  slot.hasRenderPosition = false;
+  slot.mesh.material.opacity = 1;
+  slot.trail.material.opacity = 0.72;
+  resetTrailBuffer(slot);
+  replay.flareSlots.set(id, slot);
+  return slot;
+}
+
 function updateReplayMissileTrail(replayMissile, crashing = false) {
   const pointX = replayMissile.renderPosition.x;
   const pointY = replayMissile.renderPosition.y;
   const pointZ = replayMissile.renderPosition.z - 0.1;
   if (crashing && replayMissile.hasTrailPoint) {
     refreshTrailGeometry(replayMissile);
+    updateMissileTrailFade(replayMissile);
     return;
   }
   const dx = pointX - replayMissile.lastTrailX;
@@ -2304,6 +2507,30 @@ function updateReplayMissileTrail(replayMissile, crashing = false) {
   replayMissile.lastTrailY = pointY;
   replayMissile.lastTrailZ = pointZ;
   refreshTrailGeometry(replayMissile);
+  updateMissileTrailFade(replayMissile);
+}
+
+function updateReplayFlareTrail(replayFlare) {
+  const pointX = replayFlare.renderPosition.x;
+  const pointY = replayFlare.renderPosition.y;
+  const pointZ = replayFlare.renderPosition.z - 0.1;
+  const dx = pointX - replayFlare.lastTrailX;
+  const dy = pointY - replayFlare.lastTrailY;
+  const dz = pointZ - replayFlare.lastTrailZ;
+  const distanceSq = dx * dx + dy * dy + dz * dz;
+  if (!replayFlare.hasTrailPoint || distanceSq > REPLAY_TRAIL_RESET_DISTANCE * REPLAY_TRAIL_RESET_DISTANCE) {
+    resetTrailBuffer(replayFlare);
+    addTrailPoint(replayFlare, pointX, pointY, pointZ);
+  } else if (distanceSq >= REPLAY_TRAIL_MIN_DISTANCE * REPLAY_TRAIL_MIN_DISTANCE) {
+    addTrailPoint(replayFlare, pointX, pointY, pointZ);
+  } else {
+    updateLastTrailPoint(replayFlare, pointX, pointY, pointZ);
+  }
+  replayFlare.hasTrailPoint = true;
+  replayFlare.lastTrailX = pointX;
+  replayFlare.lastTrailY = pointY;
+  replayFlare.lastTrailZ = pointZ;
+  refreshTrailGeometry(replayFlare);
 }
 
 function getReplayFrame(elapsed) {
@@ -2365,7 +2592,30 @@ function interpolateReplayFrame(a, b, alpha) {
       crashing: ma.crashing || mb.crashing,
     });
   }
-  return { player: playerFrame, missiles: missileFrames };
+  const aFlares = a.flareById;
+  const bFlares = b.flareById;
+  const flareIds = replay.idScratch;
+  flareIds.clear();
+  for (const flare of a.flares) flareIds.add(flare.id);
+  for (const flare of b.flares) flareIds.add(flare.id);
+  const flareFrames = [];
+  for (const id of flareIds) {
+    if (flareFrames.length >= REPLAY_MAX_FLARES) break;
+    const fa = aFlares.get(id);
+    const fb = bFlares.get(id);
+    if (!fa || !fb) continue;
+    flareFrames.push({
+      id,
+      x: hermiteReplayPosition(fa.x, fa.vx, fb.x, fb.vx, alpha, span),
+      y: hermiteReplayPosition(fa.y, fa.vy, fb.y, fb.vy, alpha, span),
+      z: THREE.MathUtils.lerp(fa.z, fb.z, alpha),
+      vx: THREE.MathUtils.lerp(fa.vx, fb.vx, alpha),
+      vy: THREE.MathUtils.lerp(fa.vy, fb.vy, alpha),
+      life: THREE.MathUtils.lerp(fa.life, fb.life, alpha),
+      phase: fa.phase,
+    });
+  }
+  return { player: playerFrame, missiles: missileFrames, flares: flareFrames };
 }
 
 function drawMinimap() {
