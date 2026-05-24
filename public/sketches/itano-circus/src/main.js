@@ -117,6 +117,7 @@ const MISSILE_TURN_RATE_BASE = 1.35;
 const MISSILE_TURN_RATE_GROWTH = 0.045;
 const MISSILE_TURN_RATE_CAP = 1.2;
 const MISSILE_SPIRAL_STRENGTH = 0.42;
+const MISSILE_SPIRAL_VERTICAL_STRENGTH = 0.72;
 const MISSILE_SPIRAL_FREQUENCY_MIN = 5.2;
 const MISSILE_SPIRAL_FREQUENCY_MAX = 8.7;
 const LAUNCH_WARNING_TIME = 18 / PLAYER_MAX_SPEED;
@@ -136,6 +137,11 @@ const REPLAY_TRAIL_POINTS = 128;
 const REPLAY_TRAIL_MIN_DISTANCE = 0.14;
 const REPLAY_TRAIL_RESET_DISTANCE = 18;
 const REPLAY_MISSILE_SMOOTHING = 28;
+const LIVE_CHASE_BACK_DISTANCE = 15.5;
+const LIVE_CHASE_HEIGHT = 8.8;
+const LIVE_CHASE_LOOK_AHEAD = 3.4;
+const LIVE_CHASE_LATERAL_MAX = 2.4;
+const LIVE_CHASE_LATERAL_RESPONSE = 2.2;
 const REPLAY_SIDE_DISTANCE = 24;
 const REPLAY_SIDE_HEIGHT = 10.5;
 const REPLAY_LOOK_AHEAD = 6.5;
@@ -332,6 +338,7 @@ const cameraRig = {
   shakeStrength: 0,
   shakePhase: 0,
   shakeElapsed: 0,
+  chaseLateralOffset: 0,
 };
 
 const state = {
@@ -345,6 +352,7 @@ const state = {
   afterburner: AFTERBURNER_MAX,
   afterburnerActive: false,
   afterburnerRechargeDelay: 0,
+  cameraMode: 'side',
   waveTimer: 1.2,
   hudTimer: 0,
   runTime: 0,
@@ -394,6 +402,14 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.code === 'KeyP' || event.code === 'Escape') {
     togglePause();
+    return;
+  }
+  if (event.code === 'Digit1') {
+    state.cameraMode = 'top';
+    return;
+  }
+  if (event.code === 'Digit2') {
+    state.cameraMode = 'side';
     return;
   }
   // W starts / resumes while the non-terminal overlay is up. Run-end restarts require the button.
@@ -1212,9 +1228,11 @@ function addMissile(pos, vel) {
     crashing: false,
     age: 0,
     spiralPhase: Math.random() * Math.PI * 2,
+    verticalSpiralPhase: Math.random() * Math.PI * 2,
     spiralFrequency: MISSILE_SPIRAL_FREQUENCY_MIN + Math.random() * (MISSILE_SPIRAL_FREQUENCY_MAX - MISSILE_SPIRAL_FREQUENCY_MIN),
     spiralSide: Math.random() < 0.5 ? -1 : 1,
     spiralStrength: MISSILE_SPIRAL_STRENGTH * (0.72 + Math.random() * 0.56),
+    verticalSpiralStrength: MISSILE_SPIRAL_VERTICAL_STRENGTH * (0.72 + Math.random() * 0.56),
     turnRate: MISSILE_TURN_RATE_BASE + Math.min(MISSILE_TURN_RATE_CAP, state.wave * MISSILE_TURN_RATE_GROWTH) + Math.random() * 0.55,
   });
   trailRawPositions[0] = pos.x;
@@ -1244,11 +1262,12 @@ function updateMissiles(dt) {
       missile.vel.multiplyScalar(Math.pow(MISSILE_CRASH_DRAG, dt));
       missile.altitude -= MISSILE_CRASH_FALL_SPEED * dt;
     } else {
+      const spiralPhase = missile.age * missile.spiralFrequency + missile.spiralPhase;
+      const weave = 0.35 + Math.min(0.65, missile.age * 1.8);
       scratchV2.copy(chooseMissileTarget(missile.pos)).sub(missile.pos);
       if (scratchV2.lengthSq() > 0.0001) {
         scratchV2.normalize();
-        const lateral = Math.sin(missile.age * missile.spiralFrequency + missile.spiralPhase) * missile.spiralStrength * missile.spiralSide;
-        const weave = 0.35 + Math.min(0.65, missile.age * 1.8);
+        const lateral = Math.sin(spiralPhase) * missile.spiralStrength * missile.spiralSide;
         const targetX = scratchV2.x;
         const targetY = scratchV2.y;
         scratchV2.set(targetX - targetY * lateral * weave, targetY + targetX * lateral * weave).normalize();
@@ -1260,7 +1279,9 @@ function updateMissiles(dt) {
 
     missile.pos.addScaledVector(missile.vel, dt);
     if (!missile.crashing) {
-      missile.altitude += (getMissileFlightZ(missile.pos.x, missile.pos.y) - 0.08 - missile.altitude) * getDampingFactor(5.4, dt);
+      const verticalWeave = Math.cos(missile.age * missile.spiralFrequency * 1.07 + missile.verticalSpiralPhase) * missile.verticalSpiralStrength * (0.35 + Math.min(0.65, missile.age * 1.8));
+      const targetAltitude = getMissileFlightZ(missile.pos.x, missile.pos.y) - 0.08 + verticalWeave;
+      missile.altitude += (targetAltitude - missile.altitude) * getDampingFactor(6.8, dt);
     }
     missile.mesh.position.set(missile.pos.x, missile.pos.y, missile.altitude);
     orientMissile(missile.mesh, missile.vel);
@@ -1746,26 +1767,53 @@ function render(dt) {
   const introLead = THREE.MathUtils.lerp(2.5, lead, introEase);
   const desiredFocus = desiredFocusVector.set(player.pos.x, player.pos.y);
   const threatFocus = getThreatFocus();
-  if (!ended && threatFocus) desiredFocus.lerp(threatFocus, 0.24);
+  const chaseCamera = !ended && state.cameraMode === 'side';
+  if (!chaseCamera && !ended && threatFocus) desiredFocus.lerp(threatFocus, 0.24);
 
   cameraRig.focus.lerp(desiredFocus, getDampingFactor(ended ? 3.2 : (state.mode === 'playing' ? 4.2 : 1.4), dt));
 
-  const desiredPosition = scratchV3.set(
-    cameraRig.focus.x - motion.x * introBack,
-    cameraRig.focus.y - motion.y * introBack,
-    player.altitude + introHeight
-  );
-  cameraRig.position.lerp(desiredPosition, getDampingFactor(ended ? 1.85 : (state.mode === 'playing' ? 2.7 : 1.2), dt));
-  camera.position.copy(cameraRig.position);
+  if (chaseCamera) {
+    const right = scratchV2b.set(motion.y, -motion.x);
+    const desiredLateral = THREE.MathUtils.clamp(-player.bank / PLAYER_MAX_ROLL, -1, 1) * LIVE_CHASE_LATERAL_MAX;
+    cameraRig.chaseLateralOffset += (desiredLateral - cameraRig.chaseLateralOffset) * getDampingFactor(LIVE_CHASE_LATERAL_RESPONSE, dt);
+    const chaseBack = THREE.MathUtils.lerp(4.8, LIVE_CHASE_BACK_DISTANCE + speedRatio * 3.2, introEase);
+    const chaseHeight = THREE.MathUtils.lerp(7.2, LIVE_CHASE_HEIGHT + speedRatio * 2.0, introEase);
+    const desiredPosition = scratchV3.set(
+      cameraRig.focus.x - motion.x * chaseBack + right.x * cameraRig.chaseLateralOffset,
+      cameraRig.focus.y - motion.y * chaseBack + right.y * cameraRig.chaseLateralOffset,
+      player.altitude + chaseHeight
+    );
+    cameraRig.position.lerp(desiredPosition, getDampingFactor(state.mode === 'playing' ? 3.1 : 1.4, dt));
+    camera.position.copy(cameraRig.position);
 
-  const desiredLookAt = scratchV3.set(
-    cameraRig.focus.x + motion.x * (ended ? 0 : introLead),
-    cameraRig.focus.y + motion.y * (ended ? 0 : introLead),
-    ended ? player.altitude : player.altitude - 0.25
-  );
-  cameraRig.lookAt.lerp(desiredLookAt, getDampingFactor(5.5, dt));
+    const desiredLookAt = scratchV3.set(
+      cameraRig.focus.x + motion.x * LIVE_CHASE_LOOK_AHEAD + right.x * cameraRig.chaseLateralOffset * 0.35,
+      cameraRig.focus.y + motion.y * LIVE_CHASE_LOOK_AHEAD + right.y * cameraRig.chaseLateralOffset * 0.35,
+      player.altitude + 0.5
+    );
+    cameraRig.lookAt.lerp(desiredLookAt, getDampingFactor(4.4, dt));
+  } else {
+    const desiredPosition = scratchV3.set(
+      cameraRig.focus.x - motion.x * introBack,
+      cameraRig.focus.y - motion.y * introBack,
+      player.altitude + introHeight
+    );
+    cameraRig.position.lerp(desiredPosition, getDampingFactor(ended ? 1.85 : (state.mode === 'playing' ? 2.7 : 1.2), dt));
+    camera.position.copy(cameraRig.position);
+
+    const desiredLookAt = scratchV3.set(
+      cameraRig.focus.x + motion.x * (ended ? 0 : introLead),
+      cameraRig.focus.y + motion.y * (ended ? 0 : introLead),
+      ended ? player.altitude : player.altitude - 0.25
+    );
+    cameraRig.lookAt.lerp(desiredLookAt, getDampingFactor(5.5, dt));
+  }
   starField.position.set(player.pos.x, player.pos.y, -20);
-  camera.up.set(motion.x, motion.y, 0);
+  if (chaseCamera) {
+    camera.up.set(0, 0, 1);
+  } else {
+    camera.up.set(motion.x, motion.y, 0);
+  }
   let shakeChroma = 0;
   if (cameraRig.shakeTimer > 0) {
     cameraRig.shakeTimer = Math.max(0, cameraRig.shakeTimer - dt);
