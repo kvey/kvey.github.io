@@ -66,6 +66,7 @@ const PLAYER_ALTITUDE_VARIATION = 0.34;
 const PLAYER_ALTITUDE_RESPONSE = 3.8;
 const MISSILE_TERRAIN_CLEARANCE = PLAYER_TERRAIN_CLEARANCE - 0.18;
 const DOWNTOWN_CENTER_Y = 128;
+const CAMERA_BASE_FOV = 50;
 const CAMERA_HEIGHT = 56;
 const CAMERA_BACK_OFFSET = 7.5;
 const CAMERA_LOOK_AHEAD = 18;
@@ -87,6 +88,9 @@ const INTRO_AUTO_SPEED = PLAYER_MAX_SPEED * 0.42;
 const PLAYER_IDLE_DRAG = 0.14;
 const PLAYER_ACTIVE_DRAG = 0.035;
 const PLAYER_BRAKE_DRAG = 0.002;
+const PLAYER_BRAKE_LIFT = 0.42;
+const PLAYER_BRAKE_PITCH = 0.26;
+const PLAYER_BRAKE_POSE_RESPONSE = 8.5;
 const PLAYER_MAX_ROLL = 0.82;
 const PLAYER_ROLL_TURN_WEIGHT = 0.78;
 const PLAYER_TURN_COMMAND_LIMIT = 1.35;
@@ -97,6 +101,15 @@ const PLAYER_HIT_PUSH_DURATION = 0.42;
 const PLAYER_HIT_ROLL_IMPULSE = 1.25;
 const PLAYER_HIT_YAW_IMPULSE = 0.34;
 const PLAYER_HIT_ROTATION_DAMPING = 6.5;
+const PLAYER_G_FORCE_SCALE = 30;
+const PLAYER_G_FORCE_ATTACK_RESPONSE = 15;
+const PLAYER_G_FORCE_RELEASE_RESPONSE = 3.2;
+const PLAYER_G_FORCE_CAMERA_ATTACK_RESPONSE = 12;
+const PLAYER_G_FORCE_CAMERA_RELEASE_RESPONSE = 4;
+const PLAYER_G_FORCE_FOV_REDUCTION = 4.5;
+const PLAYER_G_FORCE_ZOOM = 0.055;
+const PLAYER_G_FORCE_HEIGHT_ZOOM = 0.025;
+const PLAYER_G_FORCE_VIGNETTE = 0.95;
 const AFTERBURNER_MAX = 100;
 const AFTERBURNER_DRAIN = 34;
 const AFTERBURNER_RECHARGE = 18;
@@ -111,8 +124,8 @@ const MISSILE_LAUNCH_SPEED = PLAYER_MAX_SPEED * 0.28;
 const MISSILE_MAX_SPEED = PLAYER_MAX_SPEED * 0.56;
 const MISSILE_ACCELERATION = PLAYER_MAX_SPEED * 0.045;
 const MISSILE_FUEL_TIME = 4.8;
-const MISSILE_CRASH_DRAG = 0.09;
-const MISSILE_CRASH_FALL_SPEED = 3.4;
+const MISSILE_CRASH_FALL_SPEED = 2.2;
+const MISSILE_CRASH_GRAVITY = 4.8;
 const MISSILE_TURN_RATE_BASE = 1.35;
 const MISSILE_TURN_RATE_GROWTH = 0.045;
 const MISSILE_TURN_RATE_CAP = 1.2;
@@ -155,7 +168,7 @@ app.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x010604);
 
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 260);
+const camera = new THREE.PerspectiveCamera(CAMERA_BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 260);
 camera.position.set(0, 0, 26);
 camera.lookAt(0, 0, 0);
 
@@ -174,9 +187,9 @@ composer.setSize(window.innerWidth, window.innerHeight);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.63, // strength
-  0.6, // radius
-  0.16 // threshold
+  0.48, // strength
+  0.5, // radius
+  0.2 // threshold
 );
 composer.addPass(bloomPass);
 const afterburnerLensPass = new ShaderPass(makeAfterburnerLensShader());
@@ -237,6 +250,8 @@ const player = {
   altitude: FLIGHT_Z,
   heading: 0,
   bank: 0,
+  brakePose: 0,
+  gForce: 0,
   maxTurnRate: 1.65,
   invulnerable: 0,
   hitPush: new THREE.Vector2(),
@@ -312,6 +327,7 @@ for (let i = 0; i < REPLAY_MAX_MISSILES; i += 1) {
     renderPosition: new THREE.Vector3(),
     hasRenderPosition: false,
     activeId: null,
+    crashing: false,
   });
 }
 
@@ -386,8 +402,10 @@ const lensDirUv = new THREE.Vector2();
 const baseMissileDir = new THREE.Vector3(0, 1, 0);
 const yawAxis = new THREE.Vector3(0, 0, 1);
 const rollAxis = new THREE.Vector3(0, 1, 0);
+const pitchAxis = new THREE.Vector3(1, 0, 0);
 const scratchQuatA = new THREE.Quaternion();
 const scratchQuatB = new THREE.Quaternion();
+const scratchQuatC = new THREE.Quaternion();
 
 startButton.addEventListener('click', startRun);
 overlayStart.addEventListener('click', handleOverlayButton);
@@ -472,6 +490,8 @@ function startRun() {
   player.altitude = getPlayerFlightZ(player.pos.x, player.pos.y, 0, player.vel.length(), 0);
   player.heading = 0;
   player.bank = 0;
+  player.brakePose = 0;
+  player.gForce = 0;
   player.hitPush.set(0, 0);
   player.hitPushTimer = 0;
   player.hitRollVelocity = 0;
@@ -494,9 +514,12 @@ function startRun() {
   afterburnerLensPass.uniforms.uTime.value = 0;
   afterburnerLensPass.uniforms.uIntensity.value = 0;
   afterburnerLensPass.uniforms.uScreenChroma.value = 0;
+  afterburnerLensPass.uniforms.uVignette.value = 0;
   afterburnerLensPass.uniforms.uSampleCount.value = 0;
   cameraRig.position.set(player.pos.x, player.pos.y - 3.5, player.altitude + 9);
   cameraRig.lookAt.set(player.pos.x, player.pos.y + 2.5, player.altitude);
+  camera.fov = CAMERA_BASE_FOV;
+  camera.updateProjectionMatrix();
   camera.position.copy(cameraRig.position);
   startOverlay.classList.remove('run-end');
   startOverlay.classList.add('hide');
@@ -673,6 +696,7 @@ function recordReplayFrame(dt) {
       z: missile.altitude,
       vx: missile.vel.x,
       vy: missile.vel.y,
+      crashing: missile.crashing,
     });
   }
   replayBuffer.push({
@@ -769,6 +793,8 @@ function setLiveSceneVisible(visible) {
 
 function updatePlayer(dt) {
   const previousHeading = player.heading;
+  const previousVelX = player.vel.x;
+  const previousVelY = player.vel.y;
   const introActive = isIntroActive();
   const rollInput = introActive ? 0 : getRollInput();
   const accelerating = !introActive && (keys.has('KeyW') || keys.has('ArrowUp'));
@@ -837,14 +863,14 @@ function updatePlayer(dt) {
   }
   const impulseMaxSpeed = PLAYER_MAX_SPEED * AFTERBURNER_MAX_SPEED_MULT;
   if (player.vel.length() > impulseMaxSpeed) player.vel.setLength(impulseMaxSpeed);
+  const turnDelta = getSignedAngleDelta(previousHeading, player.heading);
+  const turnRate = turnDelta / Math.max(dt, 0.0001);
   player.pos.addScaledVector(player.vel, dt);
   const targetAltitude = getPlayerFlightZ(player.pos.x, player.pos.y, state.runTime, player.vel.length(), player.bank);
   player.altitude += (targetAltitude - player.altitude) * getDampingFactor(PLAYER_ALTITUDE_RESPONSE, dt);
   updateTargetGuide();
 
   player.invulnerable = Math.max(0, player.invulnerable - dt);
-  const turnDelta = getSignedAngleDelta(previousHeading, player.heading);
-  const turnRate = turnDelta / Math.max(dt, 0.0001);
   const yawBank = -turnRate * 0.28;
   const manualRoll = rollInput * PLAYER_MAX_ROLL;
   const desiredBank = THREE.MathUtils.clamp(yawBank + manualRoll, -PLAYER_MAX_ROLL, PLAYER_MAX_ROLL);
@@ -852,10 +878,19 @@ function updatePlayer(dt) {
   player.bank += player.hitRollVelocity * dt;
   player.hitRollVelocity *= Math.exp(-PLAYER_HIT_ROTATION_DAMPING * dt);
   player.bank = THREE.MathUtils.clamp(player.bank, -PLAYER_MAX_ROLL * 1.45, PLAYER_MAX_ROLL * 1.45);
-  player.mesh.position.set(player.pos.x, player.pos.y, player.altitude);
+  const velocityAcceleration = Math.hypot(player.vel.x - previousVelX, player.vel.y - previousVelY) / Math.max(dt, 0.0001);
+  const turnAcceleration = Math.abs(turnRate) * player.vel.length();
+  const measuredGForce = THREE.MathUtils.clamp(Math.hypot(velocityAcceleration * 0.8, turnAcceleration) / PLAYER_G_FORCE_SCALE, 0, 1);
+  const bankLoad = THREE.MathUtils.clamp(Math.abs(player.bank) / PLAYER_MAX_ROLL, 0, 1) * THREE.MathUtils.clamp(player.vel.length() / PLAYER_MAX_SPEED, 0, 1);
+  const targetGForce = introActive ? 0 : Math.max(measuredGForce, bankLoad);
+  const gForceResponse = targetGForce > player.gForce ? PLAYER_G_FORCE_ATTACK_RESPONSE : PLAYER_G_FORCE_RELEASE_RESPONSE;
+  player.gForce += (targetGForce - player.gForce) * getDampingFactor(gForceResponse, dt);
+  player.brakePose += ((braking && !introActive ? 1 : 0) - player.brakePose) * getDampingFactor(PLAYER_BRAKE_POSE_RESPONSE, dt);
+  player.mesh.position.set(player.pos.x, player.pos.y, player.altitude + player.brakePose * PLAYER_BRAKE_LIFT);
   scratchQuatA.setFromAxisAngle(yawAxis, player.heading);
-  scratchQuatB.setFromAxisAngle(rollAxis, player.bank);
-  player.mesh.quaternion.copy(scratchQuatA).multiply(scratchQuatB);
+  scratchQuatB.setFromAxisAngle(pitchAxis, player.brakePose * PLAYER_BRAKE_PITCH);
+  scratchQuatC.setFromAxisAngle(rollAxis, player.bank);
+  player.mesh.quaternion.copy(scratchQuatA).multiply(scratchQuatB).multiply(scratchQuatC);
   updateEngineTrails();
   setObjectOpacity(player.mesh, player.invulnerable > 0 ? 0.44 + Math.sin(state.runTime * 46) * 0.22 : 1);
 }
@@ -1223,7 +1258,7 @@ function addMissile(pos, vel) {
     lastTrailX: pos.x,
     lastTrailY: pos.y,
     fuel: MISSILE_FUEL_TIME + Math.random() * 1.7,
-    crashLife: 2.2,
+    crashFallSpeed: MISSILE_CRASH_FALL_SPEED,
     altitude: getMissileFlightZ(pos.x, pos.y) - 0.08,
     crashing: false,
     age: 0,
@@ -1252,15 +1287,16 @@ function updateMissiles(dt) {
       missile.fuel -= dt;
       if (missile.fuel <= 0) {
         missile.crashing = true;
-        missile.mesh.material.color.setHex(0xffae2b);
-        missile.trail.material.opacity = 0.46;
+        missile.crashFallSpeed = MISSILE_CRASH_FALL_SPEED + Math.random() * 1.1;
+        missile.mesh.material.color.setHex(0xff7a1f);
+        missile.trail.material.color.setHex(0xff7a1f);
+        missile.trail.material.opacity = 0.38;
       }
     }
 
     if (missile.crashing) {
-      missile.crashLife -= dt;
-      missile.vel.multiplyScalar(Math.pow(MISSILE_CRASH_DRAG, dt));
-      missile.altitude -= MISSILE_CRASH_FALL_SPEED * dt;
+      missile.crashFallSpeed += MISSILE_CRASH_GRAVITY * dt;
+      missile.altitude -= missile.crashFallSpeed * dt;
     } else {
       const spiralPhase = missile.age * missile.spiralFrequency + missile.spiralPhase;
       const weave = 0.35 + Math.min(0.65, missile.age * 1.8);
@@ -1285,7 +1321,7 @@ function updateMissiles(dt) {
     }
     missile.mesh.position.set(missile.pos.x, missile.pos.y, missile.altitude);
     orientMissile(missile.mesh, missile.vel);
-    updateTrail(missile);
+    if (!missile.crashing) updateTrail(missile);
 
     const playerDistanceSq = missile.pos.distanceToSquared(player.pos);
     if (playerDistanceSq < SHIELD_RADIUS * SHIELD_RADIUS) {
@@ -1320,7 +1356,6 @@ function updateMissiles(dt) {
 
     if (
       missile.altitude <= getTerrainZ(missile.pos.x, missile.pos.y) + 0.22 ||
-      missile.crashLife <= 0 ||
       missile.pos.x < player.pos.x - 90 ||
       missile.pos.x > player.pos.x + 90 ||
       missile.pos.y < player.pos.y - 90 ||
@@ -1756,14 +1791,24 @@ function render(dt) {
   const motion = cameraRig.motion;
 
   const speedRatio = THREE.MathUtils.clamp(player.vel.length() / PLAYER_MAX_SPEED, 0, 1);
+  const gForce = state.mode === 'playing' ? player.gForce : 0;
+  const targetFov = CAMERA_BASE_FOV - gForce * PLAYER_G_FORCE_FOV_REDUCTION;
+  const fovResponse = targetFov < camera.fov ? PLAYER_G_FORCE_CAMERA_ATTACK_RESPONSE : PLAYER_G_FORCE_CAMERA_RELEASE_RESPONSE;
+  const nextFov = camera.fov + (targetFov - camera.fov) * getDampingFactor(fovResponse, dt);
+  if (Math.abs(camera.fov - nextFov) > 0.001) {
+    camera.fov = nextFov;
+    camera.updateProjectionMatrix();
+  }
+  const gZoom = 1 - gForce * PLAYER_G_FORCE_ZOOM;
+  const gHeightZoom = 1 - gForce * PLAYER_G_FORCE_HEIGHT_ZOOM;
   const lead = ended ? 0 : CAMERA_LOOK_AHEAD + speedRatio * 14;
   const back = ended ? CAMERA_END_BACK_OFFSET : CAMERA_BACK_OFFSET + speedRatio * 8;
   cameraRig.introTimer = Math.max(0, cameraRig.introTimer - dt);
   const introProgress = 1 - cameraRig.introTimer / CAMERA_INTRO_DURATION;
   const introEase = introProgress * introProgress * (3 - 2 * introProgress);
-  const introBack = THREE.MathUtils.lerp(3.5, back, introEase);
+  const introBack = THREE.MathUtils.lerp(3.5, back, introEase) * gZoom;
   const targetHeight = ended ? CAMERA_END_HEIGHT : CAMERA_HEIGHT + speedRatio * 12;
-  const introHeight = THREE.MathUtils.lerp(9, targetHeight, introEase);
+  const introHeight = THREE.MathUtils.lerp(9, targetHeight, introEase) * gHeightZoom;
   const introLead = THREE.MathUtils.lerp(2.5, lead, introEase);
   const desiredFocus = desiredFocusVector.set(player.pos.x, player.pos.y);
   const threatFocus = getThreatFocus();
@@ -1776,8 +1821,8 @@ function render(dt) {
     const right = scratchV2b.set(motion.y, -motion.x);
     const desiredLateral = THREE.MathUtils.clamp(-player.bank / PLAYER_MAX_ROLL, -1, 1) * LIVE_CHASE_LATERAL_MAX;
     cameraRig.chaseLateralOffset += (desiredLateral - cameraRig.chaseLateralOffset) * getDampingFactor(LIVE_CHASE_LATERAL_RESPONSE, dt);
-    const chaseBack = THREE.MathUtils.lerp(4.8, LIVE_CHASE_BACK_DISTANCE + speedRatio * 3.2, introEase);
-    const chaseHeight = THREE.MathUtils.lerp(7.2, LIVE_CHASE_HEIGHT + speedRatio * 2.0, introEase);
+    const chaseBack = THREE.MathUtils.lerp(4.8, LIVE_CHASE_BACK_DISTANCE + speedRatio * 3.2, introEase) * gZoom;
+    const chaseHeight = THREE.MathUtils.lerp(7.2, LIVE_CHASE_HEIGHT + speedRatio * 2.0, introEase) * gHeightZoom;
     const desiredPosition = scratchV3.set(
       cameraRig.focus.x - motion.x * chaseBack + right.x * cameraRig.chaseLateralOffset,
       cameraRig.focus.y - motion.y * chaseBack + right.y * cameraRig.chaseLateralOffset,
@@ -1838,6 +1883,7 @@ function render(dt) {
     camera.lookAt(cameraRig.lookAt);
   }
   afterburnerLensPass.uniforms.uScreenChroma.value = shakeChroma;
+  afterburnerLensPass.uniforms.uVignette.value = gForce * PLAYER_G_FORCE_VIGNETTE;
   updateAfterburnerLens(dt, state.afterburnerActive, player.pos.x, player.pos.y, player.heading, player.altitude);
   composer.render();
   drawMinimap();
@@ -1875,6 +1921,10 @@ function renderReplay(dt) {
     replayMissile._seen = true;
     replayMissile.mesh.visible = true;
     replayMissile.trail.visible = true;
+    replayMissile.crashing = missile.crashing;
+    replayMissile.mesh.material.color.setHex(missile.crashing ? 0xff7a1f : 0xff2b2b);
+    replayMissile.trail.material.color.setHex(missile.crashing ? 0xff7a1f : 0xfff2d0);
+    replayMissile.trail.material.opacity = missile.crashing ? 0.38 : 0.72;
     scratchV3.set(missile.x, missile.y, missile.z);
     if (
       !replayMissile.hasRenderPosition ||
@@ -1889,13 +1939,14 @@ function renderReplay(dt) {
     scratchV2.set(missile.vx, missile.vy);
     if (scratchV2.lengthSq() < 0.0001) scratchV2.set(0, 1);
     orientMissile(replayMissile.mesh, scratchV2);
-    updateReplayMissileTrail(replayMissile);
+    updateReplayMissileTrail(replayMissile, missile.crashing);
   }
   for (const replayMissile of replay.missiles) {
     if (replayMissile._seen) continue;
     if (replayMissile.activeId !== null) replay.missileSlots.delete(replayMissile.activeId);
     replayMissile.activeId = null;
     replayMissile.hasRenderPosition = false;
+    replayMissile.crashing = false;
     replayMissile.mesh.visible = false;
     replayMissile.trail.visible = false;
     resetTrailBuffer(replayMissile);
@@ -1921,7 +1972,13 @@ function renderReplay(dt) {
   );
   replay.cameraLookAt.lerp(scratchV3, getDampingFactor(2.8, dt));
   camera.lookAt(replay.cameraLookAt);
+  const nextReplayFov = camera.fov + (CAMERA_BASE_FOV - camera.fov) * getDampingFactor(7.5, dt);
+  if (Math.abs(camera.fov - nextReplayFov) > 0.001) {
+    camera.fov = nextReplayFov;
+    camera.updateProjectionMatrix();
+  }
   afterburnerLensPass.uniforms.uScreenChroma.value = 0;
+  afterburnerLensPass.uniforms.uVignette.value = 0;
   updateAfterburnerLens(dt, frame.player.afterburner, frame.player.x, frame.player.y, frame.player.heading, replayPlayerZ);
   composer.render();
   drawMinimap();
@@ -1934,15 +1991,23 @@ function getReplayMissileSlot(id) {
   if (!slot) return null;
   slot.activeId = id;
   slot.hasRenderPosition = false;
+  slot.crashing = false;
+  slot.mesh.material.color.setHex(0xff2b2b);
+  slot.trail.material.color.setHex(0xfff2d0);
+  slot.trail.material.opacity = 0.72;
   resetTrailBuffer(slot);
   replay.missileSlots.set(id, slot);
   return slot;
 }
 
-function updateReplayMissileTrail(replayMissile) {
+function updateReplayMissileTrail(replayMissile, crashing = false) {
   const pointX = replayMissile.renderPosition.x;
   const pointY = replayMissile.renderPosition.y;
   const pointZ = replayMissile.renderPosition.z - 0.1;
+  if (crashing && replayMissile.hasTrailPoint) {
+    refreshTrailGeometry(replayMissile);
+    return;
+  }
   const dx = pointX - replayMissile.lastTrailX;
   const dy = pointY - replayMissile.lastTrailY;
   const dz = pointZ - replayMissile.lastTrailZ;
@@ -2031,6 +2096,7 @@ function interpolateReplayFrame(a, b, alpha) {
       z: THREE.MathUtils.lerp(ma.z, mb.z, alpha),
       vx: THREE.MathUtils.lerp(ma.vx, mb.vx, alpha),
       vy: THREE.MathUtils.lerp(ma.vy, mb.vy, alpha),
+      crashing: ma.crashing || mb.crashing,
     });
   }
   return { player: playerFrame, missiles: missileFrames };
@@ -2311,6 +2377,7 @@ function makeAfterburnerLensShader() {
       uTime: { value: 0 },
       uIntensity: { value: 0 },
       uScreenChroma: { value: 0 },
+      uVignette: { value: 0 },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -2335,6 +2402,7 @@ function makeAfterburnerLensShader() {
       uniform float uTime;
       uniform float uIntensity;
       uniform float uScreenChroma;
+      uniform float uVignette;
       varying vec2 vUv;
 
       void main() {
@@ -2393,7 +2461,10 @@ function makeAfterburnerLensShader() {
           texture2D(tDiffuse, uvB).b,
           base.a
         );
-        gl_FragColor = vec4(mix(base.rgb, refracted.rgb, clamp(lens * 1.28, 0.0, 0.96)), base.a);
+        float vignette = smoothstep(0.36, 0.88, length(screenP));
+        vec3 color = mix(base.rgb, refracted.rgb, clamp(lens * 1.28, 0.0, 0.96));
+        color *= 1.0 - vignette * uVignette;
+        gl_FragColor = vec4(color, base.a);
       }
     `,
   };
@@ -2406,6 +2477,7 @@ function resetAfterburnerLens() {
   afterburnerLens.samples.length = 0;
   afterburnerLensPass.uniforms.uTime.value = 0;
   afterburnerLensPass.uniforms.uIntensity.value = 0;
+  afterburnerLensPass.uniforms.uVignette.value = 0;
   afterburnerLensPass.uniforms.uSampleCount.value = 0;
 }
 
@@ -3280,32 +3352,53 @@ function makeTargetTower() {
   const group = new THREE.Group();
   const targetX = TARGET.x;
   const targetY = TARGET.y;
-  const baseZ = getTerrainZ(targetX, targetY) + 0.08;
-  const bodyMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffae2b,
-    transparent: true,
-    opacity: 0.26,
-    wireframe: true,
-  });
+  const terrainZ = getTerrainZ(targetX, targetY);
+  const orbZ = getPlayerFlightZ(targetX, targetY, 0, PLAYER_CRUISE_SPEED, 0) + 0.35;
   const edgeMaterial = new THREE.LineBasicMaterial({
     color: 0xffae2b,
     transparent: true,
-    opacity: 0.82,
+    opacity: 0.95,
     blending: THREE.AdditiveBlending,
   });
-  const tower = new THREE.Mesh(new THREE.BoxGeometry(4.4, 4.4, 3.0), bodyMaterial);
-  tower.position.set(targetX, targetY, baseZ + 1.5);
-  tower.rotation.z = Math.PI / 4;
-  group.add(tower);
+  const glowMaterial = new THREE.MeshBasicMaterial({
+    color: 0xfff0a8,
+    transparent: true,
+    opacity: 0.58,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const shellMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffae2b,
+    transparent: true,
+    opacity: 0.32,
+    wireframe: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
 
-  const towerTopZ = baseZ + 3.08;
-  for (const scale of [1, 1.55, 2.1]) {
-    const marker = makeRectLine(targetX, targetY, 4.4 * scale, 4.4 * scale, edgeMaterial, towerTopZ);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(1.15, 18, 12), glowMaterial);
+  core.position.set(targetX, targetY, orbZ);
+  group.add(core);
+
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(2.15, 18, 12), shellMaterial);
+  shell.position.set(targetX, targetY, orbZ);
+  group.add(shell);
+
+  for (const scale of [1.45, 2.25, 3.1]) {
+    const marker = makeRectLine(targetX, targetY, 2.4 * scale, 2.4 * scale, edgeMaterial, orbZ);
     marker.rotation.z = Math.PI / 4;
     group.add(marker);
   }
-  group.add(makeLine(targetX - 2.9, targetY, targetX + 2.9, targetY, edgeMaterial, towerTopZ));
-  group.add(makeLine(targetX, targetY - 2.9, targetX, targetY + 2.9, edgeMaterial, towerTopZ));
+  const verticalRing = makeRectLine(targetX, targetY, 4.4, 4.4, edgeMaterial, orbZ);
+  verticalRing.rotation.x = Math.PI / 2;
+  group.add(verticalRing);
+  const sideRing = makeRectLine(targetX, targetY, 4.4, 4.4, edgeMaterial, orbZ);
+  sideRing.rotation.y = Math.PI / 2;
+  group.add(sideRing);
+
+  group.add(makeLine(targetX - 4.2, targetY, targetX + 4.2, targetY, edgeMaterial, orbZ));
+  group.add(makeLine(targetX, targetY - 4.2, targetX, targetY + 4.2, edgeMaterial, orbZ));
+  group.add(makeLine3D(targetX, targetY, terrainZ + 0.18, targetX, targetY, orbZ - 2.25, edgeMaterial));
   return group;
 }
 
