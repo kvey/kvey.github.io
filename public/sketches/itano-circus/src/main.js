@@ -43,6 +43,13 @@ const FLARE_BURST_INTERVAL = 0.075;
 const GAME_SPEED = 1.75;
 const TARGET_RADIUS = 2.5;
 const TARGET = new THREE.Vector2(0, TARGET_Y);
+const TARGET_ADVANCE_MIN = 92;
+const TARGET_ADVANCE_MAX = 138;
+const TARGET_LATERAL_RANGE = 42;
+const TOWER_SCORE = 1600;
+const TOWER_STREAK_BONUS = 220;
+const FLARE_DEFENSE_SCORE = 180;
+const SHIELD_DEFENSE_SCORE = 90;
 const CHUNK_SIZE = 52;
 const CHUNK_RENDER_RADIUS = 4;
 const MAX_RENDER_PIXEL_RATIO = 1.5;
@@ -194,7 +201,8 @@ scene.add(city);
 const cityChunks = new Map();
 const neededChunkKeys = new Set();
 const launchPads = [];
-city.add(makeTargetTower());
+let targetTower = makeTargetTower();
+city.add(targetTower);
 const starField = makeStarField();
 scene.add(starField);
 const targetGuide = makeTargetGuide();
@@ -320,6 +328,7 @@ const state = {
   mode: 'ready',
   score: 0,
   wave: 1,
+  towersReached: 0,
   shield: SHIELD_MAX,
   flareCharges: 3,
   flareRecharge: 0,
@@ -417,6 +426,7 @@ function startRun() {
   state.mode = 'playing';
   state.score = 0;
   state.wave = 1;
+  state.towersReached = 0;
   state.shield = SHIELD_MAX;
   state.flareCharges = 3;
   state.flareRecharge = 0;
@@ -436,6 +446,7 @@ function startRun() {
   player.hitPushTimer = 0;
   player.hitRollVelocity = 0;
   player.hitYawVelocity = 0;
+  setTarget(0, TARGET_Y);
   for (const launcher of launchPads) resetLauncher(launcher);
   ensureCityChunks();
   cameraRig.focus.copy(player.pos);
@@ -504,23 +515,58 @@ function gameOver() {
   pauseButton.textContent = 'Pause';
 }
 
-function missionComplete() {
-  state.mode = 'complete';
-  state.afterburnerActive = false;
-  state.endTime = 0;
-  state.endOrbitAngle = Math.atan2(cameraRig.motion.y, cameraRig.motion.x);
-  startReplayPlayback();
-  state.score += 1500 + Math.max(0, state.shield) * 400;
+function reachTargetTower() {
+  const towerBonus = TOWER_SCORE + state.towersReached * TOWER_STREAK_BONUS + Math.max(0, state.shield) * 120;
+  state.score += towerBonus;
+  state.towersReached += 1;
+  state.wave = Math.max(state.wave, state.towersReached + 1);
+  spark(TARGET, 0xffae2b, 22, scratchV2.set(0, 1));
+  blastRing(TARGET, 0xffae2b, scratchV2.set(0, 1));
+  moveTargetTower();
+  updateTargetGuide();
   updateHud();
-  startOverlay.classList.add('run-end');
-  startOverlay.classList.remove('hide');
-  overlayControls?.classList.add('hide');
-  controlsPanel?.classList.add('hide');
-  startOverlay.querySelector('h1').textContent = 'Target Reached';
-  startOverlay.querySelector('p').textContent = `Score ${Math.floor(state.score)}. You reached the tower with ${Math.max(0, Math.ceil(state.shield))} shield charges.`;
-  overlayStart.textContent = 'Run Again';
-  startButton.textContent = 'Restart';
-  pauseButton.textContent = 'Pause';
+}
+
+function moveTargetTower() {
+  const forward = scratchV2.copy(player.vel);
+  if (forward.lengthSq() > 0.1) {
+    forward.normalize();
+  } else {
+    forward.set(-Math.sin(player.heading), Math.cos(player.heading));
+  }
+  const right = scratchV2b.set(forward.y, -forward.x);
+  const advance = TARGET_ADVANCE_MIN + Math.random() * (TARGET_ADVANCE_MAX - TARGET_ADVANCE_MIN);
+  let bestX = player.pos.x + forward.x * advance;
+  let bestY = player.pos.y + forward.y * advance;
+  let bestScore = -Infinity;
+  for (let i = 0; i < 9; i += 1) {
+    const lateral = (Math.random() - 0.5) * TARGET_LATERAL_RANGE * (i === 0 ? 0.3 : 1);
+    const extraForward = (Math.random() - 0.25) * 18;
+    const x = player.pos.x + forward.x * (advance + extraForward) + right.x * lateral;
+    const y = player.pos.y + forward.y * (advance + extraForward) + right.y * lateral;
+    if (y < CITY_EDGE_Y + 24) continue;
+    const riverPenalty = isInRiver(x, y, 6.5) ? 1 : 0;
+    const roadPenalty = isNearRoad(x, y, 1.0) ? 0.35 : 0;
+    const densityScore = getDensity(x, y);
+    const distanceScore = Math.hypot(x - TARGET.x, y - TARGET.y) * 0.004;
+    const score = densityScore + distanceScore - riverPenalty - roadPenalty;
+    if (score > bestScore) {
+      bestScore = score;
+      bestX = x;
+      bestY = y;
+    }
+  }
+  setTarget(bestX, bestY);
+}
+
+function setTarget(x, y) {
+  TARGET.set(x, y);
+  if (targetTower) {
+    city.remove(targetTower);
+    disposeObjectTree(targetTower);
+  }
+  targetTower = makeTargetTower();
+  city.add(targetTower);
 }
 
 function clearRun() {
@@ -562,7 +608,6 @@ function animate() {
 
 function update(dt) {
   state.runTime += dt;
-  state.score += dt * 10 + player.vel.length() * dt * 3.6 + Math.max(0, state.wave - 1) * dt * 3;
 
   updatePlayer(dt);
   ensureCityChunks();
@@ -574,7 +619,7 @@ function update(dt) {
   updateHud();
   recordReplayFrame(dt);
 
-  if (player.pos.distanceToSquared(TARGET) <= TARGET_RADIUS * TARGET_RADIUS) missionComplete();
+  if (player.pos.distanceToSquared(TARGET) <= TARGET_RADIUS * TARGET_RADIUS) reachTargetTower();
 }
 
 function recordReplayFrame(dt) {
@@ -1145,7 +1190,6 @@ function addMissile(pos, vel) {
     spiralSide: Math.random() < 0.5 ? -1 : 1,
     spiralStrength: MISSILE_SPIRAL_STRENGTH * (0.72 + Math.random() * 0.56),
     turnRate: MISSILE_TURN_RATE_BASE + Math.min(MISSILE_TURN_RATE_CAP, state.wave * MISSILE_TURN_RATE_GROWTH) + Math.random() * 0.55,
-    scoredNear: false,
   });
   trailRawPositions[0] = pos.x;
   trailRawPositions[1] = pos.y;
@@ -1197,18 +1241,13 @@ function updateMissiles(dt) {
     updateTrail(missile);
 
     const playerDistanceSq = missile.pos.distanceToSquared(player.pos);
-    if (!missile.scoredNear && playerDistanceSq < 1.05 * 1.05) {
-      missile.scoredNear = true;
-      state.score += 75 + state.wave * 5;
-      spark(missile.pos, 0x86ffb0, 10);
-    }
-
     if (playerDistanceSq < SHIELD_RADIUS * SHIELD_RADIUS) {
       placeMissileAtShieldImpact(missile);
       triggerCameraShake(missile);
       applyShipExplosionImpulse(missile);
       shieldImpactVisual(missile.pos);
       if (state.shield > 0) {
+        state.score += SHIELD_DEFENSE_SCORE;
         state.shield -= 1;
       } else {
         gameOver();
@@ -1227,7 +1266,7 @@ function updateMissiles(dt) {
       }
     }
     if (flareHit) {
-      state.score += 110;
+      state.score += FLARE_DEFENSE_SCORE;
       explodeMissile(i, 0xffae2b, 18);
       continue;
     }
@@ -1240,7 +1279,6 @@ function updateMissiles(dt) {
       missile.pos.y < player.pos.y - 90 ||
       missile.pos.y > player.pos.y + 130
     ) {
-      state.score += 18;
       explodeMissile(i, 0xfff2d0, 24);
     }
   }
@@ -3081,7 +3119,9 @@ function addBridgeBatch(batch, y) {
 
 function makeTargetTower() {
   const group = new THREE.Group();
-  const baseZ = getTerrainZ(0, TARGET_Y) + 0.08;
+  const targetX = TARGET.x;
+  const targetY = TARGET.y;
+  const baseZ = getTerrainZ(targetX, targetY) + 0.08;
   const bodyMaterial = new THREE.MeshBasicMaterial({
     color: 0xffae2b,
     transparent: true,
@@ -3095,18 +3135,18 @@ function makeTargetTower() {
     blending: THREE.AdditiveBlending,
   });
   const tower = new THREE.Mesh(new THREE.BoxGeometry(4.4, 4.4, 3.0), bodyMaterial);
-  tower.position.set(0, TARGET_Y, baseZ + 1.5);
+  tower.position.set(targetX, targetY, baseZ + 1.5);
   tower.rotation.z = Math.PI / 4;
   group.add(tower);
 
   const towerTopZ = baseZ + 3.08;
   for (const scale of [1, 1.55, 2.1]) {
-    const marker = makeRectLine(0, TARGET_Y, 4.4 * scale, 4.4 * scale, edgeMaterial, towerTopZ);
+    const marker = makeRectLine(targetX, targetY, 4.4 * scale, 4.4 * scale, edgeMaterial, towerTopZ);
     marker.rotation.z = Math.PI / 4;
     group.add(marker);
   }
-  group.add(makeLine(-2.9, TARGET_Y, 2.9, TARGET_Y, edgeMaterial, towerTopZ));
-  group.add(makeLine(0, TARGET_Y - 2.9, 0, TARGET_Y + 2.9, edgeMaterial, towerTopZ));
+  group.add(makeLine(targetX - 2.9, targetY, targetX + 2.9, targetY, edgeMaterial, towerTopZ));
+  group.add(makeLine(targetX, targetY - 2.9, targetX, targetY + 2.9, edgeMaterial, towerTopZ));
   return group;
 }
 
