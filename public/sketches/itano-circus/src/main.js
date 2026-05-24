@@ -44,9 +44,13 @@ const FLARE_BURST_INTERVAL = 0.075;
 const GAME_SPEED = 1.75;
 const TARGET_RADIUS = 2.5;
 const TARGET = new THREE.Vector2(0, TARGET_Y);
-const TARGET_ADVANCE_MIN = 92;
-const TARGET_ADVANCE_MAX = 138;
-const TARGET_LATERAL_RANGE = 42;
+const TARGET_RELOCATE_MIN_DISTANCE = 58;
+const TARGET_RELOCATE_MAX_DISTANCE = 126;
+const TARGET_RELOCATE_ATTEMPTS = 18;
+const TARGET_BUILDING_CLEARANCE = 3.2;
+const TARGET_ALIGN_ASSIST_RANGE = 34;
+const TARGET_ALIGN_ASSIST_TURN_RATE = 0.72;
+const TARGET_ALIGN_ASSIST_MANUAL_REDUCTION = 0.42;
 const TOWER_SCORE = 1600;
 const TOWER_STREAK_BONUS = 220;
 const FLARE_DEFENSE_SCORE = 180;
@@ -77,13 +81,16 @@ const CAMERA_END_BACK_OFFSET = 2.2;
 const CAMERA_END_ORBIT_SPEED = 0.24;
 const CAMERA_SHAKE_DURATION = 0.34;
 const CAMERA_SHAKE_STRENGTH = 0.82;
+const AFTERBURNER_IGNITION_SHAKE_DURATION = 0.22;
+const AFTERBURNER_IGNITION_SHAKE_STRENGTH = 0.36;
 const PLAYER_ACCELERATION = 62.5;
 const PLAYER_ASSIST_ACCELERATION = 27.5;
 const PLAYER_MAX_SPEED = 52;
-const PLAYER_THROTTLE_SPEED = PLAYER_MAX_SPEED * 0.62;
+const PLAYER_THROTTLE_SPEED = PLAYER_MAX_SPEED * 0.535;
 const PLAYER_CRUISE_SPEED = PLAYER_THROTTLE_SPEED * 0.5;
 const PLAYER_BRAKE_SPEED = PLAYER_CRUISE_SPEED * 0.62;
 const PLAYER_SPEED_MATCH_RATE = 2.35;
+const PLAYER_AFTERBURNER_DECEL_RATE = 12;
 const INTRO_AUTO_SPEED = PLAYER_MAX_SPEED * 0.42;
 const PLAYER_IDLE_DRAG = 0.14;
 const PLAYER_ACTIVE_DRAG = 0.035;
@@ -98,6 +105,7 @@ const PLAYER_MIN_TURN_SCALE = 0.42;
 const PLAYER_SPEED_TURN_GAIN = 1.55;
 const PLAYER_HIT_IMPULSE = 12;
 const PLAYER_HIT_PUSH_DURATION = 0.42;
+const PLAYER_INVULNERABLE_DURATION = 1.05;
 const PLAYER_HIT_ROLL_IMPULSE = 1.25;
 const PLAYER_HIT_YAW_IMPULSE = 0.34;
 const PLAYER_HIT_ROTATION_DAMPING = 6.5;
@@ -121,20 +129,26 @@ const AFTERBURNER_LENS_SAMPLES = 8;
 const AFTERBURNER_LENS_EMIT_INTERVAL = 0.045;
 const AFTERBURNER_LENS_SAMPLE_LIFE = 0.62;
 const MISSILE_LAUNCH_SPEED = PLAYER_MAX_SPEED * 0.28;
-const MISSILE_MAX_SPEED = PLAYER_MAX_SPEED * 0.56;
-const MISSILE_ACCELERATION = PLAYER_MAX_SPEED * 0.045;
+const MISSILE_MAX_SPEED = PLAYER_MAX_SPEED * 0.59;
+const MISSILE_ACCELERATION = PLAYER_MAX_SPEED * 0.07;
 const MISSILE_FUEL_TIME = 4.8;
 const MISSILE_CRASH_FALL_SPEED = 2.2;
 const MISSILE_CRASH_GRAVITY = 4.8;
-const MISSILE_TURN_RATE_BASE = 1.35;
-const MISSILE_TURN_RATE_GROWTH = 0.045;
-const MISSILE_TURN_RATE_CAP = 1.2;
+const MISSILE_TURN_RATE_BASE = 2.25;
+const MISSILE_TURN_RATE_GROWTH = 0.065;
+const MISSILE_TURN_RATE_CAP = 1.6;
+const MISSILE_MIN_TURN_RADIUS = 24;
+const MISSILE_PRO_NAV_GAIN = 2.35;
+const MISSILE_TAIL_CHASE_BLEND = 0.68;
+const MISSILE_LEAD_TIME_MIN = 0.18;
+const MISSILE_LEAD_TIME_MAX = 2.4;
 const MISSILE_SPIRAL_STRENGTH = 0.42;
 const MISSILE_SPIRAL_VERTICAL_STRENGTH = 0.72;
 const MISSILE_SPIRAL_FREQUENCY_MIN = 5.2;
 const MISSILE_SPIRAL_FREQUENCY_MAX = 8.7;
 const LAUNCH_WARNING_TIME = 18 / PLAYER_MAX_SPEED;
 const LAUNCH_FLASH_RATE = 18;
+const LAUNCH_EFFECT_LIFE = 0.28;
 const LAUNCHER_STAGGER_TIME = LAUNCH_WARNING_TIME * 0.035;
 const LAUNCHER_SHOT_COOLDOWN = LAUNCH_WARNING_TIME * 0.22;
 const LAUNCH_ENGAGE_RADIUS = PLAYER_MAX_SPEED * 3.1;
@@ -252,6 +266,7 @@ const player = {
   bank: 0,
   brakePose: 0,
   gForce: 0,
+  speedLimit: PLAYER_THROTTLE_SPEED,
   maxTurnRate: 1.65,
   invulnerable: 0,
   hitPush: new THREE.Vector2(),
@@ -325,6 +340,7 @@ for (let i = 0; i < REPLAY_MAX_MISSILES; i += 1) {
     lastTrailY: 0,
     lastTrailZ: 0,
     renderPosition: new THREE.Vector3(),
+    lastVelocity: new THREE.Vector2(0, 1),
     hasRenderPosition: false,
     activeId: null,
     crashing: false,
@@ -492,6 +508,8 @@ function startRun() {
   player.bank = 0;
   player.brakePose = 0;
   player.gForce = 0;
+  player.speedLimit = PLAYER_THROTTLE_SPEED;
+  player.invulnerable = 0;
   player.hitPush.set(0, 0);
   player.hitPushTimer = 0;
   player.hitRollVelocity = 0;
@@ -587,26 +605,51 @@ function moveTargetTower() {
   } else {
     forward.set(-Math.sin(player.heading), Math.cos(player.heading));
   }
-  const right = scratchV2b.set(forward.y, -forward.x);
-  const advance = TARGET_ADVANCE_MIN + Math.random() * (TARGET_ADVANCE_MAX - TARGET_ADVANCE_MIN);
-  let bestX = player.pos.x + forward.x * advance;
-  let bestY = player.pos.y + forward.y * advance;
+  const minY = CITY_EDGE_Y + 24;
+  const distanceSpan = TARGET_RELOCATE_MAX_DISTANCE - TARGET_RELOCATE_MIN_DISTANCE;
+  const idealDistance = (TARGET_RELOCATE_MIN_DISTANCE + TARGET_RELOCATE_MAX_DISTANCE) * 0.5;
+  let bestX = player.pos.x + forward.x * idealDistance;
+  let bestY = Math.max(minY, player.pos.y + forward.y * idealDistance);
   let bestScore = -Infinity;
-  for (let i = 0; i < 9; i += 1) {
-    const lateral = (Math.random() - 0.5) * TARGET_LATERAL_RANGE * (i === 0 ? 0.3 : 1);
-    const extraForward = (Math.random() - 0.25) * 18;
-    const x = player.pos.x + forward.x * (advance + extraForward) + right.x * lateral;
-    const y = player.pos.y + forward.y * (advance + extraForward) + right.y * lateral;
-    if (y < CITY_EDGE_Y + 24) continue;
+  for (let i = 0; i < TARGET_RELOCATE_ATTEMPTS; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = TARGET_RELOCATE_MIN_DISTANCE + Math.random() * distanceSpan;
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const x = player.pos.x + dirX * distance;
+    const y = player.pos.y + dirY * distance;
+    if (y < minY) continue;
+    if (isInsideBuildingFootprint(x, y, TARGET_BUILDING_CLEARANCE)) continue;
     const riverPenalty = isInRiver(x, y, 6.5) ? 1 : 0;
     const roadPenalty = isNearRoad(x, y, 1.0) ? 0.35 : 0;
     const densityScore = getDensity(x, y);
+    const saneDistanceScore = 1 - Math.abs(distance - idealDistance) / Math.max(1, distanceSpan * 0.5);
+    const forwardScore = (dirX * forward.x + dirY * forward.y) * 0.08;
     const distanceScore = Math.hypot(x - TARGET.x, y - TARGET.y) * 0.004;
-    const score = densityScore + distanceScore - riverPenalty - roadPenalty;
+    const score = densityScore + saneDistanceScore * 0.3 + distanceScore + forwardScore - riverPenalty - roadPenalty;
     if (score > bestScore) {
       bestScore = score;
       bestX = x;
       bestY = y;
+    }
+  }
+  if (bestScore === -Infinity) {
+    const fallbackDistances = [
+      idealDistance,
+      TARGET_RELOCATE_MIN_DISTANCE,
+      TARGET_RELOCATE_MAX_DISTANCE,
+    ];
+    fallbackSearch:
+    for (const distance of fallbackDistances) {
+      for (let i = 0; i < 16; i += 1) {
+        const angle = (i / 16) * Math.PI * 2;
+        const x = player.pos.x + Math.cos(angle) * distance;
+        const y = player.pos.y + Math.sin(angle) * distance;
+        if (y < minY || isInRiver(x, y, 6.5) || isInsideBuildingFootprint(x, y, TARGET_BUILDING_CLEARANCE)) continue;
+        bestX = x;
+        bestY = y;
+        break fallbackSearch;
+      }
     }
   }
   setTarget(bestX, bestY);
@@ -642,6 +685,7 @@ function clearRun() {
     if (particle.ring) scene.remove(particle.ring);
     if (particle.flareBurst) scene.remove(particle.flareBurst);
     if (particle.flareBurstGroup) scene.remove(particle.flareBurstGroup);
+    if (particle.launchFlash) disposeLaunchFlashParticle(particle);
     if (particle.shieldBubble) scene.remove(particle.shieldBubble);
     if (particle.shieldContact) scene.remove(particle.shieldContact);
   }
@@ -785,6 +829,7 @@ function setLiveSceneVisible(visible) {
     if (particle.ring) particle.ring.visible = visible;
     if (particle.flareBurst) particle.flareBurst.visible = visible;
     if (particle.flareBurstGroup) particle.flareBurstGroup.visible = visible;
+    if (particle.launchFlash) particle.launchFlash.visible = visible;
     if (particle.shieldBubble) particle.shieldBubble.visible = visible;
     if (particle.shieldContact) particle.shieldContact.visible = visible;
   }
@@ -801,7 +846,11 @@ function updatePlayer(dt) {
   const braking = !introActive && (keys.has('KeyS') || keys.has('ArrowDown'));
   const requestingAfterburner = !introActive && accelerating && (keys.has('ShiftLeft') || keys.has('ShiftRight'));
   const wantsAfterburner = requestingAfterburner && state.afterburner > 0;
+  const wasAfterburnerActive = state.afterburnerActive;
   state.afterburnerActive = wantsAfterburner;
+  if (state.afterburnerActive && !wasAfterburnerActive) {
+    triggerAfterburnerShake();
+  }
   if (wantsAfterburner) {
     state.afterburner = Math.max(0, state.afterburner - AFTERBURNER_DRAIN * dt);
     state.afterburnerRechargeDelay = AFTERBURNER_RECHARGE_DELAY;
@@ -825,6 +874,9 @@ function updatePlayer(dt) {
   }
   player.heading += player.hitYawVelocity * dt;
   player.hitYawVelocity *= Math.exp(-PLAYER_HIT_ROTATION_DAMPING * dt);
+  if (!introActive) {
+    applyTargetAlignmentAssist(dt, rollInput);
+  }
 
   const forward = scratchV2.set(-Math.sin(player.heading), Math.cos(player.heading));
   if (introActive) {
@@ -854,14 +906,20 @@ function updatePlayer(dt) {
     const minSpeed = braking ? PLAYER_BRAKE_SPEED : PLAYER_CRUISE_SPEED;
     if (player.vel.length() < minSpeed) player.vel.setLength(minSpeed);
   }
-  const maxSpeed = PLAYER_MAX_SPEED * (state.afterburnerActive ? AFTERBURNER_MAX_SPEED_MULT : 1);
+  const sustainedMaxSpeed = state.afterburnerActive ? PLAYER_MAX_SPEED * AFTERBURNER_MAX_SPEED_MULT : PLAYER_THROTTLE_SPEED;
+  if (state.afterburnerActive || player.speedLimit < sustainedMaxSpeed) {
+    player.speedLimit = sustainedMaxSpeed;
+  } else {
+    player.speedLimit = Math.max(sustainedMaxSpeed, player.speedLimit - PLAYER_AFTERBURNER_DECEL_RATE * dt);
+  }
+  const maxSpeed = player.speedLimit;
   if (player.vel.length() > maxSpeed) player.vel.setLength(maxSpeed);
   if (player.hitPushTimer > 0) {
     const pushStrength = player.hitPushTimer / PLAYER_HIT_PUSH_DURATION;
     player.vel.addScaledVector(player.hitPush, pushStrength * dt);
     player.hitPushTimer = Math.max(0, player.hitPushTimer - dt);
   }
-  const impulseMaxSpeed = PLAYER_MAX_SPEED * AFTERBURNER_MAX_SPEED_MULT;
+  const impulseMaxSpeed = player.speedLimit;
   if (player.vel.length() > impulseMaxSpeed) player.vel.setLength(impulseMaxSpeed);
   const turnDelta = getSignedAngleDelta(previousHeading, player.heading);
   const turnRate = turnDelta / Math.max(dt, 0.0001);
@@ -878,11 +936,17 @@ function updatePlayer(dt) {
   player.bank += player.hitRollVelocity * dt;
   player.hitRollVelocity *= Math.exp(-PLAYER_HIT_ROTATION_DAMPING * dt);
   player.bank = THREE.MathUtils.clamp(player.bank, -PLAYER_MAX_ROLL * 1.45, PLAYER_MAX_ROLL * 1.45);
-  const velocityAcceleration = Math.hypot(player.vel.x - previousVelX, player.vel.y - previousVelY) / Math.max(dt, 0.0001);
-  const turnAcceleration = Math.abs(turnRate) * player.vel.length();
-  const measuredGForce = THREE.MathUtils.clamp(Math.hypot(velocityAcceleration * 0.8, turnAcceleration) / PLAYER_G_FORCE_SCALE, 0, 1);
-  const bankLoad = THREE.MathUtils.clamp(Math.abs(player.bank) / PLAYER_MAX_ROLL, 0, 1) * THREE.MathUtils.clamp(player.vel.length() / PLAYER_MAX_SPEED, 0, 1);
-  const targetGForce = introActive ? 0 : Math.max(measuredGForce, bankLoad);
+  const currentSpeed = player.vel.length();
+  const previousSpeed = Math.hypot(previousVelX, previousVelY);
+  const previousVelocityAngle = previousSpeed > 0.001 ? Math.atan2(previousVelY, previousVelX) : player.heading;
+  const currentVelocityAngle = currentSpeed > 0.001 ? Math.atan2(player.vel.y, player.vel.x) : player.heading;
+  const pathTurnRate = Math.abs(getSignedAngleDelta(previousVelocityAngle, currentVelocityAngle)) / Math.max(dt, 0.0001);
+  const pathTurnAcceleration = pathTurnRate * (previousSpeed + currentSpeed) * 0.5;
+  const headingTurnAcceleration = Math.abs(turnRate) * currentSpeed;
+  const speedChangeAcceleration = Math.abs(currentSpeed - previousSpeed) / Math.max(dt, 0.0001);
+  const turnAcceleration = Math.max(pathTurnAcceleration, headingTurnAcceleration * 0.72);
+  const measuredGForce = THREE.MathUtils.clamp((turnAcceleration + speedChangeAcceleration * 0.18) / PLAYER_G_FORCE_SCALE, 0, 1);
+  const targetGForce = introActive ? 0 : measuredGForce;
   const gForceResponse = targetGForce > player.gForce ? PLAYER_G_FORCE_ATTACK_RESPONSE : PLAYER_G_FORCE_RELEASE_RESPONSE;
   player.gForce += (targetGForce - player.gForce) * getDampingFactor(gForceResponse, dt);
   player.brakePose += ((braking && !introActive ? 1 : 0) - player.brakePose) * getDampingFactor(PLAYER_BRAKE_POSE_RESPONSE, dt);
@@ -900,6 +964,29 @@ function getRollInput() {
   if (keys.has('KeyQ') || keys.has('KeyD') || keys.has('ArrowLeft')) roll += 1;
   if (keys.has('KeyE') || keys.has('KeyA') || keys.has('ArrowRight')) roll -= 1;
   return roll;
+}
+
+function applyTargetAlignmentAssist(dt, rollInput) {
+  const toTargetX = TARGET.x - player.pos.x;
+  const toTargetY = TARGET.y - player.pos.y;
+  const distanceSq = toTargetX * toTargetX + toTargetY * toTargetY;
+  const rangeSq = TARGET_ALIGN_ASSIST_RANGE * TARGET_ALIGN_ASSIST_RANGE;
+  if (distanceSq > rangeSq || distanceSq < 0.0001) return;
+
+  const distance = Math.sqrt(distanceSq);
+  const desiredHeading = Math.atan2(-toTargetX, toTargetY);
+  const headingDelta = getSignedAngleDelta(player.heading, desiredHeading);
+  const forwardX = -Math.sin(player.heading);
+  const forwardY = Math.cos(player.heading);
+  const targetDot = (forwardX * toTargetX + forwardY * toTargetY) / distance;
+  if (targetDot < -0.18) return;
+
+  const proximity = 1 - THREE.MathUtils.smoothstep(distance, TARGET_RADIUS, TARGET_ALIGN_ASSIST_RANGE);
+  const manualScale = rollInput === 0 || Math.sign(headingDelta) === -Math.sign(rollInput)
+    ? 1
+    : TARGET_ALIGN_ASSIST_MANUAL_REDUCTION;
+  const assistTurn = TARGET_ALIGN_ASSIST_TURN_RATE * proximity * manualScale * dt;
+  player.heading += THREE.MathUtils.clamp(headingDelta, -assistTurn, assistTurn);
 }
 
 function setObjectOpacity(object, opacity) {
@@ -973,14 +1060,15 @@ function spawnCityChunk(cx, cy) {
   const rng = makeChunkRng(cx, cy);
   const chunkGroup = new THREE.Group();
   const pads = [];
+  const buildings = [];
   chunkGroup.add(makeTerrainMap(cx, cy));
   chunkGroup.add(makeNeonGrid(cx, cy, rng));
-  chunkGroup.add(makeCityBlocks(cx, cy, rng, pads));
+  chunkGroup.add(makeCityBlocks(cx, cy, rng, pads, buildings));
   mergeStaticChunkLines(chunkGroup);
   freezeStaticObject(chunkGroup);
   launchPads.push(...pads);
   city.add(chunkGroup);
-  cityChunks.set(key, { group: chunkGroup, pads });
+  cityChunks.set(key, { group: chunkGroup, pads, buildings });
 }
 
 function getChunkKey(cx, cy) {
@@ -1215,7 +1303,7 @@ function fireLauncher(launcher) {
   const angle = Math.atan2(aimY, aimX) + (Math.random() - 0.5) * LAUNCHER_ANGLE_SPREAD;
   const speed = MISSILE_LAUNCH_SPEED + Math.min(PLAYER_MAX_SPEED * 0.16, state.wave * 0.85) + Math.random() * PLAYER_MAX_SPEED * 0.08;
   const vel = new THREE.Vector2(Math.cos(angle), Math.sin(angle)).multiplyScalar(speed);
-  spark(pos, 0xffffff, 8, scratchV2b.copy(vel).normalize());
+  rocketLaunchEffect(pos, vel);
   addMissile(pos, vel);
   launcher.ammo -= 1;
   if (launcher.ammo <= 0) {
@@ -1300,14 +1388,15 @@ function updateMissiles(dt) {
     } else {
       const spiralPhase = missile.age * missile.spiralFrequency + missile.spiralPhase;
       const weave = 0.35 + Math.min(0.65, missile.age * 1.8);
-      scratchV2.copy(chooseMissileTarget(missile.pos)).sub(missile.pos);
+      getMissileInterceptDirection(missile, scratchV2);
       if (scratchV2.lengthSq() > 0.0001) {
-        scratchV2.normalize();
         const lateral = Math.sin(spiralPhase) * missile.spiralStrength * missile.spiralSide;
         const targetX = scratchV2.x;
         const targetY = scratchV2.y;
         scratchV2.set(targetX - targetY * lateral * weave, targetY + targetX * lateral * weave).normalize();
-        rotateVelocityToward(missile.vel, scratchV2, missile.turnRate * dt);
+        const speed = Math.max(0.001, missile.vel.length());
+        const radiusLimitedTurnRate = speed / MISSILE_MIN_TURN_RADIUS;
+        rotateVelocityToward(missile.vel, scratchV2, Math.min(missile.turnRate, radiusLimitedTurnRate) * dt);
       }
       const speed = missile.vel.length();
       missile.vel.setLength(Math.min(MISSILE_MAX_SPEED, speed + dt * MISSILE_ACCELERATION));
@@ -1325,6 +1414,10 @@ function updateMissiles(dt) {
 
     const playerDistanceSq = missile.pos.distanceToSquared(player.pos);
     if (playerDistanceSq < SHIELD_RADIUS * SHIELD_RADIUS) {
+      if (player.invulnerable > 0) {
+        explodeMissile(i, 0x86fff0, 14);
+        continue;
+      }
       placeMissileAtShieldImpact(missile);
       triggerCameraShake(missile);
       applyShipExplosionImpulse(missile);
@@ -1335,7 +1428,7 @@ function updateMissiles(dt) {
       } else {
         gameOver();
       }
-      player.invulnerable = 0.85;
+      player.invulnerable = PLAYER_INVULNERABLE_DURATION;
       explodeMissile(i, 0xff4d3a, 34);
       if (state.mode !== 'playing') return;
       continue;
@@ -1367,16 +1460,69 @@ function updateMissiles(dt) {
 }
 
 function chooseMissileTarget(pos) {
-  let best = player.pos;
+  let best = player;
   let bestD = Infinity;
   for (const flare of flares) {
     const d = flare.pos.distanceToSquared(pos);
     if (d < bestD && d < 115) {
       bestD = d;
-      best = flare.pos;
+      best = flare;
     }
   }
   return best;
+}
+
+function getMissileInterceptDirection(missile, out) {
+  const target = chooseMissileTarget(missile.pos);
+  const targetPos = target.pos;
+  const targetVel = target.vel || scratchV2b.set(0, 0);
+  const relX = targetPos.x - missile.pos.x;
+  const relY = targetPos.y - missile.pos.y;
+  const relVx = targetVel.x - missile.vel.x;
+  const relVy = targetVel.y - missile.vel.y;
+  const missileSpeed = Math.max(MISSILE_LAUNCH_SPEED, missile.vel.length());
+  const leadTime = getInterceptLeadTime(relX, relY, relVx, relVy, missileSpeed);
+  out.set(
+    relX + targetVel.x * leadTime,
+    relY + targetVel.y * leadTime
+  );
+  out.lerp(scratchV2b.set(relX, relY), MISSILE_TAIL_CHASE_BLEND);
+  if (out.lengthSq() < 0.0001) {
+    out.set(relX, relY);
+  }
+  if (out.lengthSq() < 0.0001) {
+    out.copy(missile.vel);
+  }
+  const rangeSq = Math.max(0.0001, relX * relX + relY * relY);
+  const losRate = (relX * relVy - relY * relVx) / rangeSq;
+  const pnAngle = THREE.MathUtils.clamp(MISSILE_PRO_NAV_GAIN * losRate * leadTime, -0.62, 0.62);
+  const cos = Math.cos(pnAngle);
+  const sin = Math.sin(pnAngle);
+  const x = out.x;
+  const y = out.y;
+  out.set(x * cos - y * sin, x * sin + y * cos);
+  return out.normalize();
+}
+
+function getInterceptLeadTime(relX, relY, relVx, relVy, missileSpeed) {
+  const a = relVx * relVx + relVy * relVy - missileSpeed * missileSpeed;
+  const b = 2 * (relX * relVx + relY * relVy);
+  const c = relX * relX + relY * relY;
+  let t = c / Math.max(1, missileSpeed * missileSpeed);
+  if (Math.abs(a) < 0.0001) {
+    if (Math.abs(b) > 0.0001) t = -c / b;
+  } else {
+    const disc = b * b - 4 * a * c;
+    if (disc >= 0) {
+      const root = Math.sqrt(disc);
+      const t0 = (-b - root) / (2 * a);
+      const t1 = (-b + root) / (2 * a);
+      if (t0 > 0 && t1 > 0) t = Math.min(t0, t1);
+      else if (t0 > 0) t = t0;
+      else if (t1 > 0) t = t1;
+    }
+  }
+  return THREE.MathUtils.clamp(t, MISSILE_LEAD_TIME_MIN, MISSILE_LEAD_TIME_MAX);
 }
 
 function placeMissileAtShieldImpact(missile) {
@@ -1455,6 +1601,14 @@ function triggerCameraShake(missile) {
   cameraRig.shakeTimer = CAMERA_SHAKE_DURATION;
   cameraRig.shakeDuration = CAMERA_SHAKE_DURATION;
   cameraRig.shakeStrength = CAMERA_SHAKE_STRENGTH * speedRatio;
+  cameraRig.shakePhase = Math.random() * Math.PI * 2;
+  cameraRig.shakeElapsed = 0;
+}
+
+function triggerAfterburnerShake() {
+  cameraRig.shakeTimer = Math.max(cameraRig.shakeTimer, AFTERBURNER_IGNITION_SHAKE_DURATION);
+  cameraRig.shakeDuration = AFTERBURNER_IGNITION_SHAKE_DURATION;
+  cameraRig.shakeStrength = Math.max(cameraRig.shakeStrength, AFTERBURNER_IGNITION_SHAKE_STRENGTH);
   cameraRig.shakePhase = Math.random() * Math.PI * 2;
   cameraRig.shakeElapsed = 0;
 }
@@ -1540,14 +1694,19 @@ function refreshTrailGeometry(entity) {
 function explodeMissile(index, color, amount) {
   const missile = missiles[index];
   const direction = getExplosionDirection(missile.vel);
-  flareBurstExplosion(missile.pos, color, direction);
-  spark(missile.pos, color, Math.max(8, Math.floor(amount * 0.45)), direction);
-  blastRing(missile.pos, color, direction);
+  spawnMissileExplosion(missile.pos, missile.vel, color, amount, missile.altitude);
   scene.remove(missile.mesh, missile.trail);
   missile.mesh.material.dispose();
   missile.trail.geometry.dispose();
   missile.trail.material.dispose();
   missiles.splice(index, 1);
+}
+
+function spawnMissileExplosion(pos, velocity, color, amount, altitude = getMissileFlightZ(pos.x, pos.y) - 0.08) {
+  const direction = getExplosionDirection(velocity);
+  flareBurstExplosion(pos, color, direction, altitude);
+  spark(pos, color, Math.max(8, Math.floor(amount * 0.45)), direction, altitude);
+  blastRing(pos, color, direction, altitude);
 }
 
 function getExplosionDirection(velocity) {
@@ -1556,9 +1715,9 @@ function getExplosionDirection(velocity) {
   return direction.normalize();
 }
 
-function flareBurstExplosion(pos, color, direction) {
+function flareBurstExplosion(pos, color, direction, altitude = getMissileFlightZ(pos.x, pos.y) - 0.08) {
   const group = new THREE.Group();
-  group.position.set(pos.x, pos.y, getMissileFlightZ(pos.x, pos.y) - 0.08);
+  group.position.set(pos.x, pos.y, altitude);
   group.rotation.z = Math.atan2(-direction.x, direction.y);
   group.frustumCulled = false;
   const materials = [];
@@ -1593,7 +1752,7 @@ function flareBurstExplosion(pos, color, direction) {
   particles.push({ flareBurstGroup: group, materials, life: 0.42, maxLife: 0.42 });
 }
 
-function spark(pos, color, amount, direction = null) {
+function spark(pos, color, amount, direction = null, altitude = getMissileFlightZ(pos.x, pos.y) - 0.1) {
   const positions = new Float32Array(amount * 3);
   const velocities = new Float32Array(amount * 2);
   let forwardX = 0;
@@ -1610,7 +1769,7 @@ function spark(pos, color, amount, direction = null) {
   for (let i = 0; i < amount; i += 1) {
     positions[i * 3] = pos.x;
     positions[i * 3 + 1] = pos.y;
-    positions[i * 3 + 2] = getMissileFlightZ(pos.x, pos.y) - 0.1;
+    positions[i * 3 + 2] = altitude;
     if (direction) {
       const lateral = (Math.random() - 0.5) * (2.2 + Math.random() * 2.8);
       const along = 1.8 + Math.random() * 5.8;
@@ -1640,7 +1799,83 @@ function spark(pos, color, amount, direction = null) {
   particles.push({ points, positions, velocities, life: 0.58 });
 }
 
-function blastRing(pos, color, direction) {
+function rocketLaunchEffect(pos, velocity) {
+  const direction = getExplosionDirection(velocity);
+  const altitude = getTerrainZ(pos.x, pos.y) + 0.38;
+  const group = new THREE.Group();
+  group.position.set(pos.x, pos.y, altitude);
+  group.rotation.z = Math.atan2(-direction.x, direction.y);
+  group.frustumCulled = false;
+
+  const flashMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.98,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const plumeMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffae2b,
+    transparent: true,
+    opacity: 0.86,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    wireframe: true,
+  });
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: 0xfff2d0,
+    transparent: true,
+    opacity: 0.74,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    wireframe: true,
+  });
+  const streakMaterial = new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.94,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  const core = new THREE.Mesh(sharedExplosionBubbleGeometry, flashMaterial);
+  core.position.set(0, 0.12, 0.1);
+  core.scale.set(0.88, 1.12, 0.88);
+  core.userData.baseScale = core.scale.clone();
+  core.userData.baseOpacity = flashMaterial.opacity;
+  core.userData.expand = 2.2;
+  group.add(core);
+
+  const plume = new THREE.Mesh(sharedExplosionBubbleGeometry, plumeMaterial);
+  plume.position.set(0, -0.46, -0.04);
+  plume.scale.set(1.1, 1.9, 0.82);
+  plume.userData.baseScale = plume.scale.clone();
+  plume.userData.baseOpacity = plumeMaterial.opacity;
+  plume.userData.expand = 3.4;
+  group.add(plume);
+
+  const ring = new THREE.Mesh(sharedBlastShellGeometry, ringMaterial);
+  ring.position.set(0, 0, 0);
+  ring.scale.set(1.45, 1.45, 0.55);
+  ring.userData.baseScale = ring.scale.clone();
+  ring.userData.baseOpacity = ringMaterial.opacity;
+  ring.userData.expand = 3.8;
+  group.add(ring);
+
+  const streakGeometry = new THREE.BufferGeometry();
+  streakGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    0, -0.18, 0.08,
+    0, 4.8, 0.35,
+  ]), 3));
+  const streak = new THREE.Line(streakGeometry, streakMaterial);
+  streak.userData.baseOpacity = streakMaterial.opacity;
+  group.add(streak);
+
+  scene.add(group);
+  particles.push({ launchFlash: group, life: LAUNCH_EFFECT_LIFE, maxLife: LAUNCH_EFFECT_LIFE });
+}
+
+function blastRing(pos, color, direction, altitude = getMissileFlightZ(pos.x, pos.y) - 0.08) {
   const material = new THREE.MeshBasicMaterial({
     color,
     transparent: true,
@@ -1650,7 +1885,7 @@ function blastRing(pos, color, direction) {
     wireframe: true,
   });
   const ring = new THREE.Mesh(sharedBlastShellGeometry, material);
-  ring.position.set(pos.x + direction.x * 0.28, pos.y + direction.y * 0.28, getMissileFlightZ(pos.x, pos.y) - 0.08);
+  ring.position.set(pos.x + direction.x * 0.28, pos.y + direction.y * 0.28, altitude);
   ring.rotation.z = Math.atan2(-direction.x, direction.y);
   ring.scale.set(0.58, 1.42, 0.58);
   ring.frustumCulled = false;
@@ -1725,6 +1960,23 @@ function updateParticles(dt) {
       }
       continue;
     }
+    if (particle.launchFlash) {
+      const progress = 1 - particle.life / particle.maxLife;
+      const fade = Math.max(0, particle.life / particle.maxLife);
+      for (const child of particle.launchFlash.children) {
+        if (child.userData.baseScale) {
+          child.scale.copy(child.userData.baseScale).multiplyScalar(1 + progress * child.userData.expand);
+        }
+        if (child.material) {
+          child.material.opacity = fade * child.userData.baseOpacity;
+        }
+      }
+      if (particle.life <= 0) {
+        disposeLaunchFlashParticle(particle);
+        particles.splice(i, 1);
+      }
+      continue;
+    }
     if (particle.shieldBubble) {
       const progress = 1 - particle.life / particle.maxLife;
       const fade = Math.max(0, particle.life / particle.maxLife);
@@ -1767,6 +2019,14 @@ function updateParticles(dt) {
       particle.points.material.dispose();
       particles.splice(i, 1);
     }
+  }
+}
+
+function disposeLaunchFlashParticle(particle) {
+  scene.remove(particle.launchFlash);
+  for (const child of particle.launchFlash.children) {
+    if (child.isLine) child.geometry.dispose();
+    child.material?.dispose();
   }
 }
 
@@ -1938,11 +2198,16 @@ function renderReplay(dt) {
     replayMissile.mesh.position.copy(replayMissile.renderPosition);
     scratchV2.set(missile.vx, missile.vy);
     if (scratchV2.lengthSq() < 0.0001) scratchV2.set(0, 1);
+    replayMissile.lastVelocity.copy(scratchV2);
     orientMissile(replayMissile.mesh, scratchV2);
     updateReplayMissileTrail(replayMissile, missile.crashing);
   }
   for (const replayMissile of replay.missiles) {
     if (replayMissile._seen) continue;
+    if (replayMissile.crashing && replayMissile.hasRenderPosition) {
+      scratchV2.set(replayMissile.renderPosition.x, replayMissile.renderPosition.y);
+      spawnMissileExplosion(scratchV2, replayMissile.lastVelocity, 0xfff2d0, 24, replayMissile.renderPosition.z);
+    }
     if (replayMissile.activeId !== null) replay.missileSlots.delete(replayMissile.activeId);
     replayMissile.activeId = null;
     replayMissile.hasRenderPosition = false;
@@ -1992,6 +2257,7 @@ function getReplayMissileSlot(id) {
   slot.activeId = id;
   slot.hasRenderPosition = false;
   slot.crashing = false;
+  slot.lastVelocity.set(0, 1);
   slot.mesh.material.color.setHex(0xff2b2b);
   slot.trail.material.color.setHex(0xfff2d0);
   slot.trail.material.opacity = 0.72;
@@ -3004,7 +3270,7 @@ function makeNeonGrid(chunkX, chunkY, rng) {
   return group;
 }
 
-function makeCityBlocks(chunkX, chunkY, rng, chunkPads) {
+function makeCityBlocks(chunkX, chunkY, rng, chunkPads, chunkBuildings) {
   const group = new THREE.Group();
   const edgeMaterial = new THREE.LineBasicMaterial({
     color: 0x36ff6e,
@@ -3040,7 +3306,7 @@ function makeCityBlocks(chunkX, chunkY, rng, chunkPads) {
       const blockCx = x + STREET_SPACING * 0.5;
       const blockCy = y + STREET_SPACING * 0.5;
       if (blockCy < CITY_EDGE_Y + 1 || isInRiver(blockCx, blockCy, STREET_SPACING * 0.78)) continue;
-      addCityBlock(group, batches, blockCx, blockCy, STREET_SPACING * 0.74, STREET_SPACING * 0.74, rng, chunkPads);
+      addCityBlock(group, batches, blockCx, blockCy, STREET_SPACING * 0.74, STREET_SPACING * 0.74, rng, chunkPads, chunkBuildings);
     }
   }
 
@@ -3069,7 +3335,7 @@ function makeCityBlocks(chunkX, chunkY, rng, chunkPads) {
   return group;
 }
 
-function addCityBlock(group, batches, cx, cy, blockW, blockH, rng, chunkPads) {
+function addCityBlock(group, batches, cx, cy, blockW, blockH, rng, chunkPads, chunkBuildings) {
   const density = getDensity(cx, cy);
   if (rng() > 0.14 + density * 0.86) return;
   addBatchRectLine(batches.detail, cx, cy, blockW, blockH, getTerrainZ(cx, cy) + 0.095);
@@ -3087,15 +3353,16 @@ function addCityBlock(group, batches, cx, cy, blockW, blockH, rng, chunkPads) {
       if (!canPlaceBuilding(x, y)) continue;
       const localDistrict = district === 'tower' && rng() < 0.18 ? 'commercial' : district;
       const dimensions = getBuildingDimensions(localDistrict, rng, parcelW, parcelH);
-      addBuilding(group, batches, x, y, dimensions.w, dimensions.h, localDistrict, rng, chunkPads);
+      addBuilding(group, batches, x, y, dimensions.w, dimensions.h, localDistrict, rng, chunkPads, chunkBuildings);
     }
   }
 }
 
-function addBuilding(group, batches, x, y, w, h, district, rng, chunkPads) {
+function addBuilding(group, batches, x, y, w, h, district, rng, chunkPads, chunkBuildings) {
   const height = getBuildingHeight(district, x, y, rng);
   const baseZ = getTerrainZ(x, y) + 0.06;
   const roofZ = baseZ + height;
+  chunkBuildings?.push({ x, y, w, h });
   addBatchWireBox(batches.edge, x, y, w, h, height, baseZ);
   addBatchRectLine(batches.detail, x, y, w * 0.68, h * 0.68, roofZ + 0.02);
   addBuildingTypeDetails(batches, x, y, w, h, height, baseZ, district, rng);
@@ -3231,6 +3498,25 @@ function isNearRoad(x, y, padding = 1.25) {
 
 function canPlaceBuilding(x, y) {
   return !isInRiver(x, y, 3.1) && !isNearRoad(x, y, 1.15);
+}
+
+function isInsideBuildingFootprint(x, y, padding = 0) {
+  const cx = Math.floor(x / CHUNK_SIZE);
+  const cy = Math.floor(y / CHUNK_SIZE);
+  for (let ix = cx - 1; ix <= cx + 1; ix += 1) {
+    for (let iy = cy - 1; iy <= cy + 1; iy += 1) {
+      const chunk = cityChunks.get(getChunkKey(ix, iy));
+      if (!chunk?.buildings) continue;
+      for (const building of chunk.buildings) {
+        const halfW = building.w * 0.5 + padding;
+        const halfH = building.h * 0.5 + padding;
+        if (Math.abs(x - building.x) <= halfW && Math.abs(y - building.y) <= halfH) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 function getDensity(x, y) {
