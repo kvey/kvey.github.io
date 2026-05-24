@@ -2066,26 +2066,43 @@ function drawMinimap() {
   ctx.lineTo(toX(0), h);
   ctx.stroke();
 
-  // Target tower: plotted in place, or pinned to the top edge with an arrow.
+  // Target tower: plotted in place when it's on the radar, otherwise pinned to
+  // the nearest edge with an arrow pointing toward it so it's always indicated.
   const tx = toX(TARGET.x);
   const ty = toY(TARGET.y);
   ctx.fillStyle = '#ffae2b';
   ctx.shadowColor = '#ffae2b';
   ctx.shadowBlur = 8;
-  if (ty >= 2) {
+  const onRadar = tx >= 5 && tx <= w - 5 && ty >= 5 && ty <= h - 5;
+  if (onRadar) {
     ctx.save();
     ctx.translate(tx, ty);
     ctx.rotate(Math.PI / 4);
     ctx.fillRect(-3.5, -3.5, 7, 7);
     ctx.restore();
   } else {
-    const ax = Math.max(8, Math.min(w - 8, tx));
+    // Clamp the ray from the ship anchor to the target onto the radar border.
+    const pad = 11;
+    const dx = tx - cx;
+    const dy = ty - py;
+    let t = Infinity;
+    if (dx > 0) t = Math.min(t, (w - pad - cx) / dx);
+    else if (dx < 0) t = Math.min(t, (pad - cx) / dx);
+    if (dy > 0) t = Math.min(t, (h - pad - py) / dy);
+    else if (dy < 0) t = Math.min(t, (pad - py) / dy);
+    if (!Number.isFinite(t)) t = 0;
+    const ex = cx + dx * t;
+    const ey = py + dy * t;
+    ctx.save();
+    ctx.translate(ex, ey);
+    ctx.rotate(Math.atan2(dy, dx));
     ctx.beginPath();
-    ctx.moveTo(ax, 4);
-    ctx.lineTo(ax - 5, 12);
-    ctx.lineTo(ax + 5, 12);
+    ctx.moveTo(7, 0);
+    ctx.lineTo(-5, 5);
+    ctx.lineTo(-5, -5);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
   }
   ctx.shadowBlur = 0;
 
