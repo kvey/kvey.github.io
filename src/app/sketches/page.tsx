@@ -8,7 +8,7 @@ import { useBackground, BackgroundType } from '@/components/background-provider'
 type SketchKind = 'standalone' | 'background';
 
 interface Sketch {
-  id: BackgroundType | 'desert' | 'glass' | 'plant-lab';
+  id: BackgroundType | 'desert' | 'glass' | 'plant-lab' | 'itano-circus';
   title: string;
   description: string;
   tech: string;
@@ -19,6 +19,15 @@ interface Sketch {
 }
 
 const sketches: Sketch[] = [
+  {
+    id: 'itano-circus',
+    title: 'Itano Circus',
+    description: 'A client-side cyberpunk Three.js arcade sketch about flying above a procedurally generated 3D wireframe city toward a marked target tower while surviving simultaneous homing missile volleys. The geometry stays deliberately simple: an asymmetric banking fighter, missile cones, flare decoys, neon trails, wireframe buildings, rooftop grids, traffic dashes, antennas, and route lines.',
+    tech: 'Three.js · arcade physics · homing swarms',
+    year: '2026',
+    kind: 'standalone',
+    href: '/sketches/itano-circus/index.html',
+  },
   {
     id: 'glass',
     title: 'Stained Glass',

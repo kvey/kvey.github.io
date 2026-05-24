@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Itano Circus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Saira:wght@400;500;600&family=Saira+Semi+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* EVA-Matisse — official Evangelion typeface (Fontworks, CC0), subset for dialogs */
+    @font-face {
+      font-family: "EVA Matisse";
+      src: url("./fonts/eva-matisse.woff2") format("woff2");
+      font-weight: 400 800;
+      font-display: swap;
+    }
+
+    :root {
+      /* NERV / MAGI amber-orange scheme on warm black */
+      --ink: #ffe7d6;
+      --muted: rgba(255, 214, 178, 0.64);
+      --faint: rgba(255, 176, 116, 0.85);
+      --green: #ff7a1f;            /* primary chrome — MAGI orange */
+      --green-dim: rgba(255, 122, 31, 0.5);
+      --amber: #ffb648;
+      --amber-dim: rgba(255, 182, 72, 0.5);
+      --red: #ff3b32;
+      --red-dim: rgba(255, 59, 50, 0.5);
+      --good: #ffd27a;
+      --line: rgba(255, 122, 31, 0.26);
+      --panel: rgba(14, 8, 3, 0.82);
+      --hazard: repeating-linear-gradient(135deg, var(--amber) 0 9px, #160c00 9px 18px);
+      --corner: 9px;
+      --display: "Saira Semi Condensed", "Saira", ui-sans-serif, system-ui, sans-serif;
+      --ui: "Saira", ui-sans-serif, system-ui, sans-serif;
+      --matisse: "EVA Matisse", "Saira", serif;
+      --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #060301;
+      color: var(--ink);
+      font-family: var(--ui);
+      -webkit-font-smoothing: antialiased;
+      touch-action: none;
+    }
+
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+
+    #hud {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Faint CRT scanlines + phosphor vignette — restrained, not noisy */
+    #hud::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        repeating-linear-gradient(to bottom,
+          rgba(0, 0, 0, 0) 0 2px,
+          rgba(0, 0, 0, 0.15) 3px,
+          rgba(0, 0, 0, 0) 4px),
+        radial-gradient(135% 135% at 50% 42%, transparent 58%, rgba(18, 8, 0, 0.55) 100%);
+      opacity: 0.6;
+    }
+
+    /* Angular panel with EVA-style cut corners */
+    .panel {
+      position: relative;
+      pointer-events: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      clip-path: polygon(
+        var(--corner) 0, 100% 0,
+        100% calc(100% - var(--corner)), calc(100% - var(--corner)) 100%,
+        0 100%, 0 var(--corner)
+      );
+      -webkit-backdrop-filter: blur(14px) saturate(135%);
+      backdrop-filter: blur(14px) saturate(135%);
+    }
+
+    .top-left {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      z-index: 2;
+    }
+
+    .back {
+      appearance: none;
+      border: 1px solid var(--line);
+      color: var(--faint);
+      background: var(--panel);
+      cursor: pointer;
+      text-decoration: none;
+      font-family: var(--ui);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 0 16px;
+      display: inline-flex;
+      align-items: center;
+      clip-path: polygon(
+        var(--corner) 0, 100% 0,
+        100% calc(100% - var(--corner)), calc(100% - var(--corner)) 100%,
+        0 100%, 0 var(--corner)
+      );
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+
+    .back::before {
+      content: "◄";
+      margin-right: 8px;
+      font-size: 9px;
+      color: var(--green);
+    }
+
+    .back:hover {
+      color: var(--ink);
+      background: rgba(255, 122, 31, 0.12);
+    }
+
+    .title {
+      padding: 9px 18px;
+      font-family: var(--matisse);
+      font-weight: 400;
+      font-size: 18px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: #f4eedc;
+      text-shadow:
+        0 0 1px rgba(255, 251, 238, 0.95),
+        0 0 7px rgba(255, 247, 224, 0.55),
+        0 0 18px rgba(255, 233, 178, 0.4),
+        0 0 38px rgba(255, 220, 150, 0.24);
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .title::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      background: var(--red);
+      box-shadow: 0 0 9px var(--red-dim);
+      clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+      animation: ping 2s ease-in-out infinite;
+    }
+
+    @keyframes ping {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ---- Telemetry strip ---- */
+    .stats {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      display: flex;
+      z-index: 2;
+    }
+
+    .stat {
+      position: relative;
+      padding: 8px 17px 9px;
+    }
+
+    .stat + .stat::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 20%;
+      bottom: 20%;
+      width: 1px;
+      background: var(--line);
+    }
+
+    .label {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .label .jp {
+      font-family: var(--matisse);
+      font-size: 11px;
+      line-height: 1;
+      color: var(--green);
+      opacity: 0.75;
+    }
+
+    .label .en {
+      font-family: var(--ui);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--faint);
+      opacity: 0.85;
+    }
+
+    .value {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink);
+      font-family: var(--display);
+      font-size: 23px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1;
+      line-height: 1;
+    }
+
+    /* Reserve numeric width per gauge so changing digits never reflow the strip */
+    #score { min-width: 6ch; }
+    #wave { min-width: 5ch; }
+    #speed { min-width: 4ch; }
+    #afterburner,
+    #hull { min-width: 2ch; }
+    #flares { min-width: 1ch; }
+
+    /* Color-code gauges so the HUD reads at a glance */
+    #hull { color: var(--good); }
+    #flares,
+    #afterburner { color: var(--amber); }
+    #wave { color: var(--red); }
+    #speed { color: var(--green); }
+
+    /* ---- Controls (inside the dialog, under the explanation) ---- */
+    .center .controls {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.85;
+      letter-spacing: 0.01em;
+      color: var(--faint);
+    }
+
+    .center .controls strong {
+      color: var(--green);
+      font-weight: 500;
+    }
+
+    /* ---- Radar ---- */
+    .minimap {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      width: 190px;
+      height: 226px;
+      padding: 10px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      z-index: 2;
+    }
+
+    .minimap-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .minimap-head .lbl {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+    }
+
+    .minimap-head .jp {
+      font-family: var(--matisse);
+      font-size: 12px;
+      color: var(--green);
+      opacity: 0.8;
+    }
+
+    .minimap-head .en {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--faint);
+      opacity: 0.8;
+    }
+
+    .minimap-head .ping {
+      width: 7px;
+      height: 7px;
+      background: var(--green);
+      box-shadow: 0 0 7px var(--green-dim);
+      clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+      animation: ping 2s ease-in-out infinite;
+    }
+
+    .minimap canvas {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: block;
+      border: 1px solid var(--line);
+      background: radial-gradient(120% 120% at 50% 70%, rgba(50, 24, 4, 0.42), rgba(10, 5, 1, 0.6));
+    }
+
+    /* ---- Buttons ---- */
+    .button {
+      appearance: none;
+      cursor: pointer;
+      font-family: var(--display);
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 13px 30px;
+      color: var(--ink);
+      background: rgba(255, 122, 31, 0.07);
+      border: 1px solid var(--green-dim);
+      clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .button:hover {
+      background: rgba(255, 122, 31, 0.16);
+    }
+
+    .button:active { transform: translateY(1px); }
+
+    .button.primary {
+      color: #1c0d00;
+      background: var(--green);
+      border-color: transparent;
+    }
+
+    .button.primary:hover { background: #ff9442; }
+
+    /* ---- Dialog (EVA-Matisse) ---- */
+    /* Title-card styled dialog — cream Matisse with the signature NGE bloom */
+    .center {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: min(460px, calc(100vw - 36px));
+      transform: translate(-50%, -50%);
+      padding: 30px 34px 32px;
+      text-align: left;
+      background: rgba(2, 5, 3, 0.9);
+      z-index: 3;
+    }
+
+    .center.run-end { top: 72%; }
+
+    .center .ribbon {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 14px;
+    }
+
+    .center .ribbon::before {
+      content: "";
+      width: 34px;
+      height: 8px;
+      background: var(--hazard);
+    }
+
+    .center .ribbon span {
+      font-family: var(--matisse);
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      color: var(--amber);
+    }
+
+    .center h1 {
+      margin: 0;
+      font-family: var(--matisse);
+      font-weight: 400;
+      color: #f4eedc;
+      font-size: clamp(36px, 6.4vw, 60px);
+      letter-spacing: 0.015em;
+      line-height: 0.96;
+      text-transform: uppercase;
+      text-shadow:
+        0 0 1px rgba(255, 251, 238, 0.95),
+        0 0 7px rgba(255, 247, 224, 0.55),
+        0 0 18px rgba(255, 233, 178, 0.4),
+        0 0 38px rgba(255, 220, 150, 0.24);
+    }
+
+    .center .jp-sub {
+      margin-top: 10px;
+      font-family: var(--matisse);
+      font-size: clamp(16px, 2.6vw, 21px);
+      letter-spacing: 0.18em;
+      color: #f1ead6;
+      text-shadow:
+        0 0 6px rgba(255, 247, 224, 0.45),
+        0 0 16px rgba(255, 226, 165, 0.3);
+    }
+
+    .center p {
+      margin: 18px 0 16px;
+      max-width: 40em;
+      font-family: var(--mono);
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.7;
+    }
+
+    .center .button.primary {
+      display: flex;
+      align-items: center;
+      width: fit-content;
+      margin: 26px auto 0;
+    }
+
+    #overlayStart::before {
+      content: "W";
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      margin-right: 11px;
+      border: 1.5px solid currentColor;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .center.run-end #overlayStart::before {
+      display: none;
+    }
+
+    .hide { display: none; }
+
+    @media (max-width: 760px) {
+      .top-left { top: 10px; left: 10px; }
+
+      .stats {
+        top: 56px;
+        left: 10px;
+        right: 10px;
+        justify-content: space-between;
+      }
+
+      .stat { padding: 7px 5px 8px; }
+      .stat + .stat::before { display: none; }
+      .label .jp { display: none; }
+      .value { font-size: 19px; }
+
+      .center.run-end { top: 68%; }
+
+      .bottom-left {
+        left: 10px;
+        right: 10px;
+        bottom: 78px;
+        width: auto;
+      }
+
+      .minimap {
+        right: 10px;
+        bottom: 10px;
+        width: 130px;
+        height: 158px;
+        padding: 8px 9px 9px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="hud">
+    <div class="top-left">
+      <a class="back" href="/sketches">Back</a>
+      <div class="title panel">Itano Circus</div>
+    </div>
+
+    <div class="stats panel" aria-live="polite">
+      <div class="stat">
+        <span class="label"><span class="jp">得点</span><span class="en">Score</span></span>
+        <span id="score" class="value">0</span>
+      </div>
+      <div class="stat">
+        <span class="label"><span class="jp">目標</span><span class="en">Target</span></span>
+        <span id="wave" class="value">0m</span>
+      </div>
+      <div class="stat">
+        <span class="label"><span class="jp">速度</span><span class="en">Speed</span></span>
+        <span id="speed" class="value">0</span>
+      </div>
+      <div class="stat">
+        <span class="label"><span class="jp">加速</span><span class="en">Burn</span></span>
+        <span id="afterburner" class="value">100</span>
+      </div>
+      <div class="stat">
+        <span class="label"><span class="jp">防壁</span><span class="en">Shield</span></span>
+        <span id="hull" class="value">3</span>
+      </div>
+      <div class="stat">
+        <span class="label"><span class="jp">火炎</span><span class="en">Flares</span></span>
+        <span id="flares" class="value">3</span>
+      </div>
+    </div>
+
+    <div class="minimap panel" aria-hidden="true">
+      <div class="minimap-head">
+        <span class="lbl"><span class="jp">索敵</span><span class="en">Radar</span></span>
+        <span class="ping"></span>
+      </div>
+      <canvas id="minimap"></canvas>
+    </div>
+
+    <div id="startOverlay" class="center panel">
+      <div class="ribbon"><span>作戦開始</span></div>
+      <h1>Itano Circus</h1>
+      <div class="jp-sub">イタノ・サーカス</div>
+      <p>The “Itano Circus” is a style of anime action named for animator Ichirō Itano — dense swarms of missiles spiraling through the air on twisting smoke trails as the camera weaves through the barrage. Here, you fly it.</p>
+      <div class="controls"><strong>A/D</strong> or <strong>Q/E</strong> roll &nbsp;·&nbsp; <strong>W</strong> thrust &nbsp;·&nbsp; <strong>S</strong> brake &nbsp;·&nbsp; <strong>Shift</strong> afterburner &nbsp;·&nbsp; hold <strong>Space</strong> for flares</div>
+      <button id="overlayStart" class="button primary" type="button">Start Run</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
