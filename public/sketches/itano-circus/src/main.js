@@ -38,6 +38,7 @@ const MISSILE_TRAIL_MIN_DISTANCE = 0.32;
 const PLAYER_ENGINE_TRAIL_POINTS = 48;
 const PLAYER_ENGINE_TRAIL_MIN_DISTANCE = 0.18;
 const FLARE_TRAIL_POINTS = 18;
+const HUD_UPDATE_INTERVAL = 0.1;
 const FLARE_BURST_SIZE = 8;
 const FLARE_BURST_INTERVAL = 0.075;
 const GAME_SPEED = 1.75;
@@ -214,6 +215,14 @@ const sharedFlareGeometry = new THREE.SphereGeometry(0.22, 10, 8);
 const sharedShieldGeometry = new THREE.SphereGeometry(SHIELD_RADIUS, 18, 10);
 const sharedExplosionBubbleGeometry = new THREE.SphereGeometry(0.34, 10, 8);
 const sharedBlastShellGeometry = new THREE.SphereGeometry(0.42, 12, 8);
+const staticCityLineMaterial = new THREE.LineBasicMaterial({
+  vertexColors: true,
+  transparent: true,
+  opacity: 1,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+});
+staticCityLineMaterial.userData.keepAlive = true;
 
 const player = {
   mesh: makePlayerMesh(),
@@ -337,6 +346,7 @@ const state = {
   afterburnerActive: false,
   afterburnerRechargeDelay: 0,
   waveTimer: 1.2,
+  hudTimer: 0,
   runTime: 0,
   wallRunTime: 0,
   endTime: 0,
@@ -436,6 +446,7 @@ function startRun() {
   state.afterburnerActive = false;
   state.afterburnerRechargeDelay = 0;
   state.waveTimer = 0.35;
+  state.hudTimer = 0;
   state.runTime = 0;
   state.wallRunTime = 0;
   state.endTime = 0;
@@ -619,7 +630,11 @@ function update(dt) {
   updateMissiles(dt);
   updateParticles(dt);
   updateSpawns(dt);
-  updateHud();
+  state.hudTimer -= dt;
+  if (state.hudTimer <= 0) {
+    updateHud();
+    state.hudTimer = HUD_UPDATE_INTERVAL;
+  }
   recordReplayFrame(dt);
 
   if (player.pos.distanceToSquared(TARGET) <= TARGET_RADIUS * TARGET_RADIUS) reachTargetTower();
@@ -910,6 +925,8 @@ function spawnCityChunk(cx, cy) {
   chunkGroup.add(makeTerrainMap(cx, cy));
   chunkGroup.add(makeNeonGrid(cx, cy, rng));
   chunkGroup.add(makeCityBlocks(cx, cy, rng, pads));
+  mergeStaticChunkLines(chunkGroup);
+  freezeStaticObject(chunkGroup);
   launchPads.push(...pads);
   city.add(chunkGroup);
   cityChunks.set(key, { group: chunkGroup, pads });
@@ -2617,7 +2634,75 @@ function disposeObjectTree(root) {
     }
   });
   for (const geometry of geometries) geometry.dispose();
-  for (const material of materials) material.dispose();
+  for (const material of materials) {
+    if (!material.userData?.keepAlive) material.dispose();
+  }
+}
+
+function freezeStaticObject(root) {
+  root.traverse((object) => {
+    if (!object.isLineSegments) return;
+    object.updateMatrix();
+    object.updateMatrixWorld(true);
+    object.matrixAutoUpdate = false;
+    object.matrixWorldAutoUpdate = false;
+  });
+}
+
+function mergeStaticChunkLines(chunkGroup) {
+  const lineObjects = [];
+  chunkGroup.traverse((object) => {
+    if (object.isLineSegments && object.geometry?.attributes?.position) lineObjects.push(object);
+  });
+  if (lineObjects.length <= 1) return;
+
+  chunkGroup.updateMatrixWorld(true);
+  const positions = [];
+  const colors = [];
+  const color = new THREE.Color();
+  const localPoint = new THREE.Vector3();
+  const worldPoint = new THREE.Vector3();
+  const chunkPoint = new THREE.Vector3();
+  const chunkWorldInverse = new THREE.Matrix4().copy(chunkGroup.matrixWorld).invert();
+
+  for (const line of lineObjects) {
+    const position = line.geometry.attributes.position;
+    const material = Array.isArray(line.material) ? line.material[0] : line.material;
+    color.copy(material?.color || new THREE.Color(0x36ff6e));
+    const alpha = material?.opacity ?? 1;
+    for (let i = 0; i < position.count; i += 1) {
+      localPoint.fromBufferAttribute(position, i);
+      worldPoint.copy(localPoint).applyMatrix4(line.matrixWorld);
+      chunkPoint.copy(worldPoint).applyMatrix4(chunkWorldInverse);
+      positions.push(chunkPoint.x, chunkPoint.y, chunkPoint.z);
+      colors.push(color.r * alpha, color.g * alpha, color.b * alpha);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(colors), 3));
+  const merged = new THREE.LineSegments(geometry, staticCityLineMaterial);
+  merged.frustumCulled = false;
+
+  for (const line of lineObjects) {
+    line.parent?.remove(line);
+    line.geometry.dispose();
+    const material = Array.isArray(line.material) ? line.material : [line.material];
+    for (const item of material) {
+      if (item && !item.userData?.keepAlive) item.dispose();
+    }
+  }
+  pruneEmptyGroups(chunkGroup);
+  chunkGroup.add(merged);
+}
+
+function pruneEmptyGroups(root) {
+  for (let i = root.children.length - 1; i >= 0; i -= 1) {
+    const child = root.children[i];
+    pruneEmptyGroups(child);
+    if (child.isGroup && child.children.length === 0) root.remove(child);
+  }
 }
 
 function makeTerrainMap(chunkX, chunkY) {
