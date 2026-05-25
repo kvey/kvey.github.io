@@ -23,9 +23,9 @@ const repos: Repo[] = [
   },
   {
     id: 'tael',
-    title: 'tael',
+    title: 'Tael',
     description:
-      'An AI-agent-native observability platform. tael ingests OpenTelemetry traces over standard OTLP gRPC, stores them in DuckDB, and exposes a CLI-first interface that returns structured JSON — built for agents like Claude Code to query, monitor, and annotate production telemetry programmatically. No dashboards, no browser: just a single binary and structured data.',
+      'An AI-agent-native observability platform. Tael ingests OpenTelemetry traces over standard OTLP gRPC, stores them in DuckDB, and exposes a CLI-first interface that returns structured JSON — built for agents like Claude Code to query, monitor, and annotate production telemetry programmatically. No dashboards, no browser: just a single binary and structured data.',
     tech: 'Rust · OpenTelemetry · DuckDB',
     year: '2026',
     href: 'https://github.com/ThousandBirdsInc/tael',
