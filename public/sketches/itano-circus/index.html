@@ -138,6 +138,42 @@
       background: rgba(255, 122, 31, 0.12);
     }
 
+    .settings-toggle {
+      appearance: none;
+      pointer-events: auto;
+      border: 1px solid var(--line);
+      color: var(--faint);
+      background: var(--panel);
+      cursor: pointer;
+      font-family: var(--ui);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      clip-path: polygon(
+        var(--corner) 0, 100% 0,
+        100% calc(100% - var(--corner)), calc(100% - var(--corner)) 100%,
+        0 100%, 0 var(--corner)
+      );
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+
+    .settings-toggle::before {
+      content: "⚙";
+      margin-right: 8px;
+      font-size: 12px;
+      color: var(--green);
+    }
+
+    .settings-toggle:hover,
+    .settings-toggle[aria-expanded="true"] {
+      color: var(--ink);
+      background: rgba(255, 122, 31, 0.12);
+    }
+
     .title {
       padding: 9px 18px;
       font-family: var(--matisse);
@@ -164,6 +200,98 @@
       box-shadow: 0 0 9px var(--red-dim);
       clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
       animation: ping 2s ease-in-out infinite;
+    }
+
+    .settings-panel {
+      position: fixed;
+      top: 66px;
+      left: 18px;
+      width: min(310px, calc(100vw - 36px));
+      padding: 16px 18px 18px;
+      z-index: 4;
+    }
+
+    .settings-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .settings-title {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .settings-title .jp {
+      font-family: var(--matisse);
+      font-size: 12px;
+      color: var(--green);
+      opacity: 0.8;
+    }
+
+    .settings-title .en {
+      color: var(--ink);
+      font-family: var(--display);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .icon-button {
+      appearance: none;
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--line);
+      color: var(--faint);
+      background: rgba(255, 122, 31, 0.06);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      line-height: 1;
+      clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+    }
+
+    .icon-button:hover {
+      color: var(--ink);
+      background: rgba(255, 122, 31, 0.14);
+    }
+
+    .setting-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 7px 12px;
+      align-items: center;
+    }
+
+    .setting-row label {
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .setting-value {
+      min-width: 5ch;
+      color: var(--amber);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    .setting-row input[type="range"] {
+      grid-column: 1 / -1;
+      width: 100%;
+      margin: 0;
+      accent-color: var(--green);
+      cursor: pointer;
     }
 
     @keyframes ping {
@@ -456,7 +584,37 @@
     .hide { display: none; }
 
     @media (max-width: 760px) {
-      .top-left { top: 10px; left: 10px; }
+      .top-left {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+      }
+
+      .back { padding: 0 12px; }
+
+      .title {
+        min-width: 0;
+        padding: 8px 12px;
+        font-size: 16px;
+      }
+
+      .settings-toggle {
+        width: 40px;
+        justify-content: center;
+        padding: 0;
+        font-size: 0;
+      }
+
+      .settings-toggle::before {
+        margin-right: 0;
+        font-size: 13px;
+      }
+
+      .settings-panel {
+        top: 54px;
+        left: 10px;
+        width: min(300px, calc(100vw - 20px));
+      }
 
       .stats {
         top: 56px;
@@ -496,7 +654,20 @@
     <div class="top-left">
       <a class="back" href="/sketches">Back</a>
       <div class="title panel">Itano Circus</div>
+      <button id="settingsButton" class="settings-toggle" type="button" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
     </div>
+
+    <section id="settingsPanel" class="settings-panel panel hide" aria-hidden="true">
+      <div class="settings-head">
+        <div class="settings-title"><span class="jp">設定</span><span class="en">Settings</span></div>
+        <button id="settingsClose" class="icon-button" type="button" aria-label="Close settings">×</button>
+      </div>
+      <div class="setting-row">
+        <label for="bloomStrength">Bloom</label>
+        <output id="bloomStrengthValue" class="setting-value" for="bloomStrength">0.25</output>
+        <input id="bloomStrength" type="range" min="0" max="1.5" step="0.01" value="0.25">
+      </div>
+    </section>
 
     <div class="stats panel" aria-live="polite">
       <div class="stat">

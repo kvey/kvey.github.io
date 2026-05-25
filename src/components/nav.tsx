@@ -7,6 +7,7 @@ const navigation = [
   { name: 'Home', href: '/' },
   { name: 'Writing', href: '/blog' },
   { name: 'Sketches', href: '/sketches' },
+  { name: 'Open Source', href: '/open-source' },
 ]
 
 function XComIcon(props: SVGProps<SVGSVGElement>) {

@@ -23,6 +23,11 @@ const overlayControls = startOverlay.querySelector('.controls');
 const controlsPanel = document.querySelector('.bottom-left');
 const minimapCanvas = document.getElementById('minimap');
 const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
+const settingsButton = document.getElementById('settingsButton');
+const settingsPanel = document.getElementById('settingsPanel');
+const settingsClose = document.getElementById('settingsClose');
+const bloomStrengthInput = document.getElementById('bloomStrength');
+const bloomStrengthValue = document.getElementById('bloomStrengthValue');
 
 const CITY_START_Y = -180;
 const CITY_EDGE_Y = -22;
@@ -178,6 +183,11 @@ const LIVE_CHASE_LATERAL_RESPONSE = 2.2;
 const REPLAY_SIDE_DISTANCE = 24;
 const REPLAY_SIDE_HEIGHT = 10.5;
 const REPLAY_LOOK_AHEAD = 6.5;
+const DEFAULT_BLOOM_STRENGTH = 0.25;
+const BLOOM_STRENGTH_STORAGE_KEY = 'itano-circus:bloom-strength';
+const bloomSettings = {
+  strength: readStoredBloomStrength(),
+};
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO));
@@ -207,11 +217,12 @@ composer.setSize(window.innerWidth, window.innerHeight);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.48, // strength
+  bloomSettings.strength, // strength
   0.5, // radius
   0.2 // threshold
 );
 composer.addPass(bloomPass);
+applyBloomStrength(bloomSettings.strength, false);
 const afterburnerLensPass = new ShaderPass(makeAfterburnerLensShader());
 afterburnerLensPass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
 composer.addPass(afterburnerLensPass);
@@ -306,9 +317,11 @@ const replay = {
   missiles: [],
   flares: [],
   shieldEvents: [],
+  explosionEvents: [],
   missileSlots: new Map(),
   flareSlots: new Map(),
   shieldEventIndex: 0,
+  explosionEventIndex: 0,
   frameIndex: 0,
   idScratch: new Set(),
 };
@@ -404,6 +417,7 @@ let nextMissileId = 1;
 const flares = [];
 let nextFlareId = 1;
 const shieldReplayEvents = [];
+const missileReplayExplosionEvents = [];
 const particles = [];
 const keys = new Set();
 const flareBurst = {
@@ -481,8 +495,19 @@ startButton.addEventListener('click', startRun);
 overlayStart.addEventListener('click', handleOverlayButton);
 pauseButton.addEventListener('click', togglePause);
 flareButton.addEventListener('click', dropFlares);
+settingsButton?.addEventListener('click', () => setSettingsOpen(!isSettingsOpen()));
+settingsClose?.addEventListener('click', () => setSettingsOpen(false));
+bloomStrengthInput?.addEventListener('input', (event) => {
+  applyBloomStrength(Number(event.currentTarget.value));
+});
 
 window.addEventListener('keydown', (event) => {
+  if (event.code === 'Escape' && isSettingsOpen()) {
+    setSettingsOpen(false);
+    return;
+  }
+  if (isControlTarget(event.target)) return;
+
   if (event.code === 'Space') {
     event.preventDefault();
     if (!event.repeat) beginFlareBurst(false);
@@ -533,11 +558,57 @@ sizeMinimap();
 updateHud();
 animate();
 
+function readStoredBloomStrength() {
+  try {
+    const storedValue = window.localStorage?.getItem(BLOOM_STRENGTH_STORAGE_KEY);
+    if (storedValue === null) return DEFAULT_BLOOM_STRENGTH;
+    const parsedValue = Number(storedValue);
+    if (!Number.isFinite(parsedValue)) return DEFAULT_BLOOM_STRENGTH;
+    return THREE.MathUtils.clamp(parsedValue, 0, 1.5);
+  } catch {
+    return DEFAULT_BLOOM_STRENGTH;
+  }
+}
+
+function applyBloomStrength(value, persist = true) {
+  const strength = THREE.MathUtils.clamp(Number.isFinite(value) ? value : DEFAULT_BLOOM_STRENGTH, 0, 1.5);
+  bloomSettings.strength = strength;
+  bloomPass.strength = strength;
+  if (bloomStrengthInput) bloomStrengthInput.value = strength.toFixed(2);
+  if (bloomStrengthValue) bloomStrengthValue.value = strength.toFixed(2);
+  if (!persist) return;
+  try {
+    window.localStorage?.setItem(BLOOM_STRENGTH_STORAGE_KEY, strength.toFixed(2));
+  } catch {
+    // Rendering should not depend on storage availability.
+  }
+}
+
+function isSettingsOpen() {
+  return Boolean(settingsPanel && !settingsPanel.classList.contains('hide'));
+}
+
+function setSettingsOpen(open) {
+  settingsPanel?.classList.toggle('hide', !open);
+  settingsPanel?.setAttribute('aria-hidden', open ? 'false' : 'true');
+  settingsButton?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) {
+    bloomStrengthInput?.focus();
+  } else if (settingsPanel?.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
+}
+
+function isControlTarget(target) {
+  return target instanceof Element && Boolean(target.closest('button, input, select, textarea, [role="button"]'));
+}
+
 function startRun() {
   clearRun();
   stopReplayPlayback();
   replayBuffer.length = 0;
   shieldReplayEvents.length = 0;
+  missileReplayExplosionEvents.length = 0;
   replay.sampleTimer = 0;
   nextMissileId = 1;
   nextFlareId = 1;
@@ -742,6 +813,11 @@ function clearRun() {
     if (particle.flareBurst) scene.remove(particle.flareBurst);
     if (particle.flareBurstGroup) scene.remove(particle.flareBurstGroup);
     if (particle.launchFlash) disposeLaunchFlashParticle(particle);
+    if (particle.missileTrailCollapse) {
+      scene.remove(particle.missileTrailCollapse);
+      particle.missileTrailCollapse.geometry.dispose();
+      particle.missileTrailCollapse.material.dispose();
+    }
     if (particle.shieldBubble) scene.remove(particle.shieldBubble);
     if (particle.shieldContact) scene.remove(particle.shieldContact);
   }
@@ -831,6 +907,7 @@ function recordReplayFrame(dt) {
   const cutoff = state.wallRunTime - REPLAY_DURATION;
   while (replayBuffer.length > 2 && replayBuffer[0].t < cutoff) replayBuffer.shift();
   while (shieldReplayEvents.length > 0 && shieldReplayEvents[0].t < cutoff) shieldReplayEvents.shift();
+  while (missileReplayExplosionEvents.length > 0 && missileReplayExplosionEvents[0].t < cutoff) missileReplayExplosionEvents.shift();
 }
 
 function startReplayPlayback() {
@@ -851,11 +928,15 @@ function startReplayPlayback() {
   replay.shieldEvents = shieldReplayEvents
     .filter((event) => event.t >= firstReplayTime && event.t <= lastReplayTime)
     .map((event) => ({ ...event }));
+  replay.explosionEvents = missileReplayExplosionEvents
+    .filter((event) => event.t >= firstReplayTime && event.t <= lastReplayTime)
+    .map((event) => ({ ...event }));
   const lastFrame = replay.frames[replay.frames.length - 1];
   replay.sideSign = lastFrame.player.bank >= 0 ? 1 : -1;
   replay.elapsed = 0;
   replay.frameIndex = 0;
   replay.shieldEventIndex = 0;
+  replay.explosionEventIndex = 0;
   replay.duration = Math.max(0.1, replay.frames[replay.frames.length - 1].t - replay.frames[0].t);
   const firstFrame = replay.frames[0];
   const replayStartZ = getPlayerFlightZ(firstFrame.player.x, firstFrame.player.y, 0, Math.hypot(firstFrame.player.vx, firstFrame.player.vy), firstFrame.player.bank);
@@ -871,10 +952,12 @@ function stopReplayPlayback() {
   replay.active = false;
   replay.frames.length = 0;
   replay.shieldEvents.length = 0;
+  replay.explosionEvents.length = 0;
   replay.elapsed = 0;
   replay.duration = 0;
   replay.frameIndex = 0;
   replay.shieldEventIndex = 0;
+  replay.explosionEventIndex = 0;
   replay.player.visible = false;
   replay.missileSlots.clear();
   replay.flareSlots.clear();
@@ -927,6 +1010,7 @@ function setLiveSceneVisible(visible) {
     if (particle.flareBurst) particle.flareBurst.visible = visible;
     if (particle.flareBurstGroup) particle.flareBurstGroup.visible = visible;
     if (particle.launchFlash) particle.launchFlash.visible = visible;
+    if (particle.missileTrailCollapse) particle.missileTrailCollapse.visible = visible;
     if (particle.shieldBubble) particle.shieldBubble.visible = visible;
     if (particle.shieldContact) particle.shieldContact.visible = visible;
   }
@@ -1556,7 +1640,7 @@ function updateMissiles(dt) {
     }
     if (flareHit) {
       state.score += FLARE_DEFENSE_SCORE;
-      explodeMissile(i, 0xffae2b, 18);
+      explodeMissile(i, 0xfff2d0, 24, { collapseTrail: true, recordReplay: true });
       continue;
     }
 
@@ -1660,6 +1744,19 @@ function recordShieldReplayEvent(impactPos) {
     t: state.wallRunTime,
     x: impactPos.x,
     y: impactPos.y,
+  });
+}
+
+function recordMissileReplayExplosion(missile, color, amount) {
+  missileReplayExplosionEvents.push({
+    t: state.wallRunTime,
+    x: missile.pos.x,
+    y: missile.pos.y,
+    z: missile.altitude,
+    vx: missile.vel.x,
+    vy: missile.vel.y,
+    color,
+    amount,
   });
 }
 
@@ -1831,15 +1928,35 @@ function updateMissileTrailFade(missile) {
   missile.trail.geometry.attributes.color.needsUpdate = true;
 }
 
-function explodeMissile(index, color, amount) {
+function explodeMissile(index, color, amount, options = {}) {
   const missile = missiles[index];
-  const direction = getExplosionDirection(missile.vel);
+  if (options.recordReplay) recordMissileReplayExplosion(missile, color, amount);
   spawnMissileExplosion(missile.pos, missile.vel, color, amount, missile.altitude);
-  scene.remove(missile.mesh, missile.trail);
+  scene.remove(missile.mesh);
   missile.mesh.material.dispose();
-  missile.trail.geometry.dispose();
-  missile.trail.material.dispose();
+  if (options.collapseTrail) {
+    collapseMissileTrail(missile);
+  } else {
+    scene.remove(missile.trail);
+    missile.trail.geometry.dispose();
+    missile.trail.material.dispose();
+  }
   missiles.splice(index, 1);
+}
+
+function collapseMissileTrail(missile) {
+  refreshTrailGeometry(missile);
+  updateMissileTrailFade(missile);
+  missile.trail.geometry.setDrawRange(0, missile.trailCount);
+  missile.trail.material.color.setHex(0xfff2d0);
+  missile.trail.material.opacity = Math.max(missile.trail.material.opacity, 0.72);
+  particles.push({
+    missileTrailCollapse: missile.trail,
+    initialCount: Math.max(1, missile.trailCount),
+    life: 0.46,
+    maxLife: 0.46,
+    baseOpacity: missile.trail.material.opacity,
+  });
 }
 
 function spawnMissileExplosion(pos, velocity, color, amount, altitude = getMissileFlightZ(pos.x, pos.y) - 0.08) {
@@ -2117,6 +2234,21 @@ function updateParticles(dt) {
       }
       continue;
     }
+    if (particle.missileTrailCollapse) {
+      const progress = 1 - particle.life / particle.maxLife;
+      const initialCount = particle.initialCount;
+      const start = Math.min(initialCount - 1, Math.floor(progress * initialCount));
+      const count = Math.max(0, initialCount - start);
+      particle.missileTrailCollapse.geometry.setDrawRange(start, count);
+      particle.missileTrailCollapse.material.opacity = Math.max(0, particle.life / particle.maxLife) * particle.baseOpacity;
+      if (particle.life <= 0) {
+        scene.remove(particle.missileTrailCollapse);
+        particle.missileTrailCollapse.geometry.dispose();
+        particle.missileTrailCollapse.material.dispose();
+        particles.splice(i, 1);
+      }
+      continue;
+    }
     if (particle.shieldBubble) {
       const progress = 1 - particle.life / particle.maxLife;
       const fade = Math.max(0, particle.life / particle.maxLife);
@@ -2310,7 +2442,9 @@ function renderReplay(dt) {
   scratchQuatA.setFromAxisAngle(yawAxis, frame.player.heading);
   scratchQuatB.setFromAxisAngle(rollAxis, frame.player.bank);
   replay.player.quaternion.copy(scratchQuatA).multiply(scratchQuatB);
-  triggerReplayShieldEvents(replay.frames[0].t + replay.elapsed);
+  const currentReplayTime = replay.frames[0].t + replay.elapsed;
+  triggerReplayShieldEvents(currentReplayTime);
+  triggerReplayExplosionEvents(currentReplayTime);
 
   for (const replayMissile of replay.missiles) {
     replayMissile._seen = false;
@@ -2422,6 +2556,7 @@ function renderReplay(dt) {
   afterburnerLensPass.uniforms.uScreenChroma.value = 0;
   afterburnerLensPass.uniforms.uVignette.value = 0;
   updateAfterburnerLens(dt, frame.player.afterburner, frame.player.x, frame.player.y, frame.player.heading, replayPlayerZ);
+  updateParticles(dt);
   composer.render();
   drawMinimap();
 }
@@ -2451,6 +2586,23 @@ function triggerReplayShieldEvents(currentTime) {
     const event = replay.shieldEvents[replay.shieldEventIndex];
     shieldImpactVisual(scratchV2.set(event.x, event.y));
     replay.shieldEventIndex += 1;
+  }
+}
+
+function triggerReplayExplosionEvents(currentTime) {
+  while (
+    replay.explosionEventIndex < replay.explosionEvents.length &&
+    replay.explosionEvents[replay.explosionEventIndex].t <= currentTime
+  ) {
+    const event = replay.explosionEvents[replay.explosionEventIndex];
+    spawnMissileExplosion(
+      scratchV2.set(event.x, event.y),
+      scratchV2b.set(event.vx, event.vy),
+      event.color,
+      event.amount,
+      event.z
+    );
+    replay.explosionEventIndex += 1;
   }
 }
 
