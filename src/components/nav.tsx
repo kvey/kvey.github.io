@@ -1,7 +1,7 @@
 "use client";
 
-import { type SVGProps } from 'react'
-import { Linkedin } from 'lucide-react';
+import { useState, type SVGProps } from 'react'
+import { Linkedin, Menu, X } from 'lucide-react';
 
 const navigation = [
   { name: 'Home', href: '/' },
@@ -24,6 +24,8 @@ const socialLinks = [
 ]
 
 export default function Nav() {
+  const [open, setOpen] = useState(false)
+
   return (
     <header className="sticky top-0 z-30 w-full backdrop-blur-md bg-paper/70 dark:bg-paper/60 border-b border-rule/60">
       <nav
@@ -32,13 +34,14 @@ export default function Nav() {
       >
         <a
           href="/"
-          className="nav-link hidden font-mono text-[11px] uppercase tracking-[0.18em] sm:block"
+          className="nav-link font-mono text-[11px] uppercase tracking-[0.18em]"
         >
           Colton Pierson
         </a>
 
-        <div className="flex flex-1 items-center justify-between gap-x-6 sm:flex-none sm:justify-start sm:gap-x-8">
-          <ul className="flex items-center gap-x-5 sm:gap-x-7">
+        {/* Desktop links + socials */}
+        <div className="hidden sm:flex flex-none items-center justify-start gap-x-8">
+          <ul className="flex items-center gap-x-7">
             {navigation.map((item) => (
               <li key={item.name}>
                 <a
@@ -51,7 +54,7 @@ export default function Nav() {
             ))}
           </ul>
 
-          <span className="hidden sm:block h-3 w-px bg-rule" aria-hidden="true" />
+          <span className="h-3 w-px bg-rule" aria-hidden="true" />
 
           <div className="flex items-center gap-x-3.5">
             {socialLinks.map((item) => {
@@ -71,7 +74,61 @@ export default function Nav() {
             })}
           </div>
         </div>
+
+        {/* Mobile menu toggle */}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-expanded={open}
+          aria-controls="mobile-menu"
+          className="sm:hidden -mr-1.5 inline-flex items-center justify-center p-1.5 text-muted hover:text-accent transition-colors"
+        >
+          {open
+            ? <X className="h-[18px] w-[18px]" strokeWidth={1.75} strokeLinecap="round" aria-hidden="true" />
+            : <Menu className="h-[18px] w-[18px]" strokeWidth={1.75} strokeLinecap="round" aria-hidden="true" />}
+        </button>
       </nav>
+
+      {/* Mobile menu panel */}
+      <div
+        id="mobile-menu"
+        className={`sm:hidden overflow-hidden border-t border-rule/60 transition-[max-height,opacity] duration-300 ease-out ${
+          open ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'
+        }`}
+      >
+        <ul className="flex flex-col px-6 py-2">
+          {navigation.map((item) => (
+            <li key={item.name}>
+              <a
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className="nav-link block py-2.5 font-mono text-[11px] uppercase tracking-[0.18em]"
+              >
+                {item.name}
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex items-center gap-x-5 border-t border-rule/60 px-6 py-3">
+          {socialLinks.map((item) => {
+            const Icon = item.icon
+            return (
+              <a
+                key={item.name}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={item.name}
+                className="text-muted hover:text-accent transition-colors"
+              >
+                <Icon className="h-[16px] w-[16px]" strokeWidth={1.75} strokeLinecap="round" aria-hidden="true" />
+              </a>
+            )
+          })}
+        </div>
+      </div>
     </header>
   )
 }
