@@ -62,6 +62,15 @@
       line-height: 1.5;
     }
 
+    #hud > * {
+      opacity: 0;
+      pointer-events: none !important;
+    }
+
+    #hud::before {
+      display: none;
+    }
+
     /* Faint CRT scanlines + phosphor vignette — restrained, not noisy */
     #hud::before {
       content: "";
@@ -562,11 +571,11 @@
     }
 
     #overlayStart::before {
-      content: "W";
+      content: "ENT";
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 22px;
+      width: 30px;
       height: 22px;
       margin-right: 11px;
       border: 1.5px solid currentColor;
@@ -709,7 +718,7 @@
       <h1>Itano Circus</h1>
       <div class="jp-sub">イタノ・サーカス</div>
       <p>The “Itano Circus” is a style of anime action named for animator Ichirō Itano — dense swarms of missiles spiraling through the air on twisting smoke trails as the camera weaves through the barrage. Here, you fly it.</p>
-      <div class="controls"><strong>A/D</strong> or <strong>Q/E</strong> roll &nbsp;·&nbsp; <strong>W</strong> thrust &nbsp;·&nbsp; <strong>S</strong> brake &nbsp;·&nbsp; <strong>Shift</strong> afterburner &nbsp;·&nbsp; hold <strong>Space</strong> for flares</div>
+      <div class="controls"><strong>A/D</strong> or <strong>Q/E</strong> roll &nbsp;·&nbsp; <strong>J/K</strong> pitch &nbsp;·&nbsp; <strong>W</strong> thrust &nbsp;·&nbsp; <strong>S</strong> brake &nbsp;·&nbsp; <strong>Shift+W</strong> afterburner &nbsp;·&nbsp; hold <strong>Space</strong> for flares</div>
       <button id="overlayStart" class="button primary" type="button">Start Run</button>
     </div>
   </div>

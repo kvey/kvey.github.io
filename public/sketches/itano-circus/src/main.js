@@ -21,8 +21,6 @@ const flareButton = document.getElementById('flareButton') || document.createEle
 const startOverlay = document.getElementById('startOverlay');
 const overlayControls = startOverlay.querySelector('.controls');
 const controlsPanel = document.querySelector('.bottom-left');
-const minimapCanvas = document.getElementById('minimap');
-const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
 const settingsButton = document.getElementById('settingsButton');
 const settingsPanel = document.getElementById('settingsPanel');
 const settingsClose = document.getElementById('settingsClose');
@@ -108,6 +106,13 @@ const PLAYER_BRAKE_DRAG = 0.002;
 const PLAYER_BRAKE_LIFT = 0.42;
 const PLAYER_BRAKE_PITCH = 0.26;
 const PLAYER_BRAKE_POSE_RESPONSE = 8.5;
+const PLAYER_MAX_PITCH = 0.36;
+const PLAYER_PITCH_RESPONSE = 7.8;
+const PLAYER_VERTICAL_RESPONSE = 3.2;
+const PLAYER_VERTICAL_SPEED_SCALE = 0.58;
+const PLAYER_GROUND_SPEED_MIN_SCALE = 0.48;
+const PLAYER_MAX_ALTITUDE = 36;
+const PLAYER_MIN_TERRAIN_CLEARANCE = 1.75;
 const PLAYER_MAX_ROLL = 0.82;
 const PLAYER_ROLL_TURN_WEIGHT = 0.78;
 const PLAYER_TURN_COMMAND_LIMIT = 1.35;
@@ -185,6 +190,8 @@ const REPLAY_SIDE_HEIGHT = 10.5;
 const REPLAY_LOOK_AHEAD = 6.5;
 const DEFAULT_BLOOM_STRENGTH = 0.25;
 const BLOOM_STRENGTH_STORAGE_KEY = 'itano-circus:bloom-strength';
+const CRT_GLITCH_DURATION = 0.72;
+const CRT_GLITCH_DECAY = 5.4;
 const bloomSettings = {
   strength: readStoredBloomStrength(),
 };
@@ -201,6 +208,7 @@ scene.background = new THREE.Color(0x010604);
 const camera = new THREE.PerspectiveCamera(CAMERA_BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 260);
 camera.position.set(0, 0, 26);
 camera.lookAt(0, 0, 0);
+scene.add(camera);
 
 scene.add(new THREE.AmbientLight(0x2f7a44, 0.78));
 const keyLight = new THREE.DirectionalLight(0x9dff7a, 1.15);
@@ -209,6 +217,10 @@ scene.add(keyLight);
 const rimLight = new THREE.PointLight(0xff3030, 2.2, 28);
 rimLight.position.set(-5, 7, 8);
 scene.add(rimLight);
+
+const sceneHud = makeSceneHud();
+camera.add(sceneHud.mesh);
+sizeSceneHud();
 
 // Bloom post-processing — gives emissive geometry the NERV phosphor glow.
 const composer = new EffectComposer(renderer);
@@ -226,27 +238,17 @@ applyBloomStrength(bloomSettings.strength, false);
 const afterburnerLensPass = new ShaderPass(makeAfterburnerLensShader());
 afterburnerLensPass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
 composer.addPass(afterburnerLensPass);
+const afterburnerMotionBlurPass = new ShaderPass(makeAfterburnerMotionBlurShader());
+composer.addPass(afterburnerMotionBlurPass);
+const crtPass = new ShaderPass(makeCrtShader());
+crtPass.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+composer.addPass(crtPass);
 composer.addPass(new OutputPass());
 
 // Tactical radar (minimap). Looks much further than the camera window so
 // incoming volleys and launchers are visible long before they are on screen.
 const MINIMAP_FORWARD = 150; // world units of corridor shown ahead of the ship
 const MINIMAP_PLAYER_Y = 0.7; // player anchored 70% down the canvas -> more space ahead
-const minimap = { w: 0, h: 0, scale: 1, dpr: 1 };
-
-function sizeMinimap() {
-  if (!minimapCanvas || !minimapCtx) return;
-  const rect = minimapCanvas.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
-  minimap.dpr = Math.min(window.devicePixelRatio || 1, 2);
-  minimap.w = rect.width;
-  minimap.h = rect.height;
-  minimapCanvas.width = Math.round(rect.width * minimap.dpr);
-  minimapCanvas.height = Math.round(rect.height * minimap.dpr);
-  minimapCtx.setTransform(minimap.dpr, 0, 0, minimap.dpr, 0, 0);
-  // Uniform world->screen scale chosen so MINIMAP_FORWARD fits above the ship.
-  minimap.scale = (minimap.h * MINIMAP_PLAYER_Y) / MINIMAP_FORWARD;
-}
 
 const city = new THREE.Group();
 scene.add(city);
@@ -279,7 +281,9 @@ const player = {
   pos: new THREE.Vector2(0, 0),
   vel: new THREE.Vector2(0, 0),
   altitude: FLIGHT_Z,
+  verticalSpeed: 0,
   heading: 0,
+  pitch: 0,
   bank: 0,
   brakePose: 0,
   gForce: 0,
@@ -301,6 +305,13 @@ const afterburnerLens = {
   dirs: Array.from({ length: AFTERBURNER_LENS_SAMPLES }, () => new THREE.Vector2(0, 1)),
   ages: new Float32Array(AFTERBURNER_LENS_SAMPLES),
   strengths: new Float32Array(AFTERBURNER_LENS_SAMPLES),
+};
+const crtGlitch = {
+  intensity: 0,
+  timer: 0,
+};
+const sceneHudPointer = {
+  drag: null,
 };
 const replayBuffer = [];
 const replay = {
@@ -500,6 +511,10 @@ settingsClose?.addEventListener('click', () => setSettingsOpen(false));
 bloomStrengthInput?.addEventListener('input', (event) => {
   applyBloomStrength(Number(event.currentTarget.value));
 });
+renderer.domElement.addEventListener('pointerdown', handleSceneHudPointerDown);
+renderer.domElement.addEventListener('pointermove', handleSceneHudPointerMove);
+renderer.domElement.addEventListener('pointerup', handleSceneHudPointerUp);
+renderer.domElement.addEventListener('pointerleave', handleSceneHudPointerUp);
 
 window.addEventListener('keydown', (event) => {
   if (event.code === 'Escape' && isSettingsOpen()) {
@@ -525,9 +540,10 @@ window.addEventListener('keydown', (event) => {
     state.cameraMode = 'side';
     return;
   }
-  // W starts / resumes while the non-terminal overlay is up. Run-end restarts require the button.
-  if (event.code === 'KeyW' && (state.mode === 'ready' || state.mode === 'paused') && !event.repeat) {
+  // Enter starts / resumes while the non-terminal overlay is up. Run-end restarts require the button.
+  if (event.code === 'Enter' && (state.mode === 'ready' || state.mode === 'paused') && !event.repeat) {
     handleOverlayButton();
+    event.preventDefault();
   }
   keys.add(event.code);
 });
@@ -551,10 +567,10 @@ window.addEventListener('resize', () => {
   composer.setSize(window.innerWidth, window.innerHeight);
   bloomPass.setSize(window.innerWidth, window.innerHeight);
   afterburnerLensPass.uniforms.uAspect.value = window.innerWidth / window.innerHeight;
-  sizeMinimap();
+  crtPass.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+  sizeSceneHud();
 });
 
-sizeMinimap();
 updateHud();
 animate();
 
@@ -603,7 +619,117 @@ function isControlTarget(target) {
   return target instanceof Element && Boolean(target.closest('button, input, select, textarea, [role="button"]'));
 }
 
+function getSceneHudPoint(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  return {
+    x: ((event.clientX - rect.left) / Math.max(1, rect.width)) * sceneHud.w,
+    y: ((event.clientY - rect.top) / Math.max(1, rect.height)) * sceneHud.h,
+  };
+}
+
+function isPointInRect(point, rect) {
+  return point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h;
+}
+
+function getSceneTopLeftLayout(width = sceneHud.w) {
+  const compact = width <= 760;
+  const x = compact ? 10 : 18;
+  const y = compact ? 10 : 18;
+  return {
+    x,
+    y,
+    back: { x, y, w: 74, h: 40 },
+    title: { x: x + 82, y, w: 158, h: 40 },
+    settings: { x: x + 248, y, w: compact ? 40 : 92, h: 40 },
+  };
+}
+
+function getSceneSettingsLayout(width = sceneHud.w) {
+  const x = width <= 760 ? 10 : 18;
+  const y = width <= 760 ? 54 : 66;
+  const w = Math.min(310, width - x * 2);
+  return {
+    x,
+    y,
+    w,
+    h: 112,
+    close: { x: x + w - 42, y: y + 13, w: 30, h: 30 },
+    slider: { x: x + 18, y: y + 78, w: w - 36, h: 22 },
+  };
+}
+
+function getSceneOverlayLayout(width = sceneHud.w, height = sceneHud.h) {
+  const runEnd = state.mode === 'gameover' || state.mode === 'complete';
+  const boxW = Math.min(460, width - 36);
+  const boxH = runEnd ? 226 : 318;
+  const x = (width - boxW) / 2;
+  const y = (height - boxH) * (runEnd ? 0.72 : 0.5);
+  const buttonW = 172;
+  return {
+    runEnd,
+    box: { x, y, w: boxW, h: boxH },
+    button: { x: x + (boxW - buttonW) / 2, y: y + boxH - 64, w: buttonW, h: 42 },
+  };
+}
+
+function setBloomFromSceneSlider(point) {
+  const { slider } = getSceneSettingsLayout();
+  const t = THREE.MathUtils.clamp((point.x - slider.x) / slider.w, 0, 1);
+  applyBloomStrength(t * 1.5);
+}
+
+function handleSceneHudPointerDown(event) {
+  const point = getSceneHudPoint(event);
+  const topLeft = getSceneTopLeftLayout();
+  if (isPointInRect(point, topLeft.back)) {
+    event.preventDefault();
+    window.location.href = '/sketches';
+    return;
+  }
+  if (isPointInRect(point, topLeft.settings)) {
+    event.preventDefault();
+    setSettingsOpen(!isSettingsOpen());
+    return;
+  }
+  if (isSettingsOpen()) {
+    const settings = getSceneSettingsLayout();
+    if (isPointInRect(point, settings.close)) {
+      event.preventDefault();
+      setSettingsOpen(false);
+      return;
+    }
+    if (isPointInRect(point, settings.slider)) {
+      event.preventDefault();
+      sceneHudPointer.drag = 'bloom';
+      renderer.domElement.setPointerCapture?.(event.pointerId);
+      setBloomFromSceneSlider(point);
+      return;
+    }
+  }
+  if (state.mode === 'ready' || state.mode === 'paused' || state.mode === 'gameover' || state.mode === 'complete') {
+    const overlay = getSceneOverlayLayout();
+    if (isPointInRect(point, overlay.button)) {
+      event.preventDefault();
+      handleOverlayButton();
+    }
+  }
+}
+
+function handleSceneHudPointerMove(event) {
+  if (sceneHudPointer.drag !== 'bloom') return;
+  event.preventDefault();
+  setBloomFromSceneSlider(getSceneHudPoint(event));
+}
+
+function handleSceneHudPointerUp(event) {
+  if (!sceneHudPointer.drag) return;
+  event.preventDefault();
+  sceneHudPointer.drag = null;
+  renderer.domElement.releasePointerCapture?.(event.pointerId);
+}
+
 function startRun() {
+  triggerCrtGlitch();
   clearRun();
   stopReplayPlayback();
   replayBuffer.length = 0;
@@ -631,7 +757,9 @@ function startRun() {
   player.pos.set(0, CITY_START_Y);
   player.vel.set(0, PLAYER_CRUISE_SPEED);
   player.altitude = getPlayerFlightZ(player.pos.x, player.pos.y, 0, player.vel.length(), 0);
+  player.verticalSpeed = 0;
   player.heading = 0;
+  player.pitch = 0;
   player.bank = 0;
   player.brakePose = 0;
   player.gForce = 0;
@@ -661,6 +789,7 @@ function startRun() {
   afterburnerLensPass.uniforms.uScreenChroma.value = 0;
   afterburnerLensPass.uniforms.uVignette.value = 0;
   afterburnerLensPass.uniforms.uSampleCount.value = 0;
+  afterburnerMotionBlurPass.uniforms.uIntensity.value = 0;
   cameraRig.position.set(player.pos.x, player.pos.y - 3.5, player.altitude + 9);
   cameraRig.lookAt.set(player.pos.x, player.pos.y + 2.5, player.altitude);
   camera.fov = CAMERA_BASE_FOV;
@@ -677,7 +806,9 @@ function startRun() {
 
 function togglePause() {
   if (state.mode === 'ready' || state.mode === 'gameover' || state.mode === 'complete') return;
-  state.mode = state.mode === 'paused' ? 'playing' : 'paused';
+  const resuming = state.mode === 'paused';
+  if (resuming) triggerCrtGlitch();
+  state.mode = resuming ? 'playing' : 'paused';
   pauseButton.textContent = state.mode === 'paused' ? 'Resume' : 'Pause';
   startOverlay.classList.remove('run-end');
   overlayControls?.classList.remove('hide');
@@ -694,6 +825,28 @@ function handleOverlayButton() {
   } else {
     startRun();
   }
+}
+
+function triggerCrtGlitch() {
+  crtGlitch.intensity = 1;
+  crtGlitch.timer = CRT_GLITCH_DURATION;
+  crtPass.uniforms.uHit.value = 1;
+  document.body.classList.remove('crt-hit');
+  void document.body.offsetWidth;
+  document.body.classList.add('crt-hit');
+}
+
+function updateCrtGlitch(dt) {
+  if (crtGlitch.timer > 0) {
+    crtGlitch.timer = Math.max(0, crtGlitch.timer - dt);
+    const t = crtGlitch.timer / CRT_GLITCH_DURATION;
+    crtGlitch.intensity = Math.max(t * t, crtGlitch.intensity * Math.exp(-CRT_GLITCH_DECAY * dt));
+  } else {
+    crtGlitch.intensity *= Math.exp(-CRT_GLITCH_DECAY * dt);
+    if (crtGlitch.intensity < 0.001) crtGlitch.intensity = 0;
+  }
+  crtPass.uniforms.uHit.value = crtGlitch.intensity;
+  if (crtGlitch.intensity === 0) document.body.classList.remove('crt-hit');
 }
 
 function gameOver() {
@@ -828,6 +981,8 @@ function animate() {
   requestAnimationFrame(animate);
   const frameDt = Math.min(clock.getDelta(), 0.033);
   const dt = frameDt * GAME_SPEED;
+  crtPass.uniforms.uTime.value += frameDt;
+  updateCrtGlitch(frameDt);
   if (state.mode === 'playing') {
     state.wallRunTime += frameDt;
     update(dt);
@@ -872,6 +1027,7 @@ function recordReplayFrame(dt) {
       z: missile.altitude,
       vx: missile.vel.x,
       vy: missile.vel.y,
+      vz: missile.verticalVelocity ?? 0,
       crashing: missile.crashing,
     });
   }
@@ -895,9 +1051,12 @@ function recordReplayFrame(dt) {
     player: {
       x: player.pos.x,
       y: player.pos.y,
+      z: player.altitude,
       vx: player.vel.x,
       vy: player.vel.y,
+      vz: player.verticalSpeed,
       heading: player.heading,
+      pitch: player.pitch,
       bank: player.bank,
       afterburner: state.afterburnerActive,
     },
@@ -939,7 +1098,7 @@ function startReplayPlayback() {
   replay.explosionEventIndex = 0;
   replay.duration = Math.max(0.1, replay.frames[replay.frames.length - 1].t - replay.frames[0].t);
   const firstFrame = replay.frames[0];
-  const replayStartZ = getPlayerFlightZ(firstFrame.player.x, firstFrame.player.y, 0, Math.hypot(firstFrame.player.vx, firstFrame.player.vy), firstFrame.player.bank);
+  const replayStartZ = firstFrame.player.z ?? getPlayerFlightZ(firstFrame.player.x, firstFrame.player.y, 0, Math.hypot(firstFrame.player.vx, firstFrame.player.vy), firstFrame.player.bank);
   replay.cameraFocus.set(firstFrame.player.x, firstFrame.player.y);
   replay.cameraPosition.set(firstFrame.player.x, firstFrame.player.y, replayStartZ + REPLAY_SIDE_HEIGHT);
   replay.cameraLookAt.set(firstFrame.player.x, firstFrame.player.y, replayStartZ);
@@ -1023,6 +1182,7 @@ function updatePlayer(dt) {
   const previousVelY = player.vel.y;
   const introActive = isIntroActive();
   const rollInput = introActive ? 0 : getRollInput();
+  const pitchInput = introActive ? 0 : getPitchInput();
   const accelerating = !introActive && (keys.has('KeyW') || keys.has('ArrowUp'));
   const braking = !introActive && (keys.has('KeyS') || keys.has('ArrowDown'));
   const requestingAfterburner = !introActive && accelerating && (keys.has('ShiftLeft') || keys.has('ShiftRight'));
@@ -1047,8 +1207,7 @@ function updatePlayer(dt) {
     const headingDelta = getSignedAngleDelta(player.heading, 0);
     player.heading += THREE.MathUtils.clamp(headingDelta, -player.maxTurnRate * dt, player.maxTurnRate * dt);
   } else {
-    const speedRatio = THREE.MathUtils.clamp(player.vel.length() / PLAYER_MAX_SPEED, 0, AFTERBURNER_MAX_SPEED_MULT);
-    const turnScale = PLAYER_MIN_TURN_SCALE + speedRatio * speedRatio * PLAYER_SPEED_TURN_GAIN;
+    const turnScale = getPlayerTurnAuthority();
     const rollTurnInput = -(player.bank / PLAYER_MAX_ROLL) * PLAYER_ROLL_TURN_WEIGHT;
     const turnCommand = THREE.MathUtils.clamp(rollTurnInput, -PLAYER_TURN_COMMAND_LIMIT, PLAYER_TURN_COMMAND_LIMIT);
     player.heading += turnCommand * player.maxTurnRate * turnScale * dt;
@@ -1058,14 +1217,18 @@ function updatePlayer(dt) {
   if (!introActive) {
     applyTargetAlignmentAssist(dt, rollInput);
   }
+  const targetPitch = introActive ? 0 : pitchInput * PLAYER_MAX_PITCH;
+  player.pitch += (targetPitch - player.pitch) * getDampingFactor(PLAYER_PITCH_RESPONSE, dt);
 
   const forward = scratchV2.set(-Math.sin(player.heading), Math.cos(player.heading));
+  const groundSpeedScale = THREE.MathUtils.clamp(Math.cos(player.pitch), PLAYER_GROUND_SPEED_MIN_SCALE, 1);
   if (introActive) {
     player.vel.lerp(forward.multiplyScalar(INTRO_AUTO_SPEED), Math.min(1, dt * 2.6));
   } else {
-    const targetSpeed = braking
+    const targetAirSpeed = braking
       ? PLAYER_BRAKE_SPEED
       : (state.afterburnerActive ? PLAYER_MAX_SPEED * AFTERBURNER_MAX_SPEED_MULT : (accelerating ? PLAYER_THROTTLE_SPEED : PLAYER_CRUISE_SPEED));
+    const targetSpeed = targetAirSpeed * groundSpeedScale;
     const speed = player.vel.length();
     if (speed < targetSpeed) {
       const burnMult = state.afterburnerActive ? AFTERBURNER_ACCEL_MULT : 1;
@@ -1084,7 +1247,7 @@ function updatePlayer(dt) {
   if (!introActive) {
     const drag = accelerating ? PLAYER_ACTIVE_DRAG : PLAYER_IDLE_DRAG;
     player.vel.multiplyScalar(Math.pow(braking ? PLAYER_BRAKE_DRAG : drag, dt));
-    const minSpeed = braking ? PLAYER_BRAKE_SPEED : PLAYER_CRUISE_SPEED;
+    const minSpeed = (braking ? PLAYER_BRAKE_SPEED : PLAYER_CRUISE_SPEED) * groundSpeedScale;
     if (player.vel.length() < minSpeed) player.vel.setLength(minSpeed);
   }
   const sustainedMaxSpeed = state.afterburnerActive ? PLAYER_MAX_SPEED * AFTERBURNER_MAX_SPEED_MULT : PLAYER_THROTTLE_SPEED;
@@ -1105,8 +1268,24 @@ function updatePlayer(dt) {
   const turnDelta = getSignedAngleDelta(previousHeading, player.heading);
   const turnRate = turnDelta / Math.max(dt, 0.0001);
   player.pos.addScaledVector(player.vel, dt);
-  const targetAltitude = getPlayerFlightZ(player.pos.x, player.pos.y, state.runTime, player.vel.length(), player.bank);
-  player.altitude += (targetAltitude - player.altitude) * getDampingFactor(PLAYER_ALTITUDE_RESPONSE, dt);
+  const terrainFloor = getTerrainZ(player.pos.x, player.pos.y) + PLAYER_MIN_TERRAIN_CLEARANCE;
+  const targetVerticalSpeed = introActive ? 0 : getPlayerAirSpeed() * Math.sin(player.pitch) * PLAYER_VERTICAL_SPEED_SCALE;
+  player.verticalSpeed += (targetVerticalSpeed - player.verticalSpeed) * getDampingFactor(PLAYER_VERTICAL_RESPONSE, dt);
+  if (introActive) {
+    const targetAltitude = getPlayerFlightZ(player.pos.x, player.pos.y, state.runTime, player.vel.length(), player.bank);
+    player.altitude += (targetAltitude - player.altitude) * getDampingFactor(PLAYER_ALTITUDE_RESPONSE, dt);
+  } else {
+    player.altitude += player.verticalSpeed * dt;
+    if (player.altitude < terrainFloor) {
+      player.altitude = terrainFloor;
+      player.verticalSpeed = Math.max(0, player.verticalSpeed);
+      player.pitch = Math.max(0, player.pitch);
+    } else if (player.altitude > PLAYER_MAX_ALTITUDE) {
+      player.altitude = PLAYER_MAX_ALTITUDE;
+      player.verticalSpeed = Math.min(0, player.verticalSpeed);
+      player.pitch = Math.min(0, player.pitch);
+    }
+  }
   updateTargetGuide();
 
   player.invulnerable = Math.max(0, player.invulnerable - dt);
@@ -1133,7 +1312,7 @@ function updatePlayer(dt) {
   player.brakePose += ((braking && !introActive ? 1 : 0) - player.brakePose) * getDampingFactor(PLAYER_BRAKE_POSE_RESPONSE, dt);
   player.mesh.position.set(player.pos.x, player.pos.y, player.altitude + player.brakePose * PLAYER_BRAKE_LIFT);
   scratchQuatA.setFromAxisAngle(yawAxis, player.heading);
-  scratchQuatB.setFromAxisAngle(pitchAxis, player.brakePose * PLAYER_BRAKE_PITCH);
+  scratchQuatB.setFromAxisAngle(pitchAxis, player.pitch + player.brakePose * PLAYER_BRAKE_PITCH);
   scratchQuatC.setFromAxisAngle(rollAxis, player.bank);
   player.mesh.quaternion.copy(scratchQuatA).multiply(scratchQuatB).multiply(scratchQuatC);
   updateEngineTrails();
@@ -1145,6 +1324,23 @@ function getRollInput() {
   if (keys.has('KeyQ') || keys.has('KeyD') || keys.has('ArrowLeft')) roll += 1;
   if (keys.has('KeyE') || keys.has('KeyA') || keys.has('ArrowRight')) roll -= 1;
   return roll;
+}
+
+function getPitchInput() {
+  let pitch = 0;
+  if (keys.has('KeyJ')) pitch += 1;
+  if (keys.has('KeyK')) pitch -= 1;
+  return pitch;
+}
+
+function getPlayerAirSpeed() {
+  return Math.hypot(player.vel.length(), player.verticalSpeed);
+}
+
+function getPlayerTurnAuthority() {
+  const speedRatio = THREE.MathUtils.clamp(player.vel.length() / PLAYER_MAX_SPEED, 0, AFTERBURNER_MAX_SPEED_MULT);
+  const highSpeedPenalty = 1 + speedRatio * speedRatio * PLAYER_SPEED_TURN_GAIN;
+  return THREE.MathUtils.clamp(1 / highSpeedPenalty, PLAYER_MIN_TURN_SCALE, 1);
 }
 
 function applyTargetAlignmentAssist(dt, rollInput) {
@@ -1166,7 +1362,7 @@ function applyTargetAlignmentAssist(dt, rollInput) {
   const manualScale = rollInput === 0 || Math.sign(headingDelta) === -Math.sign(rollInput)
     ? 1
     : TARGET_ALIGN_ASSIST_MANUAL_REDUCTION;
-  const assistTurn = TARGET_ALIGN_ASSIST_TURN_RATE * proximity * manualScale * dt;
+  const assistTurn = TARGET_ALIGN_ASSIST_TURN_RATE * getPlayerTurnAuthority() * proximity * manualScale * dt;
   player.heading += THREE.MathUtils.clamp(headingDelta, -assistTurn, assistTurn);
 }
 
@@ -1539,6 +1735,7 @@ function addMissile(pos, vel) {
     fuel: MISSILE_FUEL_TIME + Math.random() * 1.7,
     crashFallSpeed: MISSILE_CRASH_FALL_SPEED,
     altitude: getMissileFlightZ(pos.x, pos.y) - 0.08,
+    verticalVelocity: 0,
     crashing: false,
     age: 0,
     spiralPhase: Math.random() * Math.PI * 2,
@@ -1562,6 +1759,7 @@ function addMissile(pos, vel) {
 function updateMissiles(dt) {
   for (let i = missiles.length - 1; i >= 0; i -= 1) {
     const missile = missiles[i];
+    const previousAltitude = missile.altitude;
     missile.age += dt;
     if (!missile.crashing) {
       missile.fuel -= dt;
@@ -1601,14 +1799,16 @@ function updateMissiles(dt) {
     missile.pos.addScaledVector(missile.vel, dt);
     if (!missile.crashing) {
       const verticalWeave = Math.cos(missile.age * missile.spiralFrequency * 1.07 + missile.verticalSpiralPhase) * missile.verticalSpiralStrength * (0.35 + Math.min(0.65, missile.age * 1.8));
-      const targetAltitude = getMissileFlightZ(missile.pos.x, missile.pos.y) - 0.08 + verticalWeave;
+      const target = chooseMissileTarget(missile);
+      const targetAltitude = getEntityAltitude(target) + verticalWeave;
       missile.altitude += (targetAltitude - missile.altitude) * getDampingFactor(6.8, dt);
     }
+    missile.verticalVelocity = (missile.altitude - previousAltitude) / Math.max(dt, 0.0001);
     missile.mesh.position.set(missile.pos.x, missile.pos.y, missile.altitude);
-    orientMissile(missile.mesh, missile.vel);
+    orientMissile(missile.mesh, missile.vel, missile.verticalVelocity);
     if (!missile.crashing) updateTrail(missile);
 
-    const playerDistanceSq = missile.pos.distanceToSquared(player.pos);
+    const playerDistanceSq = getEntityDistanceSq(missile, player);
     if (playerDistanceSq < SHIELD_RADIUS * SHIELD_RADIUS) {
       if (player.invulnerable > 0) {
         explodeMissile(i, 0x86fff0, 14);
@@ -1633,7 +1833,7 @@ function updateMissiles(dt) {
 
     let flareHit = null;
     for (const flare of flares) {
-      if (flare.pos.distanceToSquared(missile.pos) < 0.62 * 0.62) {
+      if (getEntityDistanceSq(flare, missile) < 0.62 * 0.62) {
         flareHit = flare;
         break;
       }
@@ -1660,9 +1860,9 @@ function chooseMissileTarget(missile) {
   let best = player;
   let bestScore = Infinity;
   const decoyRadiusSq = FLARE_DECOY_RADIUS * FLARE_DECOY_RADIUS;
-  const playerD = missile.pos.distanceToSquared(player.pos);
+  const playerD = getEntityDistanceSq(missile, player);
   for (const flare of flares) {
-    const d = flare.pos.distanceToSquared(missile.pos);
+    const d = getEntityDistanceSq(flare, missile);
     if (d > decoyRadiusSq && d > playerD * 1.35) continue;
     const flareLifeStrength = THREE.MathUtils.clamp(flare.life / 2.2, 0.25, 1);
     const score = d * (1 - FLARE_DECOY_LOCK_BIAS * flareLifeStrength);
@@ -1728,14 +1928,32 @@ function getInterceptLeadTime(relX, relY, relVx, relVy, missileSpeed) {
   return THREE.MathUtils.clamp(t, MISSILE_LEAD_TIME_MIN, MISSILE_LEAD_TIME_MAX);
 }
 
+function getEntityAltitude(entity) {
+  return entity.altitude ?? entity.mesh?.position?.z ?? getMissileFlightZ(entity.pos.x, entity.pos.y);
+}
+
+function getEntityDistanceSq(a, b) {
+  const dx = a.pos.x - b.pos.x;
+  const dy = a.pos.y - b.pos.y;
+  const dz = getEntityAltitude(a) - getEntityAltitude(b);
+  return dx * dx + dy * dy + dz * dz;
+}
+
 function placeMissileAtShieldImpact(missile) {
-  scratchV2.copy(missile.pos).sub(player.pos);
-  if (scratchV2.lengthSq() < 0.0001) {
-    scratchV2.copy(missile.vel).multiplyScalar(-1);
+  scratchV3.set(
+    missile.pos.x - player.pos.x,
+    missile.pos.y - player.pos.y,
+    missile.altitude - player.altitude
+  );
+  if (scratchV3.lengthSq() < 0.0001) {
+    scratchV3.set(-missile.vel.x, -missile.vel.y, -missile.verticalVelocity || 0);
   }
-  scratchV2.normalize();
-  missile.pos.copy(player.pos).addScaledVector(scratchV2, SHIELD_RADIUS);
-  missile.altitude = player.altitude - 0.08;
+  scratchV3.normalize();
+  missile.pos.set(
+    player.pos.x + scratchV3.x * SHIELD_RADIUS,
+    player.pos.y + scratchV3.y * SHIELD_RADIUS
+  );
+  missile.altitude = player.altitude + scratchV3.z * SHIELD_RADIUS;
   missile.mesh.position.set(missile.pos.x, missile.pos.y, missile.altitude);
 }
 
@@ -2417,31 +2635,33 @@ function render(dt) {
   afterburnerLensPass.uniforms.uScreenChroma.value = shakeChroma;
   afterburnerLensPass.uniforms.uVignette.value = gForce * PLAYER_G_FORCE_VIGNETTE;
   updateAfterburnerLens(dt, state.afterburnerActive, player.pos.x, player.pos.y, player.heading, player.altitude);
+  drawSceneHud();
   composer.render();
-  drawMinimap();
 }
 
 function renderReplay(dt) {
   replay.elapsed = Math.min(replay.duration, replay.elapsed + dt);
   const frame = getReplayFrame(replay.elapsed);
   if (!frame) {
+    drawSceneHud();
     composer.render();
-    drawMinimap();
     return;
   }
 
   player.pos.set(frame.player.x, frame.player.y);
   player.vel.set(frame.player.vx, frame.player.vy);
+  player.verticalSpeed = frame.player.vz ?? 0;
   ensureCityChunks();
   starField.position.set(frame.player.x, frame.player.y, -20);
 
   replay.player.visible = true;
-  const replayPlayerZ = getPlayerFlightZ(frame.player.x, frame.player.y, replay.elapsed, Math.hypot(frame.player.vx, frame.player.vy), frame.player.bank);
+  const replayPlayerZ = frame.player.z ?? getPlayerFlightZ(frame.player.x, frame.player.y, replay.elapsed, Math.hypot(frame.player.vx, frame.player.vy), frame.player.bank);
   player.altitude = replayPlayerZ;
   replay.player.position.set(frame.player.x, frame.player.y, replayPlayerZ);
   scratchQuatA.setFromAxisAngle(yawAxis, frame.player.heading);
-  scratchQuatB.setFromAxisAngle(rollAxis, frame.player.bank);
-  replay.player.quaternion.copy(scratchQuatA).multiply(scratchQuatB);
+  scratchQuatB.setFromAxisAngle(pitchAxis, frame.player.pitch ?? 0);
+  scratchQuatC.setFromAxisAngle(rollAxis, frame.player.bank);
+  replay.player.quaternion.copy(scratchQuatA).multiply(scratchQuatB).multiply(scratchQuatC);
   const currentReplayTime = replay.frames[0].t + replay.elapsed;
   triggerReplayShieldEvents(currentReplayTime);
   triggerReplayExplosionEvents(currentReplayTime);
@@ -2475,7 +2695,7 @@ function renderReplay(dt) {
     scratchV2.set(missile.vx, missile.vy);
     if (scratchV2.lengthSq() < 0.0001) scratchV2.set(0, 1);
     replayMissile.lastVelocity.copy(scratchV2);
-    orientMissile(replayMissile.mesh, scratchV2);
+    orientMissile(replayMissile.mesh, scratchV2, missile.vz ?? 0);
     updateReplayMissileTrail(replayMissile, missile.crashing);
   }
   for (const replayMissile of replay.missiles) {
@@ -2557,8 +2777,8 @@ function renderReplay(dt) {
   afterburnerLensPass.uniforms.uVignette.value = 0;
   updateAfterburnerLens(dt, frame.player.afterburner, frame.player.x, frame.player.y, frame.player.heading, replayPlayerZ);
   updateParticles(dt);
+  drawSceneHud();
   composer.render();
-  drawMinimap();
 }
 
 function getReplayMissileSlot(id) {
@@ -2716,9 +2936,16 @@ function interpolateReplayFrame(a, b, alpha) {
   const playerFrame = {
     x: THREE.MathUtils.lerp(a.player.x, b.player.x, alpha),
     y: THREE.MathUtils.lerp(a.player.y, b.player.y, alpha),
+    z: THREE.MathUtils.lerp(
+      a.player.z ?? getPlayerFlightZ(a.player.x, a.player.y, 0, Math.hypot(a.player.vx, a.player.vy), a.player.bank),
+      b.player.z ?? getPlayerFlightZ(b.player.x, b.player.y, 0, Math.hypot(b.player.vx, b.player.vy), b.player.bank),
+      alpha
+    ),
     vx: THREE.MathUtils.lerp(a.player.vx, b.player.vx, alpha),
     vy: THREE.MathUtils.lerp(a.player.vy, b.player.vy, alpha),
+    vz: THREE.MathUtils.lerp(a.player.vz ?? 0, b.player.vz ?? 0, alpha),
     heading: a.player.heading + getSignedAngleDelta(a.player.heading, b.player.heading) * alpha,
+    pitch: THREE.MathUtils.lerp(a.player.pitch ?? 0, b.player.pitch ?? 0, alpha),
     bank: THREE.MathUtils.lerp(a.player.bank, b.player.bank, alpha),
     afterburner: a.player.afterburner || b.player.afterburner,
   };
@@ -2741,6 +2968,7 @@ function interpolateReplayFrame(a, b, alpha) {
       z: THREE.MathUtils.lerp(ma.z, mb.z, alpha),
       vx: THREE.MathUtils.lerp(ma.vx, mb.vx, alpha),
       vy: THREE.MathUtils.lerp(ma.vy, mb.vy, alpha),
+      vz: THREE.MathUtils.lerp(ma.vz ?? 0, mb.vz ?? 0, alpha),
       crashing: ma.crashing || mb.crashing,
     });
   }
@@ -2770,10 +2998,169 @@ function interpolateReplayFrame(a, b, alpha) {
   return { player: playerFrame, missiles: missileFrames, flares: flareFrames };
 }
 
-function drawMinimap() {
-  const ctx = minimapCtx;
-  if (!ctx || !minimap.w) return;
-  const { w, h, scale } = minimap;
+function makeSceneHud() {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+  mesh.position.z = -1;
+  mesh.renderOrder = 10000;
+  mesh.frustumCulled = false;
+  return { canvas, ctx, texture, mesh, dpr: 1, w: 0, h: 0 };
+}
+
+function sizeSceneHud() {
+  const dpr = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO);
+  sceneHud.dpr = dpr;
+  sceneHud.w = window.innerWidth;
+  sceneHud.h = window.innerHeight;
+  sceneHud.canvas.width = Math.max(1, Math.round(sceneHud.w * dpr));
+  sceneHud.canvas.height = Math.max(1, Math.round(sceneHud.h * dpr));
+  sceneHud.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  sceneHud.texture.needsUpdate = true;
+  updateSceneHudPlane();
+}
+
+function updateSceneHudPlane() {
+  const distance = Math.abs(sceneHud.mesh.position.z);
+  const height = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)) * distance;
+  sceneHud.mesh.scale.set(height * camera.aspect, height, 1);
+}
+
+function drawSceneHud() {
+  const ctx = sceneHud.ctx;
+  const w = sceneHud.w;
+  const h = sceneHud.h;
+  if (!ctx || !w || !h) return;
+  updateSceneHudPlane();
+  ctx.clearRect(0, 0, w, h);
+  drawSceneTopLeft(ctx);
+  if (isSettingsOpen()) drawSceneSettings(ctx);
+  drawSceneStats(ctx, w);
+  drawSceneRadar(ctx, w, h);
+  if (state.mode === 'ready' || state.mode === 'paused' || state.mode === 'gameover' || state.mode === 'complete') {
+    drawSceneOverlay(ctx, w, h);
+  }
+  sceneHud.texture.needsUpdate = true;
+}
+
+function drawSceneTopLeft(ctx) {
+  const layout = getSceneTopLeftLayout();
+  drawCutPanel(ctx, layout.back.x, layout.back.y, layout.back.w, layout.back.h, 'rgba(14, 8, 3, 0.82)', 'rgba(255, 122, 31, 0.26)');
+  drawText(ctx, '◄ BACK', layout.back.x + 14, layout.back.y + 25, '600 12px "Saira", sans-serif', '#ffb074', 0.12);
+  drawCutPanel(ctx, layout.title.x, layout.title.y, layout.title.w, layout.title.h, 'rgba(14, 8, 3, 0.82)', 'rgba(255, 122, 31, 0.26)');
+  drawText(ctx, '◆', layout.title.x + 16, layout.title.y + 26, '18px "Saira", sans-serif', '#ff3b32');
+  drawText(ctx, 'Itano Circus', layout.title.x + 38, layout.title.y + 27, '400 18px "EVA Matisse", "Saira", serif', '#f4eedc');
+  drawCutPanel(ctx, layout.settings.x, layout.settings.y, layout.settings.w, layout.settings.h, 'rgba(14, 8, 3, 0.82)', 'rgba(255, 122, 31, 0.26)');
+  drawText(ctx, sceneHud.w <= 760 ? '⚙' : '⚙ SETTINGS', layout.settings.x + (sceneHud.w <= 760 ? 13 : 14), layout.settings.y + 25, '600 12px "Saira", sans-serif', '#ffb074', 0.12);
+}
+
+function drawSceneStats(ctx, width) {
+  const compact = width <= 760;
+  const labels = [
+    ['得点', 'Score', hudCache.score || '0', '#ffe7d6'],
+    ['目標', 'Target', hudCache.wave || '0m', '#ff3b32'],
+    ['速度', 'Speed', hudCache.speed || '0', '#ff7a1f'],
+    ['加速', 'Burn', hudCache.afterburner || '100', '#ffb648'],
+    ['防壁', 'Shield', hudCache.shield || '3', '#ffd27a'],
+    ['火炎', 'Flares', hudCache.flares || '3', '#ffb648'],
+  ];
+  const y = compact ? 56 : 18;
+  const gap = compact ? 4 : 0;
+  const panelW = compact ? width - 20 : 540;
+  const panelX = compact ? 10 : width - panelW - 18;
+  const cellW = panelW / labels.length;
+  drawCutPanel(ctx, panelX, y, panelW, 58, 'rgba(14, 8, 3, 0.82)', 'rgba(255, 122, 31, 0.26)');
+  labels.forEach(([jp, en, value, color], i) => {
+    const x = panelX + i * cellW + gap;
+    if (i > 0 && !compact) {
+      ctx.fillStyle = 'rgba(255, 122, 31, 0.26)';
+      ctx.fillRect(panelX + i * cellW, y + 12, 1, 34);
+    }
+    if (!compact) drawText(ctx, jp, x + 16, y + 20, '400 11px "EVA Matisse", serif', '#ff7a1f');
+    drawText(ctx, en.toUpperCase(), x + (compact ? 6 : 42), y + 20, '600 10px "Saira", sans-serif', '#ffb074', 0.16);
+    drawText(ctx, value, x + (compact ? 6 : 16), y + 48, '700 23px "Saira Semi Condensed", sans-serif', color);
+  });
+}
+
+function drawSceneSettings(ctx) {
+  const { x, y, w, h, slider } = getSceneSettingsLayout();
+  drawCutPanel(ctx, x, y, w, h, 'rgba(14, 8, 3, 0.86)', 'rgba(255, 122, 31, 0.26)');
+  drawText(ctx, '設定', x + 18, y + 31, '400 12px "EVA Matisse", serif', '#ff7a1f');
+  drawText(ctx, 'SETTINGS', x + 54, y + 31, '700 16px "Saira Semi Condensed", sans-serif', '#ffe7d6', 0.12);
+  drawText(ctx, '×', x + w - 31, y + 31, '18px "Saira", sans-serif', '#ffb074');
+  drawText(ctx, 'BLOOM', x + 18, y + 72, '600 10px "Saira", sans-serif', '#ffb074', 0.16);
+  drawText(ctx, bloomSettings.strength.toFixed(2), x + w - 58, y + 72, '12px "JetBrains Mono", monospace', '#ffb648');
+  const trackX = slider.x;
+  const trackY = y + 88;
+  const trackW = slider.w;
+  ctx.fillStyle = 'rgba(255, 122, 31, 0.2)';
+  ctx.fillRect(trackX, trackY, trackW, 2);
+  ctx.fillStyle = '#ff7a1f';
+  ctx.fillRect(trackX, trackY, trackW * THREE.MathUtils.clamp(bloomSettings.strength / 1.5, 0, 1), 2);
+  ctx.beginPath();
+  ctx.arc(trackX + trackW * THREE.MathUtils.clamp(bloomSettings.strength / 1.5, 0, 1), trackY + 1, 5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawSceneRadar(ctx, width, height) {
+  const compact = width <= 760;
+  const radarW = compact ? 130 : 190;
+  const radarH = compact ? 158 : 226;
+  const pad = compact ? 10 : 18;
+  const x = width - radarW - pad;
+  const y = height - radarH - pad;
+  drawCutPanel(ctx, x, y, radarW, radarH, 'rgba(14, 8, 3, 0.82)', 'rgba(255, 122, 31, 0.26)');
+  drawText(ctx, '索敵', x + 13, y + 24, '400 12px "EVA Matisse", serif', '#ff7a1f');
+  drawText(ctx, 'RADAR', x + 48, y + 24, '600 10px "Saira", sans-serif', '#ffb074', 0.16);
+  const canvasX = x + (compact ? 9 : 12);
+  const canvasY = y + 38;
+  const canvasW = radarW - (compact ? 18 : 24);
+  const canvasH = radarH - (compact ? 47 : 50);
+  ctx.save();
+  ctx.translate(canvasX, canvasY);
+  drawCutPanel(ctx, 0, 0, canvasW, canvasH, 'rgba(10, 5, 1, 0.64)', 'rgba(255, 122, 31, 0.26)', 0);
+  ctx.beginPath();
+  ctx.rect(1, 1, canvasW - 2, canvasH - 2);
+  ctx.clip();
+  drawMinimapInto(ctx, canvasW, canvasH, (canvasH * MINIMAP_PLAYER_Y) / MINIMAP_FORWARD);
+  ctx.restore();
+}
+
+function drawSceneOverlay(ctx, width, height) {
+  const { runEnd, box, button } = getSceneOverlayLayout(width, height);
+  const { x, y, w: boxW, h: boxH } = box;
+  drawCutPanel(ctx, x, y, boxW, boxH, 'rgba(2, 5, 3, 0.9)', 'rgba(255, 122, 31, 0.26)');
+  drawText(ctx, runEnd ? '作戦終了' : state.mode === 'paused' ? '一時停止' : '作戦開始', x + 34, y + 42, '400 13px "EVA Matisse", serif', '#ffb648');
+  const title = state.mode === 'paused' ? 'Paused' : runEnd ? 'Run Ended' : 'Itano Circus';
+  drawText(ctx, title, x + 34, y + 100, '400 54px "EVA Matisse", "Saira", serif', '#f4eedc');
+  if (!runEnd && state.mode !== 'paused') {
+    drawText(ctx, 'イタノ・サーカス', x + 34, y + 134, '400 20px "EVA Matisse", serif', '#f1ead6', 0.18);
+  }
+  const body = runEnd
+    ? `Score ${Math.floor(state.score)}. The next run starts at the city edge.`
+    : state.mode === 'paused'
+      ? 'Resume when you are ready to re-enter the volley.'
+      : 'Dense swarms of missiles spiral through the air on twisting smoke trails as the camera weaves through the barrage. Here, you fly it.';
+  drawWrappedText(ctx, body, x + 34, y + (runEnd || state.mode === 'paused' ? 132 : 170), boxW - 68, 18, '12.5px "JetBrains Mono", monospace', 'rgba(255, 214, 178, 0.64)');
+  if (!runEnd && state.mode !== 'paused') {
+    drawWrappedText(ctx, 'A/D or Q/E roll  ·  J/K pitch  ·  W thrust  ·  S brake  ·  Shift+W afterburner  ·  hold Space for flares', x + 34, y + 240, boxW - 68, 20, '11px "JetBrains Mono", monospace', 'rgba(255, 176, 116, 0.85)');
+  }
+  drawCutPanel(ctx, button.x, button.y, button.w, button.h, '#ff7a1f', 'rgba(255, 122, 31, 0.5)');
+  drawText(ctx, state.mode === 'paused' ? 'RESUME' : runEnd ? 'RESTART' : 'START RUN', button.x + 28, button.y + 27, '700 14px "Saira Semi Condensed", sans-serif', '#1c0d00', 0.14);
+}
+
+function drawMinimapInto(ctx, w, h, scale) {
   const cx = w / 2;
   const py = h * MINIMAP_PLAYER_Y;
   const toX = (wx) => cx + (wx - player.pos.x) * scale;
@@ -2904,6 +3291,65 @@ function drawMinimap() {
   ctx.shadowBlur = 0;
 }
 
+function drawCutPanel(ctx, x, y, w, h, fill, stroke, corner = 9) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + corner, y);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h - corner);
+  ctx.lineTo(x + w - corner, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + corner);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawText(ctx, text, x, y, font, color, letterSpacing = 0) {
+  ctx.save();
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'alphabetic';
+  if (!letterSpacing) {
+    ctx.fillText(text, x, y);
+  } else {
+    let cursor = x;
+    for (const char of text) {
+      ctx.fillText(char, cursor, y);
+      cursor += ctx.measureText(char).width + letterSpacing * 10;
+    }
+  }
+  ctx.restore();
+}
+
+function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, font, color) {
+  ctx.save();
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'alphabetic';
+  const words = text.split(/\s+/);
+  let line = '';
+  let cursorY = y;
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      ctx.fillText(line, x, cursorY);
+      line = word;
+      cursorY += lineHeight;
+    } else {
+      line = test;
+    }
+  }
+  if (line) ctx.fillText(line, x, cursorY);
+  ctx.restore();
+}
+
 function getThreatFocus() {
   let count = 0;
   let x = 0;
@@ -2933,7 +3379,7 @@ function getDampingFactor(response, dt) {
 function updateHud() {
   setHudText('score', scoreEl, Math.floor(state.score).toString());
   setHudText('wave', waveEl, `${Math.max(0, Math.ceil(player.pos.distanceTo(TARGET)))}m`);
-  setHudText('speed', speedEl, Math.round(player.vel.length() * 10).toString());
+  setHudText('speed', speedEl, Math.round(getPlayerAirSpeed() * 10).toString());
   setHudText('afterburner', afterburnerEl, Math.ceil(state.afterburner).toString());
   setHudText('shield', hullEl, Math.max(0, Math.ceil(state.shield)).toString());
   setHudText('flares', flaresEl, state.flareCharges.toString());
@@ -2970,7 +3416,7 @@ function updateTargetGuide() {
   positions[2] = player.altitude - 0.36;
   positions[3] = player.pos.x + scratchV2.x * end;
   positions[4] = player.pos.y + scratchV2.y * end;
-  positions[5] = getPlayerFlightZ(positions[3], positions[4], state.runTime, player.vel.length(), player.bank) - 0.36;
+  positions[5] = player.altitude + player.verticalSpeed * 0.08 - 0.36;
   targetGuide.geometry.attributes.position.needsUpdate = true;
   targetGuide.material.opacity = THREE.MathUtils.clamp(distance / 22, 0.18, 0.72);
 }
@@ -3138,6 +3584,136 @@ function makeAfterburnerLensShader() {
   };
 }
 
+function makeAfterburnerMotionBlurShader() {
+  return {
+    uniforms: {
+      tDiffuse: { value: null },
+      uIntensity: { value: 0 },
+      uDirection: { value: new THREE.Vector2(0, 1) },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+
+      uniform sampler2D tDiffuse;
+      uniform float uIntensity;
+      uniform vec2 uDirection;
+      varying vec2 vUv;
+
+      void main() {
+        float strength = smoothstep(0.08, 1.0, uIntensity);
+        vec2 dir = normalize(uDirection + vec2(0.0001));
+        vec2 center = vUv - 0.5;
+        vec2 metricCenter = center * vec2(1.15, 1.0);
+        float edgeMask = smoothstep(0.23, 0.78, length(metricCenter));
+        float centerProtect = 1.0 - smoothstep(0.0, 0.28, length(metricCenter));
+        edgeMask *= 1.0 - centerProtect * 0.92;
+        vec2 radialDir = normalize(center + vec2(0.0001));
+        vec2 boostDir = normalize(mix(radialDir, dir, 0.32));
+        vec2 blurStep = boostDir * (0.003 + edgeMask * 0.014) * strength;
+
+        vec4 color = texture2D(tDiffuse, vUv) * 0.42;
+        color += texture2D(tDiffuse, clamp(vUv - blurStep * 0.7, vec2(0.001), vec2(0.999))) * 0.2;
+        color += texture2D(tDiffuse, clamp(vUv - blurStep * 1.45, vec2(0.001), vec2(0.999))) * 0.14;
+        color += texture2D(tDiffuse, clamp(vUv - blurStep * 2.25, vec2(0.001), vec2(0.999))) * 0.09;
+        color += texture2D(tDiffuse, clamp(vUv + blurStep * 0.7, vec2(0.001), vec2(0.999))) * 0.1;
+        color += texture2D(tDiffuse, clamp(vUv + blurStep * 1.45, vec2(0.001), vec2(0.999))) * 0.09;
+
+        vec4 base = texture2D(tDiffuse, vUv);
+        gl_FragColor = mix(base, color, strength * edgeMask * 0.9);
+      }
+    `,
+  };
+}
+
+function makeCrtShader() {
+  return {
+    uniforms: {
+      tDiffuse: { value: null },
+      uResolution: { value: new THREE.Vector2(1, 1) },
+      uTime: { value: 0 },
+      uHit: { value: 0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+
+      uniform sampler2D tDiffuse;
+      uniform vec2 uResolution;
+      uniform float uTime;
+      uniform float uHit;
+      varying vec2 vUv;
+
+      float randomLine(float y) {
+        return fract(sin(y * 91.345 + floor(uTime * 32.0) * 17.17) * 47453.5453);
+      }
+
+      vec2 barrelDistort(vec2 uv) {
+        vec2 centered = uv * 2.0 - 1.0;
+        float radiusSq = dot(centered, centered);
+        centered *= 1.0 + radiusSq * (0.038 + uHit * 0.075) + radiusSq * radiusSq * (0.012 + uHit * 0.028);
+        return centered * 0.5 + 0.5;
+      }
+
+      void main() {
+        vec2 warpedUv = barrelDistort(vUv);
+        float impact = uHit * uHit;
+        vec2 edgeFade = smoothstep(vec2(-0.018), vec2(0.028), warpedUv) *
+          (1.0 - smoothstep(vec2(0.972), vec2(1.018), warpedUv));
+        float inside = edgeFade.x * edgeFade.y;
+
+        vec2 centered = warpedUv - 0.5;
+        float roll = sin((warpedUv.y + uTime * 0.035) * 42.0) * 0.00028;
+        roll += sin((warpedUv.y * 2.0 - uTime * 0.16) * 6.2831853) * 0.00038;
+        float tearLine = smoothstep(0.84 - impact * 0.16, 1.0, randomLine(floor(warpedUv.y * (92.0 + impact * 140.0))));
+        float tearBand = sin((warpedUv.y * 18.0 + uTime * 23.0) * 6.2831853) * 0.5 + 0.5;
+        float tear = tearLine * (0.006 + impact * 0.042) * (0.35 + tearBand * 0.65);
+        float broadShake = sin(uTime * 82.0) * impact * 0.009;
+        vec2 baseUv = clamp(warpedUv + vec2(roll + tear + broadShake, sin(uTime * 61.0) * impact * 0.0025), vec2(0.001), vec2(0.999));
+
+        vec2 chromaDir = normalize(centered + vec2(0.0001));
+        vec2 chroma = chromaDir * (0.0018 + dot(centered, centered) * 0.0042 + impact * 0.024);
+        vec3 color = vec3(
+          texture2D(tDiffuse, clamp(baseUv + chroma, vec2(0.001), vec2(0.999))).r,
+          texture2D(tDiffuse, baseUv).g,
+          texture2D(tDiffuse, clamp(baseUv - chroma, vec2(0.001), vec2(0.999))).b
+        );
+
+        float scanline = sin((warpedUv.y * uResolution.y + uTime * 18.0) * 3.14159265);
+        color *= 0.88 + 0.12 * scanline - impact * (0.11 + 0.09 * tearLine);
+
+        float maskPhase = mod(floor(warpedUv.x * uResolution.x), 3.0);
+        vec3 mask = mix(vec3(0.82, 0.9, 0.82), vec3(1.05), step(1.0, maskPhase));
+        mask = mix(mask, vec3(0.82, 0.82, 0.95), step(2.0, maskPhase));
+        color *= mask;
+
+        float vignette = smoothstep(0.22, 0.88, length(centered * vec2(1.08, 0.94)));
+        color *= 1.05 - vignette * (0.34 + impact * 0.28);
+        color += vec3(0.012, 0.006, 0.002) * (1.0 - vignette);
+        color += vec3(1.0, 0.42, 0.18) * impact * (0.08 + tearLine * 0.1);
+        color *= 0.985 + sin(uTime * 59.0) * 0.015 + sin(uTime * 119.0) * impact * 0.09;
+        color *= inside;
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+  };
+}
+
 function resetAfterburnerLens() {
   afterburnerLens.intensity = 0;
   afterburnerLens.time = 0;
@@ -3147,6 +3723,7 @@ function resetAfterburnerLens() {
   afterburnerLensPass.uniforms.uIntensity.value = 0;
   afterburnerLensPass.uniforms.uVignette.value = 0;
   afterburnerLensPass.uniforms.uSampleCount.value = 0;
+  afterburnerMotionBlurPass.uniforms.uIntensity.value = 0;
 }
 
 function updateAfterburnerLens(dt, active, x, y, heading, altitude = getPlayerFlightZ(x, y, afterburnerLens.time, 0, 0)) {
@@ -3155,6 +3732,7 @@ function updateAfterburnerLens(dt, active, x, y, heading, altitude = getPlayerFl
   afterburnerLens.intensity += (target - afterburnerLens.intensity) * getDampingFactor(AFTERBURNER_SHOCKWAVE_FADE_RATE, dt);
   afterburnerLensPass.uniforms.uTime.value = afterburnerLens.time;
   afterburnerLensPass.uniforms.uIntensity.value = afterburnerLens.intensity;
+  afterburnerMotionBlurPass.uniforms.uIntensity.value = afterburnerLens.intensity;
 
   camera.updateMatrixWorld();
   const forward = scratchV2.set(-Math.sin(heading), Math.cos(heading));
@@ -3167,6 +3745,7 @@ function updateAfterburnerLens(dt, active, x, y, heading, altitude = getPlayerFl
   lensDirUv.set(lensForwardScreen.x - lensShipScreen.x, lensForwardScreen.y - lensShipScreen.y);
   if (lensDirUv.lengthSq() < 0.00001) lensDirUv.set(0, 1);
   lensDirUv.normalize();
+  afterburnerMotionBlurPass.uniforms.uDirection.value.copy(lensDirUv);
 
   for (let i = afterburnerLens.samples.length - 1; i >= 0; i -= 1) {
     const sample = afterburnerLens.samples[i];
@@ -3349,8 +3928,8 @@ function resetLauncher(launcher) {
   launcher.mesh.scale.setScalar(1);
 }
 
-function orientMissile(mesh, velocity) {
-  scratchV3.set(velocity.x, velocity.y, 0).normalize();
+function orientMissile(mesh, velocity, verticalVelocity = 0) {
+  scratchV3.set(velocity.x, velocity.y, verticalVelocity).normalize();
   mesh.quaternion.setFromUnitVectors(baseMissileDir, scratchV3);
 }
 
