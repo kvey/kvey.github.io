@@ -78,6 +78,18 @@ const PLAYER_ALTITUDE_VARIATION = 0.34;
 const PLAYER_ALTITUDE_RESPONSE = 3.8;
 const MISSILE_TERRAIN_CLEARANCE = PLAYER_TERRAIN_CLEARANCE - 0.18;
 const DOWNTOWN_CENTER_Y = 128;
+const CITY_MIN_BLOCK_FILL = 0.38;
+const CITY_MIN_PARCEL_FILL = 0.46;
+const CITY_HEIGHT_SPIKE_CHANCE = 0.075;
+const CITY_DENSITY_CENTERS = [
+  { x: 0, y: DOWNTOWN_CENTER_Y, rx: 62, ry: 128, weight: 0.62, district: 'tower' },
+  { x: -92, y: 78, rx: 78, ry: 104, weight: 0.34, district: 'industrial' },
+  { x: 84, y: 52, rx: 70, ry: 86, weight: 0.3, district: 'commercial' },
+  { x: -54, y: 232, rx: 88, ry: 118, weight: 0.38, district: 'tower' },
+  { x: 112, y: 210, rx: 92, ry: 132, weight: 0.32, district: 'residential' },
+  { x: -138, y: 182, rx: 74, ry: 96, weight: 0.28, district: 'industrial' },
+  { x: 34, y: 342, rx: 116, ry: 154, weight: 0.34, district: 'commercial' },
+];
 const CAMERA_BASE_FOV = 50;
 const CAMERA_HEIGHT = 56;
 const CAMERA_BACK_OFFSET = 7.5;
@@ -114,6 +126,11 @@ const PLAYER_GROUND_SPEED_MIN_SCALE = 0.48;
 const PLAYER_MAX_ALTITUDE = 36;
 const PLAYER_MIN_TERRAIN_CLEARANCE = 1.75;
 const PLAYER_MAX_ROLL = 0.82;
+const PLAYER_PLANE_WIDTH = 2.36;
+const PLAYER_BARREL_ROLL_DURATION = 0.56;
+const PLAYER_BARREL_ROLL_DOUBLE_TAP_WINDOW = 0.32;
+const PLAYER_BARREL_ROLL_DODGE_DISTANCE = PLAYER_PLANE_WIDTH * 2;
+const PLAYER_BARREL_ROLL_ROTATIONS = 2;
 const PLAYER_ROLL_TURN_WEIGHT = 0.78;
 const PLAYER_TURN_COMMAND_LIMIT = 1.35;
 const PLAYER_MIN_TURN_SCALE = 0.42;
@@ -172,6 +189,7 @@ const LAUNCHER_BURST_MAX = 5;
 const LAUNCHER_AMMO_MIN = 9;
 const LAUNCHER_AMMO_MAX = 15;
 const LAUNCHER_ANGLE_SPREAD = 0.42;
+const LAUNCHER_BARREL_Z = 0.36;
 const REPLAY_DURATION = 15;
 const REPLAY_SAMPLE_INTERVAL = 0.055;
 const REPLAY_MAX_MISSILES = 70;
@@ -272,7 +290,7 @@ const staticCityLineMaterial = new THREE.LineBasicMaterial({
   transparent: true,
   opacity: 1,
   depthWrite: false,
-  blending: THREE.AdditiveBlending,
+  blending: THREE.NormalBlending,
 });
 staticCityLineMaterial.userData.keepAlive = true;
 
@@ -285,6 +303,11 @@ const player = {
   heading: 0,
   pitch: 0,
   bank: 0,
+  visualBank: 0,
+  barrelRollTime: 0,
+  barrelRollDirection: 0,
+  barrelRollOffset: 0,
+  barrelRollDodgeProgress: 0,
   brakePose: 0,
   gForce: 0,
   speedLimit: PLAYER_THROTTLE_SPEED,
@@ -431,6 +454,10 @@ const shieldReplayEvents = [];
 const missileReplayExplosionEvents = [];
 const particles = [];
 const keys = new Set();
+const lastRollTap = {
+  direction: 0,
+  time: -Infinity,
+};
 const flareBurst = {
   active: false,
   auto: false,
@@ -545,6 +572,7 @@ window.addEventListener('keydown', (event) => {
     handleOverlayButton();
     event.preventDefault();
   }
+  handleRollDoubleTap(event);
   keys.add(event.code);
 });
 
@@ -613,6 +641,34 @@ function setSettingsOpen(open) {
   } else if (settingsPanel?.contains(document.activeElement)) {
     document.activeElement.blur();
   }
+}
+
+function handleRollDoubleTap(event) {
+  if (event.repeat || state.mode !== 'playing' || isIntroActive()) return;
+  const direction = getRollDirectionForKey(event.code);
+  if (direction === 0) return;
+  const now = performance.now() * 0.001;
+  if (lastRollTap.direction === direction && now - lastRollTap.time <= PLAYER_BARREL_ROLL_DOUBLE_TAP_WINDOW) {
+    startBarrelRoll(direction);
+    lastRollTap.direction = 0;
+    lastRollTap.time = -Infinity;
+    return;
+  }
+  lastRollTap.direction = direction;
+  lastRollTap.time = now;
+}
+
+function getRollDirectionForKey(code) {
+  if (code === 'KeyQ' || code === 'KeyD' || code === 'ArrowLeft') return 1;
+  if (code === 'KeyE' || code === 'KeyA' || code === 'ArrowRight') return -1;
+  return 0;
+}
+
+function startBarrelRoll(direction) {
+  player.barrelRollDirection = direction;
+  player.barrelRollTime = 0;
+  player.barrelRollOffset = 0;
+  player.barrelRollDodgeProgress = 0;
 }
 
 function isControlTarget(target) {
@@ -761,6 +817,11 @@ function startRun() {
   player.heading = 0;
   player.pitch = 0;
   player.bank = 0;
+  player.visualBank = 0;
+  player.barrelRollTime = 0;
+  player.barrelRollDirection = 0;
+  player.barrelRollOffset = 0;
+  player.barrelRollDodgeProgress = 0;
   player.brakePose = 0;
   player.gForce = 0;
   player.speedLimit = PLAYER_THROTTLE_SPEED;
@@ -769,6 +830,8 @@ function startRun() {
   player.hitPushTimer = 0;
   player.hitRollVelocity = 0;
   player.hitYawVelocity = 0;
+  lastRollTap.direction = 0;
+  lastRollTap.time = -Infinity;
   setTarget(0, TARGET_Y);
   for (const launcher of launchPads) resetLauncher(launcher);
   ensureCityChunks();
@@ -1057,7 +1120,7 @@ function recordReplayFrame(dt) {
       vz: player.verticalSpeed,
       heading: player.heading,
       pitch: player.pitch,
-      bank: player.bank,
+      bank: player.visualBank,
       afterburner: state.afterburnerActive,
     },
     missiles: missileFrames,
@@ -1296,6 +1359,27 @@ function updatePlayer(dt) {
   player.bank += player.hitRollVelocity * dt;
   player.hitRollVelocity *= Math.exp(-PLAYER_HIT_ROTATION_DAMPING * dt);
   player.bank = THREE.MathUtils.clamp(player.bank, -PLAYER_MAX_ROLL * 1.45, PLAYER_MAX_ROLL * 1.45);
+  if (player.barrelRollDirection !== 0) {
+    player.barrelRollTime += dt;
+    const progress = THREE.MathUtils.clamp(player.barrelRollTime / PLAYER_BARREL_ROLL_DURATION, 0, 1);
+    const easedProgress = progress < 0.5
+      ? 4 * progress * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 3) * 0.5;
+    const dodgeDelta = easedProgress - player.barrelRollDodgeProgress;
+    const rightX = Math.cos(player.heading);
+    const rightY = Math.sin(player.heading);
+    player.pos.x += player.barrelRollDirection * rightX * PLAYER_BARREL_ROLL_DODGE_DISTANCE * dodgeDelta;
+    player.pos.y += player.barrelRollDirection * rightY * PLAYER_BARREL_ROLL_DODGE_DISTANCE * dodgeDelta;
+    player.barrelRollDodgeProgress = easedProgress;
+    player.barrelRollOffset = player.barrelRollDirection * Math.PI * 2 * PLAYER_BARREL_ROLL_ROTATIONS * easedProgress;
+    if (progress >= 1) {
+      player.barrelRollDirection = 0;
+      player.barrelRollTime = 0;
+      player.barrelRollOffset = 0;
+      player.barrelRollDodgeProgress = 0;
+    }
+  }
+  player.visualBank = player.bank + player.barrelRollOffset;
   const currentSpeed = player.vel.length();
   const previousSpeed = Math.hypot(previousVelX, previousVelY);
   const previousVelocityAngle = previousSpeed > 0.001 ? Math.atan2(previousVelY, previousVelX) : player.heading;
@@ -1313,7 +1397,7 @@ function updatePlayer(dt) {
   player.mesh.position.set(player.pos.x, player.pos.y, player.altitude + player.brakePose * PLAYER_BRAKE_LIFT);
   scratchQuatA.setFromAxisAngle(yawAxis, player.heading);
   scratchQuatB.setFromAxisAngle(pitchAxis, player.pitch + player.brakePose * PLAYER_BRAKE_PITCH);
-  scratchQuatC.setFromAxisAngle(rollAxis, player.bank);
+  scratchQuatC.setFromAxisAngle(rollAxis, player.visualBank);
   player.mesh.quaternion.copy(scratchQuatA).multiply(scratchQuatB).multiply(scratchQuatC);
   updateEngineTrails();
   setObjectOpacity(player.mesh, player.invulnerable > 0 ? 0.44 + Math.sin(state.runTime * 46) * 0.22 : 1);
@@ -1673,6 +1757,7 @@ function updateLaunchers(dt) {
 function fireLauncher(launcher) {
   if (launcher.ammo <= 0) return false;
   const pos = new THREE.Vector2(launcher.x, launcher.y);
+  const launchAltitude = launcher.z + LAUNCHER_BARREL_Z;
   let aimX = player.pos.x - launcher.x;
   let aimY = player.pos.y - launcher.y;
   const aimLength = Math.hypot(aimX, aimY);
@@ -1686,8 +1771,8 @@ function fireLauncher(launcher) {
   const angle = Math.atan2(aimY, aimX) + (Math.random() - 0.5) * LAUNCHER_ANGLE_SPREAD;
   const speed = MISSILE_LAUNCH_SPEED + Math.min(PLAYER_MAX_SPEED * 0.16, state.wave * 0.85) + Math.random() * PLAYER_MAX_SPEED * 0.08;
   const vel = new THREE.Vector2(Math.cos(angle), Math.sin(angle)).multiplyScalar(speed);
-  rocketLaunchEffect(pos, vel);
-  addMissile(pos, vel);
+  rocketLaunchEffect(pos, vel, launchAltitude);
+  addMissile(pos, vel, launchAltitude);
   launcher.ammo -= 1;
   if (launcher.ammo <= 0) {
     launcher.launchTimer = 0;
@@ -1696,7 +1781,7 @@ function fireLauncher(launcher) {
   return true;
 }
 
-function addMissile(pos, vel) {
+function addMissile(pos, vel, altitude = getMissileFlightZ(pos.x, pos.y) - 0.08) {
   const mesh = makeMissileMesh();
   const trailRawPositions = new Float32Array(MISSILE_TRAIL_POINTS * 3);
   const trailPositions = new Float32Array(MISSILE_TRAIL_POINTS * 3);
@@ -1717,6 +1802,8 @@ function addMissile(pos, vel) {
     })
   );
   trail.frustumCulled = false;
+  mesh.position.set(pos.x, pos.y, altitude);
+  orientMissile(mesh, vel, 0);
   scene.add(mesh, trail);
   missiles.push({
     id: nextMissileId,
@@ -1734,7 +1821,7 @@ function addMissile(pos, vel) {
     lastTrailY: pos.y,
     fuel: MISSILE_FUEL_TIME + Math.random() * 1.7,
     crashFallSpeed: MISSILE_CRASH_FALL_SPEED,
-    altitude: getMissileFlightZ(pos.x, pos.y) - 0.08,
+    altitude,
     verticalVelocity: 0,
     crashing: false,
     age: 0,
@@ -1749,10 +1836,10 @@ function addMissile(pos, vel) {
   });
   trailRawPositions[0] = pos.x;
   trailRawPositions[1] = pos.y;
-  trailRawPositions[2] = getMissileFlightZ(pos.x, pos.y) - 0.18;
+  trailRawPositions[2] = altitude - 0.1;
   trailPositions[0] = pos.x;
   trailPositions[1] = pos.y;
-  trailPositions[2] = getMissileFlightZ(pos.x, pos.y) - 0.18;
+  trailPositions[2] = altitude - 0.1;
   nextMissileId += 1;
 }
 
@@ -2274,9 +2361,8 @@ function spark(pos, color, amount, direction = null, altitude = getMissileFlight
   particles.push({ points, positions, velocities, life: 0.58 });
 }
 
-function rocketLaunchEffect(pos, velocity) {
+function rocketLaunchEffect(pos, velocity, altitude = getTerrainZ(pos.x, pos.y) + LAUNCHER_BARREL_Z) {
   const direction = getExplosionDirection(velocity);
-  const altitude = getTerrainZ(pos.x, pos.y) + 0.38;
   const group = new THREE.Group();
   group.position.set(pos.x, pos.y, altitude);
   group.rotation.z = Math.atan2(-direction.x, direction.y);
@@ -2946,7 +3032,7 @@ function interpolateReplayFrame(a, b, alpha) {
     vz: THREE.MathUtils.lerp(a.player.vz ?? 0, b.player.vz ?? 0, alpha),
     heading: a.player.heading + getSignedAngleDelta(a.player.heading, b.player.heading) * alpha,
     pitch: THREE.MathUtils.lerp(a.player.pitch ?? 0, b.player.pitch ?? 0, alpha),
-    bank: THREE.MathUtils.lerp(a.player.bank, b.player.bank, alpha),
+    bank: a.player.bank + getSignedAngleDelta(a.player.bank, b.player.bank) * alpha,
     afterburner: a.player.afterburner || b.player.afterburner,
   };
   const aMissiles = a.missileById;
@@ -3154,7 +3240,7 @@ function drawSceneOverlay(ctx, width, height) {
       : 'Dense swarms of missiles spiral through the air on twisting smoke trails as the camera weaves through the barrage. Here, you fly it.';
   drawWrappedText(ctx, body, x + 34, y + (runEnd || state.mode === 'paused' ? 132 : 170), boxW - 68, 18, '12.5px "JetBrains Mono", monospace', 'rgba(255, 214, 178, 0.64)');
   if (!runEnd && state.mode !== 'paused') {
-    drawWrappedText(ctx, 'A/D or Q/E roll  ·  J/K pitch  ·  W thrust  ·  S brake  ·  Shift+W afterburner  ·  hold Space for flares', x + 34, y + 240, boxW - 68, 20, '11px "JetBrains Mono", monospace', 'rgba(255, 176, 116, 0.85)');
+    drawWrappedText(ctx, 'A/D or Q/E roll  ·  double-tap roll for barrel roll  ·  J/K pitch  ·  W thrust  ·  S brake  ·  Shift+W afterburner  ·  hold Space for flares', x + 34, y + 240, boxW - 68, 20, '11px "JetBrains Mono", monospace', 'rgba(255, 176, 116, 0.85)');
   }
   drawCutPanel(ctx, button.x, button.y, button.w, button.h, '#ff7a1f', 'rgba(255, 122, 31, 0.5)');
   drawText(ctx, state.mode === 'paused' ? 'RESUME' : runEnd ? 'RESTART' : 'START RUN', button.x + 28, button.y + 27, '700 14px "Saira Semi Condensed", sans-serif', '#1c0d00', 0.14);
@@ -4318,21 +4404,21 @@ function makeCityBlocks(chunkX, chunkY, rng, chunkPads, chunkBuildings) {
 
 function addCityBlock(group, batches, cx, cy, blockW, blockH, rng, chunkPads, chunkBuildings) {
   const density = getDensity(cx, cy);
-  if (rng() > 0.14 + density * 0.86) return;
+  if (rng() > CITY_MIN_BLOCK_FILL + density * (1 - CITY_MIN_BLOCK_FILL)) return;
   addBatchRectLine(batches.detail, cx, cy, blockW, blockH, getTerrainZ(cx, cy) + 0.095);
 
   const district = getDistrictType(cx, cy);
-  const parcelGrid = density > 0.74 ? 3 : (density > 0.42 ? 2 : 1);
+  const parcelGrid = density > 0.68 ? 3 : (density > 0.34 ? 2 : 1);
   const parcelW = blockW / parcelGrid;
   const parcelH = blockH / parcelGrid;
   for (let ix = 0; ix < parcelGrid; ix += 1) {
     for (let iy = 0; iy < parcelGrid; iy += 1) {
       const parcelDensity = density + (rng() - 0.5) * 0.18;
-      if (rng() > 0.22 + parcelDensity * 0.78) continue;
+      if (rng() > CITY_MIN_PARCEL_FILL + parcelDensity * (1 - CITY_MIN_PARCEL_FILL)) continue;
       const x = cx - blockW * 0.5 + parcelW * (ix + 0.5) + (rng() - 0.5) * parcelW * 0.15;
       const y = cy - blockH * 0.5 + parcelH * (iy + 0.5) + (rng() - 0.5) * parcelH * 0.15;
       if (!canPlaceBuilding(x, y)) continue;
-      const localDistrict = district === 'tower' && rng() < 0.18 ? 'commercial' : district;
+      const localDistrict = district === 'tower' && rng() < 0.12 ? 'commercial' : district;
       const dimensions = getBuildingDimensions(localDistrict, rng, parcelW, parcelH);
       addBuilding(group, batches, x, y, dimensions.w, dimensions.h, localDistrict, rng, chunkPads, chunkBuildings);
     }
@@ -4346,6 +4432,7 @@ function addBuilding(group, batches, x, y, w, h, district, rng, chunkPads, chunk
   chunkBuildings?.push({ x, y, w, h });
   addBatchWireBox(batches.edge, x, y, w, h, height, baseZ);
   addBatchRectLine(batches.detail, x, y, w * 0.68, h * 0.68, roofZ + 0.02);
+  addSteppedBuildingVolume(batches, x, y, w, h, height, baseZ, district, rng);
   addBuildingTypeDetails(batches, x, y, w, h, height, baseZ, district, rng);
 
   const insetW = Math.max(0.34, w * 0.22);
@@ -4478,7 +4565,7 @@ function isNearRoad(x, y, padding = 1.25) {
 }
 
 function canPlaceBuilding(x, y) {
-  return !isInRiver(x, y, 3.1) && !isNearRoad(x, y, 1.15);
+  return !isInRiver(x, y, 2.1) && !isNearRoad(x, y, 0.78);
 }
 
 function isInsideBuildingFootprint(x, y, padding = 0) {
@@ -4500,19 +4587,71 @@ function isInsideBuildingFootprint(x, y, padding = 0) {
   return false;
 }
 
+function getCityCenterInfluence(center, x, y) {
+  const dx = (x - center.x) / center.rx;
+  const dy = (y - center.y) / center.ry;
+  return Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy));
+}
+
+function getCityCenterDensity(x, y) {
+  let density = 0;
+  for (const center of CITY_DENSITY_CENTERS) {
+    const influence = getCityCenterInfluence(center, x, y);
+    density += influence * influence * center.weight;
+  }
+  return density;
+}
+
+function getDistrictInfluence(x, y, district) {
+  let influence = 0;
+  for (const center of CITY_DENSITY_CENTERS) {
+    if (center.district !== district) continue;
+    influence = Math.max(influence, getCityCenterInfluence(center, x, y));
+  }
+  return influence;
+}
+
+function getCityArterialDensity(x, y) {
+  const diagonalA = 1 - Math.min(1, Math.abs(x * 0.62 + y * 0.18 - 38) / 26);
+  const diagonalB = 1 - Math.min(1, Math.abs(x * -0.48 + y * 0.24 - 82) / 28);
+  const crossTown = 1 - Math.min(1, Math.abs(y - DOWNTOWN_CENTER_Y - Math.sin(x * 0.032) * 34) / 38);
+  const westArc = 1 - Math.min(1, Math.abs(Math.hypot(x + 116, y - 166) - 72) / 34);
+  return Math.max(diagonalA, diagonalB, crossTown, westArc, 0);
+}
+
 function getDensity(x, y) {
-  const downtownDx = x / 34;
-  const downtownDy = (y - DOWNTOWN_CENTER_Y) / 82;
-  const downtown = Math.max(0, 1 - Math.sqrt(downtownDx * downtownDx + downtownDy * downtownDy));
-  const innerCity = Math.max(0, 1 - Math.abs(y - DOWNTOWN_CENTER_Y) / 190) * Math.max(0, 1 - Math.abs(x) / 95);
-  return THREE.MathUtils.clamp(0.12 + downtown * 0.78 + innerCity * 0.28, 0.08, 1);
+  const centerDensity = getCityCenterDensity(x, y);
+  const metroSprawl = Math.max(0, 1 - Math.abs(y - DOWNTOWN_CENTER_Y) / 330) * Math.max(0, 1 - Math.abs(x) / 210);
+  const lateralSprawl = Math.max(0, 1 - Math.abs(y - 214) / 250) * Math.max(0, 1 - Math.abs(x) / 285);
+  const arterial = getCityArterialDensity(x, y);
+  const riverfront = Math.max(0, 1 - Math.abs(Math.abs(x - getRiverCenterX(y)) - RIVER_WIDTH * 1.25) / 34);
+  const cityEdgeRamp = smoothstep(CITY_EDGE_Y - 8, CITY_EDGE_Y + 72, y);
+  return THREE.MathUtils.clamp(
+    0.16 +
+      centerDensity +
+      metroSprawl * 0.22 +
+      lateralSprawl * 0.2 +
+      arterial * 0.2 +
+      riverfront * 0.12 * cityEdgeRamp,
+    0.12,
+    1
+  );
 }
 
 function getDistrictType(x, y) {
   const density = getDensity(x, y);
-  if (density > 0.72) return 'tower';
-  if (x < -34 || y < CITY_EDGE_Y + 52) return 'industrial';
-  if (Math.abs(x - getRiverCenterX(y)) < RIVER_WIDTH * 1.8) return 'commercial';
+  const towerInfluence = getDistrictInfluence(x, y, 'tower');
+  const industrialInfluence = getDistrictInfluence(x, y, 'industrial');
+  const commercialInfluence = getDistrictInfluence(x, y, 'commercial');
+  const residentialInfluence = getDistrictInfluence(x, y, 'residential');
+  const riverfront = Math.abs(x - getRiverCenterX(y)) < RIVER_WIDTH * 2.2;
+  const warehouseBelt = x < -72 || (industrialInfluence > 0.38 && density < 0.82);
+  const commercialBelt = commercialInfluence > 0.3 || getCityArterialDensity(x, y) > 0.54 || riverfront;
+
+  if (towerInfluence > 0.36 || density > 0.78) return 'tower';
+  if (warehouseBelt && commercialInfluence < 0.55 && towerInfluence < 0.45) return 'industrial';
+  if (commercialBelt && residentialInfluence < 0.62) return 'commercial';
+  if (density > 0.62 && commercialInfluence > industrialInfluence) return 'commercial';
   return 'residential';
 }
 
@@ -4527,11 +4666,37 @@ function getBuildingDimensions(district, rng, parcelW = STREET_SPACING * 0.7, pa
 
 function getBuildingHeight(district, x, y, rng) {
   const density = getDensity(x, y);
-  if (district === 'tower') return 6.5 + density * 9.5 + rng() * 8.5;
-  if (district === 'industrial') return 0.75 + rng() * 1.65;
-  if (district === 'commercial') return 1.8 + density * 2.2 + rng() * 3.4;
+  if (district === 'tower') return 7.5 + density * 11.5 + rng() * 10.5;
+  if (district === 'industrial') return 0.95 + rng() * 2.35;
+  if (district === 'commercial') {
+    let height = 2.2 + density * 3.4 + rng() * 4.6;
+    if (rng() < CITY_HEIGHT_SPIKE_CHANCE + density * 0.1) height += 5.5 + rng() * 7.5;
+    return height;
+  }
   const roadBoost = isNearRoad(x, y, 2.6) ? 0.8 : 0;
-  return 0.9 + roadBoost + density * 1.6 + rng() * 2.1;
+  let height = 1.15 + roadBoost + density * 2.2 + rng() * 2.9;
+  if (rng() < CITY_HEIGHT_SPIKE_CHANCE * density) height += 4.0 + rng() * 5.5;
+  return height;
+}
+
+function addSteppedBuildingVolume(batches, x, y, w, h, height, baseZ, district, rng) {
+  if (height < 4.8 && district !== 'tower') return;
+  const stepChance = district === 'tower' ? 0.86 : 0.42;
+  if (rng() > stepChance) return;
+
+  const midHeight = height * (0.42 + rng() * 0.18);
+  const upperHeight = height * (0.32 + rng() * 0.2);
+  const upperW = Math.max(0.52, w * (0.48 + rng() * 0.24));
+  const upperH = Math.max(0.52, h * (0.48 + rng() * 0.24));
+  const offsetX = (rng() - 0.5) * w * 0.18;
+  const offsetY = (rng() - 0.5) * h * 0.18;
+  addBatchWireBox(batches.detail, x + offsetX, y + offsetY, upperW, upperH, upperHeight, baseZ + midHeight);
+
+  if (district === 'tower' && rng() < 0.58) {
+    const crownW = Math.max(0.38, upperW * 0.48);
+    const crownH = Math.max(0.38, upperH * 0.48);
+    addBatchWireBox(batches.accent, x + offsetX * 1.2, y + offsetY * 1.2, crownW, crownH, 1.3 + rng() * 2.4, baseZ + midHeight + upperHeight);
+  }
 }
 
 function addBuildingTypeDetails(batches, x, y, w, h, height, baseZ, district, rng) {
