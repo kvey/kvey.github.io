@@ -78,22 +78,7 @@ const Home = () => {
               Building the runtime layer for production AI agents.
             </p>
 
-            <p className="font-mono text-sm leading-relaxed mt-8 text-muted max-w-lg">
-              Fourteen years shipping infrastructure people rely on — at{' '}
-              <a href="https://www.figma.com/about" target="_blank" rel="noopener noreferrer" className="accent-link">Figma</a>,{' '}
-              <a href="https://curative.com" target="_blank" rel="noopener noreferrer" className="accent-link">Curative</a>, and{' '}
-              <a href="https://asm.co" target="_blank" rel="noopener noreferrer" className="accent-link">Assembly</a>{' '}
-              (YC S15). Now full-time on{' '}
-              <a href="https://thousandbirds.ai" target="_blank" rel="noopener noreferrer" className="accent-link">Thousand Birds</a>, backed by{' '}
-              <a href="https://www.hf0.com/" target="_blank" rel="noopener noreferrer" className="accent-link">HF0</a>.
-            </p>
-          </section>
-
-          {/* Background */}
-          <section className="mb-32 sm:mb-40">
-            <SectionLabel>Background</SectionLabel>
-
-            <div className="font-mono text-base leading-relaxed text-ink/85 space-y-5 max-w-2xl mt-8">
+            <div className="font-mono text-sm leading-relaxed mt-8 text-muted max-w-2xl space-y-4">
               <p>
                 For fourteen years I&apos;ve worked <span className="text-accent">the same seam</span>: the gap between what software promises and what actually holds up in the real world.
               </p>
@@ -106,10 +91,10 @@ const Home = () => {
               </p>
               <p>
                 In 2020 all of it got called up at once. I joined{' '}
-                <a href="https://curative.com" target="_blank" rel="noopener noreferrer" className="accent-link">Curative</a> as VP of Engineering at the start of the pandemic — and we did over a billion in revenue the first year: 36 million COVID tests across 40-plus states. Then we turned around and built a health insurance company from scratch.
+                <a href="https://curative.com" target="_blank" rel="noopener noreferrer" className="accent-link">Curative</a> at the start of the pandemic and became VP of Engineering — and we did over a billion in revenue the first year: 36 million COVID tests across 40-plus states. Then we turned around and built a health insurance company from scratch.
               </p>
               <p>
-                Now I&apos;m building Thousand Birds — because the gap between a demo and something you can actually trust in production is the same gap I&apos;ve been closing my whole career.
+                Now I&apos;m building Thousand Birds. Closing the gap between what technology promises and what holds up in production isn&apos;t a new problem for me. It&apos;s the only one I&apos;ve ever worked on.
               </p>
             </div>
           </section>
