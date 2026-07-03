@@ -68,6 +68,16 @@ export function generateJumpingCholla(rng, opts = {}) {
   // captures this const, and JS would throw TDZ if the call runs first.
   const matureWoody = THREE.MathUtils.smoothstep(age, 0.40, 0.82);
 
+  // Below the highest LOD, grow fewer-but-longer joints (same chain length,
+  // ~half the geometry) and stop side-branching at depth 1. A mature colony
+  // cholla carries hundreds of joints, so joint count is the biggest lever on
+  // mid/far triangle cost; at 30m+ the missing inter-joint waists and
+  // outermost twigs are sub-pixel.
+  const structureScale = highestLod ? 1 : THREE.MathUtils.clamp(0.42 + detailScale * 0.55, 0.5, 1);
+  const maxBranchDepth = highestLod || detailScale >= 0.5 ? 2 : 1;
+  const scaledJointCount = count => Math.max(2, Math.round(count * structureScale));
+  const structureJointLength = jointLength / structureScale;
+
   // Real jumping cholla has no dedicated trunk — what looks like one is just
   // the oldest joints in each primary chain bulking up, darkening, and turning
   // bark-like with age. We model that directly: primary chains emerge from a
@@ -99,7 +109,7 @@ export function generateJumpingCholla(rng, opts = {}) {
       start: origin,
       dir,
       radius: jointRadius * rngRange(rng, 0.95, 1.20),
-      jointCount: rngInt(rng, Math.round(THREE.MathUtils.lerp(6, 10, maturity)), Math.round(THREE.MathUtils.lerp(10, 18, maturity + oldGrowth * 0.25))),
+      jointCount: scaledJointCount(rngInt(rng, Math.round(THREE.MathUtils.lerp(6, 10, maturity)), Math.round(THREE.MathUtils.lerp(10, 18, maturity + oldGrowth * 0.25)))),
       depth: 0,
       spread: crownRadius,
     });
@@ -148,7 +158,7 @@ export function generateJumpingCholla(rng, opts = {}) {
       const woodiness = depth === 0
         ? Math.max(0, 1 - chainT * 2.0) * matureWoody
         : 0;
-      const len = jointLength * rngRange(rng, 0.58, 1.04)
+      const len = structureJointLength * rngRange(rng, 0.58, 1.04)
         * THREE.MathUtils.lerp(1.02, 0.78, chainT)
         * (1 + woodiness * 0.45);
       const droop = THREE.MathUtils.smoothstep(chainT, 0.34, 1.0) * rngRange(rng, 0.05, 0.22 + depth * 0.08);
@@ -170,7 +180,7 @@ export function generateJumpingCholla(rng, opts = {}) {
       const radiusScale = THREE.MathUtils.lerp(1.16, 0.98, chainT) * (1 + woodiness * 1.6);
       addPart(buildChollaJoint(p, q, radius * radiusScale, segmentAge, branchTwist + i * 0.21, woodiness));
 
-      if (depth < 2 && i > 1 && rngChance(rng, THREE.MathUtils.lerp(0.18, 0.42, maturity) * (1 - depth * 0.24))) {
+      if (depth < maxBranchDepth && i > 1 && rngChance(rng, THREE.MathUtils.lerp(0.18, 0.42, maturity) * (1 - depth * 0.24))) {
         const side = perpendicularDirection(d, rngRange(rng, -1.0, 1.0))
           .multiplyScalar(rngRange(rng, 0.58, 0.94))
           .addScaledVector(Y_AXIS, rngRange(rng, -0.10, 0.26))
@@ -179,7 +189,7 @@ export function generateJumpingCholla(rng, opts = {}) {
           start: q.clone().addScaledVector(side, radius * 0.45),
           dir: side,
           radius: radius * rngRange(rng, 0.86, 1.02),
-          jointCount: rngInt(rng, 3, Math.round(THREE.MathUtils.lerp(5, 10, maturity))),
+          jointCount: scaledJointCount(rngInt(rng, 3, Math.round(THREE.MathUtils.lerp(5, 10, maturity)))),
           depth: depth + 1,
           spread: spread * 1.08,
         });
@@ -199,8 +209,10 @@ export function generateJumpingCholla(rng, opts = {}) {
       ? new THREE.Vector3(1, 0, 0)
       : new THREE.Vector3().crossVectors(Y_AXIS, axis).normalize();
     const binormal = new THREE.Vector3().crossVectors(axis, normal).normalize();
-    const rings = scaledSegments(Math.max(8, Math.round(length / Math.max(radius, 0.001) * 3.4)), detailScale, 7);
-    const radial = scaledSegments(24, detailScale, 14);
+    // Floors low enough that mid/far actually shed triangles — the fragment
+    // shader's tubercle bump carries the knobby look at distance, not the mesh.
+    const rings = scaledSegments(Math.max(8, Math.round(length / Math.max(radius, 0.001) * 3.4)), detailScale, 4);
+    const radial = scaledSegments(20, detailScale, 8);
     const areolesAround = 7;
     // Real cholla joints carry ~10-14 tubercles along a typical inter-node
     // length. Bump the row count so the fragment-shader bump map produces a
@@ -419,14 +431,16 @@ export function generateJumpingCholla(rng, opts = {}) {
     const baseColor = chollaSpineColor.clone()
       .lerp(CHOLLA_BLADE_TIP_COLOR, 0.16 + segmentAge * 0.30)
       .lerp(dryRidge, woodiness * 0.30);
-    // One spine cluster per tubercle (rowDensity = aroundDensity = 1) so each
-    // areole emerges from the correct bump peak on the joint surface. Density
-    // is driven entirely by the per-areole count, which scales with the
-    // user-facing chollaSpineCoverage slider. Woody joints still bear spines
-    // (real ones do) but at slightly reduced density — ~80% of fresh joints.
+    // Fur is by far the most expensive geometry in the whole scene: a mature
+    // clonal cholla carries hundreds of joints, so every blade here is
+    // multiplied ~10^4 by the time a chunk is populated. Budget accordingly:
+    // sub-sample the areole grid (0.6/0.7 densities) and keep the per-areole
+    // starburst small, with wider blades compensating for the thinner count.
+    // Woody joints still bear spines (real ones do) but at slightly reduced
+    // density — ~80% of fresh joints.
     const woodyDensityDamp = 1 - woodiness * 0.22;
     const bladesPerAreole = Math.round(
-      THREE.MathUtils.lerp(16, 26, detailScale) * chollaSpineCoverage * woodyDensityDamp,
+      THREE.MathUtils.lerp(5, 7, detailScale) * chollaSpineCoverage * woodyDensityDamp,
     );
     if (bladesPerAreole <= 0) return null;
     const attachments = sampleChollaJointAreoles({
@@ -435,8 +449,8 @@ export function generateJumpingCholla(rng, opts = {}) {
       radius,
       areolesAround,
       areoleRows,
-      rowDensity: 1.0,
-      aroundDensity: 1.0,
+      rowDensity: 0.6,
+      aroundDensity: 0.7,
       phase,
       bladesPerAreole,
       // Mean tilt ~30° off perpendicular by default, scaled by chollaSpineTilt
@@ -448,14 +462,18 @@ export function generateJumpingCholla(rng, opts = {}) {
       // here, ±15%) gives the natural-looking variation you see in real
       // clusters where every spine is "about the same" but no two identical.
       lengthFn: () => plantSpineLength * rngRange(rng, 0.85, 1.15),
-      widthFn: () => plantSpineWidth * rngRange(rng, 0.88, 1.14),
+      // ~1.5x wider than the old dense fur so the sparser blade count still
+      // reads as full coverage.
+      widthFn: () => plantSpineWidth * 1.5 * rngRange(rng, 0.88, 1.14),
       colorFn: () => baseColor.clone().multiplyScalar(rngRange(rng, 0.90, 1.12)),
       strengthFn: () => 0.65 + young * 0.30,
       rng,
       skipBelow: 0.03,
       skipAbove: 0.97,
     });
-    return buildChollaSpineBlades(attachments, { segments: 3 });
+    // 2 segments per blade: cholla quills are near-straight, and at fur blade
+    // widths the middle ring of a 3-segment strip is invisible anyway.
+    return buildChollaSpineBlades(attachments, { segments: 2 });
   }
 
   function addFruitChain(anchor, parentDir, count) {

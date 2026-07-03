@@ -177,16 +177,25 @@ export function generateSaguaro(rng, opts = {}) {
   const trunkSegmentsAlong = scaledSegments(
     Math.max(36, Math.floor(totalHeight * THREE.MathUtils.lerp(7, 9, maturity))),
     detailScale,
-    24,
+    14,
   );
-  const trunkSegmentsAround = Math.max(ribCount * 4, scaledSegments(Math.max(60, ribCount * 6), detailScale, 36));
+  // Radial density must scale with LOD too — a flat ribCount*4 floor kept
+  // far-LOD trunks at near-full triangle counts across thousands of instances.
+  const trunkSegmentsAround = Math.max(
+    scaledSegments(ribCount * 4, detailScale, 14),
+    scaledSegments(Math.max(60, ribCount * 6), detailScale, 16),
+  );
 
   // Per-blade mesh spines built once per cactus geometry variant. Blades
   // are bezier-curved ribbons whose curvature is evaluated in the vertex
-  // shader (mode 10 in cactusSpineMaterial). LOD scales density: distant
-  // cacti fall back to the cheap procedural halo only.
+  // shader (mode 10 in cactusSpineMaterial). These are the single most
+  // expensive part of the geometry, so they are gated to the closest LOD
+  // only — beyond a few metres the blades read as sub-pixel noise and every
+  // other LOD falls back to the cheap procedural spine halo.
+  const lodName = String(opts.lodName ?? '').toLowerCase();
+  const highestLod = !lodName || lodName === 'near' || lodName === 'full' || lodName === 'hero' || lodName === 'lod-0';
   const spineDetail = THREE.MathUtils.clamp((detailScale - 0.55) / 0.45, 0, 1);
-  const wantBlades = spineDetail > 0.04;
+  const wantBlades = highestLod && spineDetail > 0.04;
   const spineAttachments = [];
   function addColumnBlades({
     curve,
@@ -458,9 +467,13 @@ export function generateSaguaro(rng, opts = {}) {
     const armSegmentsAlong = scaledSegments(
       Math.max(36, Math.round(THREE.MathUtils.lerp(42, 60, armMaturity))),
       detailScale,
-      24,
+      12,
     );
-    const armSegmentsAround = Math.max(ribCount * 4, scaledSegments(Math.max(60, ribCount * 5), detailScale, 32));
+    // Same LOD-scaled radial floor as the trunk (see trunkSegmentsAround).
+    const armSegmentsAround = Math.max(
+      scaledSegments(ribCount * 4, detailScale, 12),
+      scaledSegments(Math.max(60, ribCount * 5), detailScale, 14),
+    );
     const armSpinePhase = rng();
     const armSpineRows = spineRowsPerMeter * rngRange(rng, 0.9, 1.15);
 

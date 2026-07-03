@@ -69,8 +69,13 @@ export function generateBarrelCactus(rng, opts = {}) {
 
   const body = sweepRibbedTube({
     curve,
-    segmentsAlong: scaledSegments(Math.max(34, Math.round(THREE.MathUtils.lerp(34, 66, maturity))), detailScale, 24),
-    segmentsAround: Math.max(ribCount * 3, scaledSegments(Math.max(60, ribCount * 4), detailScale, 36)),
+    segmentsAlong: scaledSegments(Math.max(34, Math.round(THREE.MathUtils.lerp(34, 66, maturity))), detailScale, 12),
+    // Radial density scales with LOD — a flat ribCount*3 floor kept far-LOD
+    // barrels at near-full triangle counts across ~500 instances per chunk.
+    segmentsAround: Math.max(
+      scaledSegments(ribCount * 3, detailScale, 14),
+      scaledSegments(Math.max(60, ribCount * 4), detailScale, 16),
+    ),
     ribCount,
     ribDepth,
     radiusFn: (t) => radius * profile(Math.min(0.99, Math.max(0.01, t))),
@@ -107,9 +112,13 @@ export function generateBarrelCactus(rng, opts = {}) {
 
   // Per-blade mesh spines. Sample areoles along the body the same way the
   // procedural shader spines are placed (rib peaks × rows), then bezier-bend
-  // each blade in the vertex shader.
+  // each blade in the vertex shader. Gated to the closest LOD only — the mesh
+  // blades are the priciest part of the geometry and read as sub-pixel noise
+  // past a few metres, where the cheap procedural spine halo takes over.
+  const lodName = String(opts.lodName ?? '').toLowerCase();
+  const highestLod = !lodName || lodName === 'near' || lodName === 'full' || lodName === 'hero' || lodName === 'lod-0';
   const spineDetail = THREE.MathUtils.clamp((detailScale - 0.50) / 0.50, 0, 1);
-  if (spineDetail > 0.04) {
+  if (highestLod && spineDetail > 0.04) {
     const bladesPerAreole = Math.max(2, Math.round(THREE.MathUtils.lerp(3, 4, spineDetail)));
     // Body spineFn writes y = t * spineRows + spinePhase (no /height scaling)
     // — so rowsPerUnit here is spineRows / height, and rowPhase = spinePhase.

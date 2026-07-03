@@ -81,22 +81,38 @@ const cameraConstraintDelta = new THREE.Vector3();
 const cameraFallbackPush = new THREE.Vector3();
 let cameraColliderMaxRadius = 0;
 
+// Only the `near` level carries the expensive per-blade mesh spines (see the
+// highestLod gate in saguaro/barrel/jumpingCholla), so its distance doubles as
+// the spine draw radius — keep it small so spines only appear on plants right
+// next to the camera. `mid`/`far` are body-only and lean hard on lower
+// tessellation to keep the triangle budget mobile-friendly.
 const plantLodLevels = [
-  { name: 'near', distance: 45, detailScale: 1, castShadow: true },
-  { name: 'mid', distance: 95, detailScale: 0.72, castShadow: false },
-  { name: 'far', distance: Infinity, detailScale: 0.48, castShadow: false },
+  { name: 'near', distance: 32, detailScale: 1, castShadow: true },
+  { name: 'mid', distance: 78, detailScale: 0.58, castShadow: false },
+  { name: 'far', distance: Infinity, detailScale: 0.26, castShadow: false },
 ];
 
 const TERRAIN_CULL_DISTANCE = 420;
 const DEFAULT_SCATTER_CULL_CELL = { size: 80, minInstances: 64 };
 const SCATTER_CULL_CELL = {
-  paloVerde: { size: 120, minInstances: 96 },
-  mesquite: { size: 120, minInstances: 96 },
-  saguaro: { size: 96, minInstances: 64 },
-  barrel: { size: 64, minInstances: 48 },
-  jumpingCholla: { size: 80, minInstances: 48 },
-  pricklyPear: { size: 64, minInstances: 48 },
-  ocotillo: { size: 96, minInstances: 64 },
+  // LOD is chosen per cell from the distance to the cell's bounding-sphere
+  // center, so cell size bounds how many instances flip to the expensive
+  // `near` level together. minInstances must stay below a typical per-variant
+  // bucket population (instances/chunk ÷ variantCount) or the bucket never
+  // splits and the *whole chunk* pops to `near` at once — sparse stages like
+  // jumpingCholla and the trees only have ~8-12 instances per bucket.
+  paloVerde: { size: 64, minInstances: 8 },
+  mesquite: { size: 64, minInstances: 8 },
+  // Spine-bearing cacti use finer cells so per-cell LOD switches sharply near
+  // the camera — the `near` cell you're standing in keeps its mesh spines while
+  // neighbours a cell away drop to the body-only LOD. Half the cell diagonal
+  // stays under plantLodLevels.near.distance so an adjacent plant reliably
+  // resolves to the spine LOD.
+  saguaro: { size: 44, minInstances: 8 },
+  barrel: { size: 40, minInstances: 8 },
+  jumpingCholla: { size: 44, minInstances: 4 },
+  pricklyPear: { size: 48, minInstances: 8 },
+  ocotillo: { size: 48, minInstances: 8 },
   creosote: { size: 56, minInstances: 48 },
   ephemerals: { size: 48, minInstances: 64 },
   deadwood: { size: 72, minInstances: 48 },
@@ -107,10 +123,12 @@ const SCATTER_CULL_DISTANCE = {
   paloVerde: 300,
   mesquite: 300,
   saguaro: 320,
-  barrel: 210,
-  jumpingCholla: 240,
-  pricklyPear: 210,
-  ocotillo: 240,
+  // Small ground plants are sub-pixel well before these ranges — every metre
+  // of cull radius is quadratic in far-LOD instance count.
+  barrel: 150,
+  jumpingCholla: 220,
+  pricklyPear: 165,
+  ocotillo: 220,
   creosote: 145,
   ephemerals: 125,
   deadwood: 180,

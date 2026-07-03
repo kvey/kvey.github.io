@@ -40,11 +40,14 @@ export function generatePricklyPear(rng, opts = {}) {
     THREE.MathUtils.lerp(0.28, 0.60, maturity),
     THREE.MathUtils.lerp(0.46, 0.88, maturity),
   );
-  const maxPads = opts.maxPads ?? rngInt(
+  // Far LOD (suppressCloneDetails) trims the newest/outermost pads — recursion
+  // adds pads outward, so capping the count keeps the clump's core silhouette.
+  const padBudgetScale = suppressCloneDetails ? 0.6 : 1;
+  const maxPads = Math.max(3, Math.round((opts.maxPads ?? rngInt(
     rng,
     Math.round(THREE.MathUtils.lerp(4, 16, maturity)),
     Math.round(THREE.MathUtils.lerp(7, 38, maturity + oldGrowth * 0.38)),
-  );
+  )) * padBudgetScale));
 
   const parts = [];
   let padCount = 0;
@@ -144,9 +147,13 @@ export function generatePricklyPear(rng, opts = {}) {
   // A custom biconvex pad mesh: broad domed faces, a real rounded rim, and a
   // pear-shaped outline instead of a flat billboard or tube-like oval.
   function buildPad(spec) {
-    const vertical = scaledSegments(24, detailScale, 14);
-    const across = scaledSegments(20, detailScale, 12);
-    const rimSteps = scaledSegments(8, detailScale, 5);
+    // Floors low enough that mid/far LODs actually shed triangles — a pad at
+    // 40m+ is a handful of pixels and doesn't need a 14x12 grid per side. The
+    // biconvex dome shading comes from normals, so even the hero pad reads
+    // smooth at 20x16.
+    const vertical = scaledSegments(20, detailScale, 7);
+    const across = scaledSegments(16, detailScale, 6);
+    const rimSteps = scaledSegments(8, detailScale, 3);
     const positions = [];
     const colors = [];
     const spines = [];

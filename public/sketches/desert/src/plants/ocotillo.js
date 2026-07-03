@@ -68,8 +68,10 @@ export function generateOcotillo(rng, opts = {}) {
       THREE.MathUtils.lerp(proportions.ocotillo.stemRadius[1] * 0.68, proportions.ocotillo.stemRadius[1] * 1.16, oldGrowth),
     );
     const stemHydration = THREE.MathUtils.clamp(plantHydration + rngRange(rng, -0.18, 0.2), 0, 1);
-    const segmentsAlong = scaledSegments(36, detailScale, 18);
-    const segmentsAround = scaledSegments(12, detailScale, 8);
+    // Floors low enough that far LOD sheds triangles — a whippy cane at 80m+
+    // reads fine as a 10x5 tube.
+    const segmentsAlong = scaledSegments(36, detailScale, 10);
+    const segmentsAround = scaledSegments(12, detailScale, 5);
     const stem = sweepRibbedTube({
       curve,
       segmentsAlong,
