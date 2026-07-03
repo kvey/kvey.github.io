@@ -48,8 +48,16 @@ varying vec2 vUv;
 varying float vFogDepth;
 
 void main() {
-  vec4 tex = texture2D(impostorMap, vUv);
-  if (tex.a < 0.4) discard;
+  // Slight negative mip bias: trilinear filtering erodes thin plant
+  // silhouettes to nothing at distance; sampling half a level sharper keeps
+  // the far scrub reading as dense as the 3D geometry it replaced.
+  vec4 tex = texture2D(impostorMap, vUv, -0.75);
+  // Distance-ramped alpha test: deep mip levels average the tile's mostly
+  // transparent pixels, so a fixed threshold makes distant sprites vanish
+  // entirely. Relaxing the cutoff with distance keeps far plants visible at
+  // the cost of blobbier edges nobody can see at that size.
+  float alphaCut = mix(0.4, 0.04, clamp(vFogDepth / 130.0, 0.0, 1.0));
+  if (tex.a < alphaCut) discard;
   vec3 color = tex.rgb * lightTint;
   float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
   color = mix(color, fogColor, clamp(fogFactor, 0.0, 1.0));
@@ -61,7 +69,7 @@ void main() {
 
 export class ChunkImpostorAtlas {
   // lights: [{ isDirectional, color, intensity, direction }, { isHemisphere, skyColor, groundColor, intensity }]
-  constructor(renderer, { tileSize = 128, tilesPerSide = 8, lights = [], fog = null } = {}) {
+  constructor(renderer, { tileSize = 160, tilesPerSide = 8, lights = [], fog = null } = {}) {
     this.renderer = renderer;
     this.tileSize = tileSize;
     this.tilesPerSide = tilesPerSide;

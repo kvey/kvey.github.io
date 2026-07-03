@@ -172,6 +172,21 @@ async function generateChunk({ generation, params, lodLevels, chunk }) {
   buildRockShelterNurses(state, terrain, subSeed(chunkSeed, 23), proportions);
   chunkDebug.rockShelters = state.rockNurses.length;
 
+  // Cacti/succulents carry the most expensive near geometry (mesh spine
+  // blades, cholla fur) and read fine as sprites much sooner than the tall
+  // trees do, so they get a tighter near ring and an earlier impostor
+  // switch. Trees keep the shared rings — their near level is what casts
+  // shadows, which stay visible farther out. Keep near <= the stage's
+  // SCATTER_CULL_CELL half-diagonal in main.js or the cell the camera is in
+  // may never resolve to the near LOD.
+  const cactusLodLevels = (lodLevels && lodLevels.length === 3)
+    ? [
+      { ...lodLevels[0], distance: 24 },
+      { ...lodLevels[1], distance: 62 },
+      { ...lodLevels[2] },
+    ]
+    : lodLevels;
+
   const stageDefs = [
     {
       key: 'paloVerde',
@@ -322,7 +337,7 @@ async function generateChunk({ generation, params, lodLevels, chunk }) {
       variantCount: 12,
       seed: subSeed(chunkSeed, 2),
       geometrySeed: subSeed(params.seed, 2),
-      lodLevels,
+      lodLevels: cactusLodLevels,
       attemptMultiplier: 24,
       candidateFilter: ctx => acceptSaguaroCandidate(ctx, state, proportions),
       onPlace: (mat, rng, i, ctx) => {
@@ -363,7 +378,7 @@ async function generateChunk({ generation, params, lodLevels, chunk }) {
       variantCount: 6,
       seed: subSeed(chunkSeed, 6),
       geometrySeed: subSeed(params.seed, 6),
-      lodLevels,
+      lodLevels: cactusLodLevels,
       attemptMultiplier: 10,
       candidateFilter: ctx => acceptOcotilloCandidate(ctx, state.matureSaguaroZones, state.resourceZones, proportions),
     },
@@ -379,7 +394,7 @@ async function generateChunk({ generation, params, lodLevels, chunk }) {
       variantCount: 6,
       seed: subSeed(chunkSeed, 3),
       geometrySeed: subSeed(params.seed, 3),
-      lodLevels,
+      lodLevels: cactusLodLevels,
       attemptMultiplier: 12,
       candidateFilter: ctx => acceptBarrelCactusCandidate(ctx, state, proportions),
       onPlace: (mat, rng, i, ctx) => {
@@ -413,7 +428,7 @@ async function generateChunk({ generation, params, lodLevels, chunk }) {
       variantCount: 6,
       seed: subSeed(chunkSeed, 5),
       geometrySeed: subSeed(params.seed, 5),
-      lodLevels,
+      lodLevels: cactusLodLevels,
       attemptMultiplier: 12,
       candidateFilter: ctx => acceptPricklyPearCandidate(ctx, state, proportions),
       onPlace: (mat, rng, i, ctx) => {
@@ -441,7 +456,7 @@ async function generateChunk({ generation, params, lodLevels, chunk }) {
       variantCount: 8,
       seed: subSeed(chunkSeed, 11),
       geometrySeed: subSeed(params.seed, 11),
-      lodLevels,
+      lodLevels: cactusLodLevels,
       attemptMultiplier: 14,
       candidateFilter: ctx => acceptJumpingChollaCandidate(ctx, state, proportions),
       onPlace: (mat, rng, i, ctx) => {

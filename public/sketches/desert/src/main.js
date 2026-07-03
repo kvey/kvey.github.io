@@ -33,14 +33,17 @@ installUncharted2Tonemapping(THREE);
 const app = document.getElementById('app');
 const uiRoot = document.getElementById('ui-root');
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+// 1.5 instead of full retina: the scene is fill-rate heavy (soft shadows,
+// procedural spine shading, fog on every fragment) and 2.25x fewer pixels
+// than dpr 2 is nearly indistinguishable for a painterly full-page scene.
+renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.CustomToneMapping;
 renderer.toneMappingExposure = 1.05;
 if ('useLegacyLights' in renderer) renderer.useLegacyLights = false;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.shadowMap.autoUpdate = false;
 renderer.shadowMap.needsUpdate = true;
 app.appendChild(renderer.domElement);
@@ -86,7 +89,9 @@ let cameraColliderMaxRadius = 0;
 // highestLod gate in saguaro/barrel/jumpingCholla), so its distance doubles as
 // the spine draw radius — keep it small so spines only appear on plants right
 // next to the camera. `mid`/`far` are body-only and lean hard on lower
-// tessellation to keep the triangle budget mobile-friendly.
+// tessellation to keep the triangle budget mobile-friendly. These are the
+// baseline rings (used by the trees); the cacti/succulent stages tighten
+// near/mid further via cactusLodLevels in generationWorker.js.
 const plantLodLevels = [
   { name: 'near', distance: 32, detailScale: 1, castShadow: true },
   { name: 'mid', distance: 78, detailScale: 0.58, castShadow: false },
@@ -116,34 +121,36 @@ const SCATTER_CULL_CELL = {
   // bucket population (instances/chunk ÷ variantCount) or the bucket never
   // splits and the *whole chunk* pops to `near` at once — sparse stages like
   // jumpingCholla and the trees only have ~8-12 instances per bucket.
-  paloVerde: { size: 64, minInstances: 8 },
-  mesquite: { size: 64, minInstances: 8 },
+  // Tree cells: half-diagonal ~31m <= the trees' 32m near distance, so the
+  // cell the camera occupies reliably resolves to near (their shadow LOD).
+  paloVerde: { size: 44, minInstances: 8 },
+  mesquite: { size: 44, minInstances: 8 },
   // Spine-bearing cacti use finer cells so per-cell LOD switches sharply near
   // the camera — the `near` cell you're standing in keeps its mesh spines while
   // neighbours a cell away drop to the body-only LOD. Half the cell diagonal
-  // stays under plantLodLevels.near.distance so an adjacent plant reliably
-  // resolves to the spine LOD.
-  saguaro: { size: 44, minInstances: 8 },
-  barrel: { size: 40, minInstances: 8 },
-  jumpingCholla: { size: 44, minInstances: 4 },
-  pricklyPear: { size: 48, minInstances: 8 },
-  ocotillo: { size: 48, minInstances: 8 },
+  // stays under the cacti's 24m near distance (see cactusLodLevels in
+  // generationWorker.js) so an adjacent plant reliably resolves to spines.
+  saguaro: { size: 33, minInstances: 8 },
+  barrel: { size: 33, minInstances: 8 },
+  jumpingCholla: { size: 33, minInstances: 4 },
+  pricklyPear: { size: 33, minInstances: 8 },
+  ocotillo: { size: 33, minInstances: 8 },
   creosote: { size: 56, minInstances: 48 },
   ephemerals: { size: 48, minInstances: 64 },
   deadwood: { size: 72, minInstances: 48 },
   pebbles: { size: 48, minInstances: 48 },
   boulders: { size: 80, minInstances: 32 },
 };
+// With far LODs rendered as 2-triangle impostors, generous view distances
+// cost almost nothing — these mainly bound cell counts and sprite fill.
 const SCATTER_CULL_DISTANCE = {
   paloVerde: 300,
   mesquite: 300,
   saguaro: 320,
-  // Small ground plants are sub-pixel well before these ranges — every metre
-  // of cull radius is quadratic in far-LOD instance count.
-  barrel: 150,
-  jumpingCholla: 220,
-  pricklyPear: 165,
-  ocotillo: 220,
+  barrel: 210,
+  jumpingCholla: 240,
+  pricklyPear: 210,
+  ocotillo: 240,
   creosote: 145,
   ephemerals: 125,
   deadwood: 180,
