@@ -115,6 +115,10 @@ vec3 treeApplyDetail(vec3 baseColor) {
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
+// Backface cull the closed woody surfaces (bark part 0, thorns part 3). The
+// material is DoubleSide only for the flat leaves/pods; trunk and branch tubes
+// are solid, so their back faces are wasted PBR + fog fragments.
+if (!gl_FrontFacing && (vTreeDetail.x < 0.5 || (vTreeDetail.x > 2.5 && vTreeDetail.x < 3.5))) discard;
 if (vTreeDetail.x > 1.5 && vTreeDetail.x < 2.5 && mesquitePodVisibility < 0.5) discard;
 if (treeIsPaloVerdeFlower(diffuseColor.rgb) && paloVerdeFlowerVisibility < 0.5) discard;
 diffuseColor.rgb = treeApplyDetail(diffuseColor.rgb);`,

@@ -439,6 +439,12 @@ if (vCactusSpine.w > 4.5 && vCactusSpine.w < 7.5) {
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
+// Cheap backface cull for the closed body surface (modes < 7.5) — the mesh is
+// DoubleSide only so the thin spine blades/cards (modes 7.5..11.5) show from
+// both sides, but the tube/pad bodies are solid, so their back faces are
+// wasted PBR + fog fragments. Discarding here (before lighting) reclaims that
+// on the fill-bound GPU. Blades and billboard cards keep both faces.
+if (!gl_FrontFacing && vCactusSpine.w < 7.5) discard;
 if (vCactusSpine.w > 2.5 && vCactusSpine.w < 3.5 && saguaroFlowerVisibility < 0.5) discard;
 if (vCactusSpine.w > 3.5 && vCactusSpine.w < 4.5 && saguaroFruitVisibility < 0.5) discard;
 if (vCactusSpine.w > 9.5 && vCactusSpine.w < 10.5) {
