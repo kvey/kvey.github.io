@@ -440,7 +440,7 @@ export function generateJumpingCholla(rng, opts = {}) {
     // density — ~80% of fresh joints.
     const woodyDensityDamp = 1 - woodiness * 0.22;
     const bladesPerAreole = Math.round(
-      THREE.MathUtils.lerp(5, 7, detailScale) * chollaSpineCoverage * woodyDensityDamp,
+      THREE.MathUtils.lerp(4, 6, detailScale) * chollaSpineCoverage * woodyDensityDamp,
     );
     if (bladesPerAreole <= 0) return null;
     const attachments = sampleChollaJointAreoles({
@@ -462,9 +462,9 @@ export function generateJumpingCholla(rng, opts = {}) {
       // here, ±15%) gives the natural-looking variation you see in real
       // clusters where every spine is "about the same" but no two identical.
       lengthFn: () => plantSpineLength * rngRange(rng, 0.85, 1.15),
-      // ~1.5x wider than the old dense fur so the sparser blade count still
+      // ~1.6x wider than the old dense fur so the sparser blade count still
       // reads as full coverage.
-      widthFn: () => plantSpineWidth * 1.5 * rngRange(rng, 0.88, 1.14),
+      widthFn: () => plantSpineWidth * 1.6 * rngRange(rng, 0.88, 1.14),
       colorFn: () => baseColor.clone().multiplyScalar(rngRange(rng, 0.90, 1.12)),
       strengthFn: () => 0.65 + young * 0.30,
       rng,

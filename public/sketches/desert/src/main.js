@@ -25,6 +25,7 @@ import { createSunLensFlare } from './lensFlare.js';
 import { createProportionOracle } from './proportions.js';
 import { createRainOverlay } from './rainOverlay.js';
 import { installUncharted2Tonemapping } from './tonemapping.js';
+import { ChunkImpostorAtlas } from './impostor.js';
 
 installUncharted2Tonemapping(THREE);
 
@@ -91,6 +92,20 @@ const plantLodLevels = [
   { name: 'mid', distance: 78, detailScale: 0.58, castShadow: false },
   { name: 'far', distance: Infinity, detailScale: 0.26, castShadow: false },
 ];
+
+// Stages whose `far` LOD renders as baked billboard impostors (2 tris per
+// instance) instead of generated 3D geometry. Applies to every 3-LOD plant
+// stage; single-LOD scatter (rocks, ephemerals) is untouched.
+const IMPOSTOR_STAGE_KEYS = new Set([
+  'paloVerde',
+  'mesquite',
+  'creosote',
+  'saguaro',
+  'ocotillo',
+  'barrel',
+  'pricklyPear',
+  'jumpingCholla',
+]);
 
 const TERRAIN_CULL_DISTANCE = 420;
 const DEFAULT_SCATTER_CULL_CELL = { size: 80, minInstances: 64 };
@@ -976,6 +991,7 @@ function clearWorld() {
   world = new THREE.Group();
   scene.add(world);
   terrain = null;
+  for (const chunk of terrainChunks.values()) chunk.impostorAtlas?.dispose();
   terrainChunks.clear();
   pendingChunkKeys.clear();
   desiredChunkKeys.clear();
@@ -1305,6 +1321,7 @@ function unloadTerrainChunk(key) {
     }
   });
   world.remove(chunk.group);
+  chunk.impostorAtlas?.dispose();
   terrainChunks.delete(key);
   pendingChunkKeys.delete(key);
   removeChunkCameraColliders(key);
@@ -1642,20 +1659,36 @@ function createScatterApplyTask(chunkKeyForStage, stage, proportions) {
           if (instanceCount === 0) continue;
 
           const lodLevels = bucketLodLevels(bucket);
+          const useImpostors = IMPOSTOR_STAGE_KEYS.has(stage.key);
+          const generateLevel = level => getScatterGeometry(stage.key, config, {
+            ...bucket,
+            lodName: level.name,
+            variantOpts: level.variantOpts,
+          }, { ...level.variantOpts, proportions }, proportions);
           const geometryResults = lodLevels.map(level => {
-            const variantOpts = {
-              ...level.variantOpts,
-              proportions,
-            };
-            return {
-              level,
-              ...getScatterGeometry(stage.key, config, {
-                ...bucket,
-                lodName: level.name,
-                variantOpts: level.variantOpts,
-              }, variantOpts, proportions),
-            };
+            if (useImpostors && level.name === 'far') return { level, impostor: true };
+            return { level, ...generateLevel(level) };
           });
+          for (const result of geometryResults) {
+            if (!result.impostor) continue;
+            // Bake the impostor from the mid LOD — near carries mesh spines
+            // the sprite doesn't need, and mid is already generated.
+            const source = geometryResults.find(r => r.geometry && r.level.name !== 'near')
+              ?? geometryResults.find(r => r.geometry);
+            const atlas = ensureChunkImpostorAtlas(chunk);
+            const bakeStart = performance.now();
+            const quad = source && atlas ? atlas.bake(source.geometry, config.material) : null;
+            if (quad) {
+              result.geometry = quad;
+              result.material = atlas.material;
+              result.cacheHit = false;
+              result.generateMs = performance.now() - bakeStart;
+            } else {
+              // Atlas exhausted (or nothing to bake from): fall back to the
+              // real far geometry rather than dropping the LOD level.
+              Object.assign(result, generateLevel(result.level));
+            }
+          }
 
           stats.instances += instanceCount;
           for (const geometryResult of geometryResults) {
@@ -1729,6 +1762,81 @@ function createScatterApplyTask(chunkKeyForStage, stage, proportions) {
   };
 }
 
+function snapshotSceneLighting() {
+  const lights = [];
+  for (const light of [sun, moonLight, skyFill, sandBounce]) {
+    if (light.intensity <= 0) continue;
+    lights.push({
+      isDirectional: true,
+      color: light.color.clone(),
+      intensity: light.intensity,
+      direction: light.position.clone().sub(light.target.position).normalize(),
+    });
+  }
+  for (const light of [hemi, moonAmbient]) {
+    if (light.intensity <= 0) continue;
+    lights.push({
+      isHemisphere: true,
+      skyColor: light.color.clone(),
+      groundColor: light.groundColor.clone(),
+      intensity: light.intensity,
+    });
+  }
+  return lights;
+}
+
+// Rough irradiance proxy for a vertical plant surface under the current
+// lights. Impostor tiles are baked once, so the ratio of this estimate
+// now vs. at bake time tints the sprites through the day/night cycle.
+const plantLightDirScratch = new THREE.Vector3();
+function estimatePlantLight(target) {
+  target.setRGB(0, 0, 0);
+  for (const light of [sun, moonLight, skyFill, sandBounce]) {
+    if (light.intensity <= 0) continue;
+    plantLightDirScratch.copy(light.position).sub(light.target.position).normalize();
+    const facing = THREE.MathUtils.lerp(0.4, 0.8, THREE.MathUtils.clamp(plantLightDirScratch.y, 0, 1));
+    const energy = light.intensity * facing;
+    target.r += light.color.r * energy;
+    target.g += light.color.g * energy;
+    target.b += light.color.b * energy;
+  }
+  for (const light of [hemi, moonAmbient]) {
+    if (light.intensity <= 0) continue;
+    target.r += (light.color.r + light.groundColor.r) * 0.5 * light.intensity;
+    target.g += (light.color.g + light.groundColor.g) * 0.5 * light.intensity;
+    target.b += (light.color.b + light.groundColor.b) * 0.5 * light.intensity;
+  }
+  return target;
+}
+
+function ensureChunkImpostorAtlas(chunk) {
+  if (!chunk.impostorAtlas) {
+    chunk.impostorAtlas = new ChunkImpostorAtlas(renderer, {
+      lights: snapshotSceneLighting(),
+      fog: scene.fog,
+    });
+    chunk.impostorBakeLight = estimatePlantLight(new THREE.Color());
+  }
+  return chunk.impostorAtlas;
+}
+
+const impostorLightNowScratch = new THREE.Color();
+const impostorTintScratch = new THREE.Color();
+function updateImpostorLightTints() {
+  let estimated = null;
+  for (const chunk of terrainChunks.values()) {
+    if (!chunk.impostorAtlas) continue;
+    if (!estimated) estimated = estimatePlantLight(impostorLightNowScratch);
+    const base = chunk.impostorBakeLight;
+    impostorTintScratch.setRGB(
+      base.r > 1e-4 ? THREE.MathUtils.clamp(estimated.r / base.r, 0, 6) : 1,
+      base.g > 1e-4 ? THREE.MathUtils.clamp(estimated.g / base.g, 0, 6) : 1,
+      base.b > 1e-4 ? THREE.MathUtils.clamp(estimated.b / base.b, 0, 6) : 1,
+    );
+    chunk.impostorAtlas.setLightTint(impostorTintScratch);
+  }
+}
+
 function bucketLodLevels(bucket) {
   if (bucket.lodLevels?.length) return bucket.lodLevels;
   return [{
@@ -1753,8 +1861,8 @@ function createScatterLodCell(stageKey, config, bucket, lodLevels, geometryResul
   let cullingSphere = null;
 
   for (let lodIdx = 0; lodIdx < geometryResults.length; lodIdx++) {
-    const { geometry, level } = geometryResults[lodIdx];
-    const inst = new THREE.InstancedMesh(geometry, config.material, instanceCount);
+    const { geometry, level, material } = geometryResults[lodIdx];
+    const inst = new THREE.InstancedMesh(geometry, material ?? config.material, instanceCount);
     inst.castShadow = level.castShadow ?? bucket.castShadow ?? config.castShadow ?? true;
     inst.receiveShadow = level.receiveShadow ?? bucket.receiveShadow ?? config.receiveShadow ?? true;
     inst.visible = group.userData.stepVisible && lodIdx === 0;
@@ -3244,6 +3352,7 @@ function tick() {
   updateTerrainChunks();
   controls.update();
   updateLightAnchors();
+  updateImpostorLightTints();
   updateShadowMapInvalidation();
   constrainCameraToWorld();
   updateVisibilityCulling(now);
