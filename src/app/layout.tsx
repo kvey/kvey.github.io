@@ -10,6 +10,7 @@ import PageContent from '@/components/page-content';
 import FluidBackground from '@/components/fluid-background';
 import SolidsBackground from '@/components/solids-background';
 import PrismBackground from '@/components/prism-background';
+import MirrorGridBackground from '@/components/mirror-grid-background';
 import BackgroundWrapper from '@/components/background-wrapper';
 import { ThemeProvider } from '@/components/theme-provider';
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({
           <FluidBackground />
           <SolidsBackground />
           <PrismBackground />
+          <MirrorGridBackground />
         </BackgroundWrapper>
         <BackgroundSelector />
         <PageContent>{children}</PageContent>

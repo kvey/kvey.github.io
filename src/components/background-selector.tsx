@@ -11,6 +11,7 @@ const options: { value: BackgroundType; label: string }[] = [
   { value: 'fluid', label: 'Fluid' },
   { value: 'solids', label: 'Solids' },
   { value: 'prism', label: 'Prism' },
+  { value: 'mirror-grid', label: 'Mirror Grid' },
 ];
 
 export default function BackgroundSelector() {

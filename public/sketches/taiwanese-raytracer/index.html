@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Taiwanese Motifs Ray Tracer</title>
+  <style>
+    :root {
+      --ink: #f5f0e6;
+      --muted: rgba(245, 240, 230, 0.66);
+      --faint: rgba(245, 240, 230, 0.42);
+      --line: rgba(245, 240, 230, 0.18);
+      --panel: rgba(8, 9, 10, 0.72);
+      --accent: #d7b56c;
+      --cool: #8bd4cf;
+      --corner: 8px;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #060708;
+      color: var(--ink);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+      touch-action: none;
+    }
+
+    #app,
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    canvas {
+      display: block;
+      cursor: crosshair;
+      background: radial-gradient(circle at 50% 25%, #17191a, #050607 68%);
+    }
+
+    .chrome {
+      position: fixed;
+      z-index: 10;
+      pointer-events: none;
+      font-family: var(--mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .chrome * { pointer-events: auto; }
+
+    .topbar {
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .cluster {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .panel,
+    .button {
+      border: 1px solid var(--line);
+      border-radius: var(--corner);
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)),
+        var(--panel);
+      -webkit-backdrop-filter: blur(18px) saturate(145%);
+      backdrop-filter: blur(18px) saturate(145%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 18px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    .title {
+      padding: 10px 13px;
+      min-height: 42px;
+    }
+
+    .eyebrow {
+      margin: 0 0 2px;
+      color: var(--accent);
+      font-size: 10px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.2;
+      font-weight: 750;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+
+    .button {
+      appearance: none;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 0 12px;
+      color: var(--muted);
+      text-decoration: none;
+      cursor: pointer;
+      font: 750 11px/1 var(--mono);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+    }
+
+    .button:hover,
+    .button:focus-visible {
+      color: var(--ink);
+      border-color: rgba(215, 181, 108, 0.58);
+      outline: none;
+    }
+
+    .button[data-active="true"] {
+      color: var(--ink);
+      border-color: rgba(139, 212, 207, 0.55);
+    }
+
+    .readout {
+      min-width: 184px;
+      padding: 11px 13px;
+      font-size: 10px;
+      line-height: 1.45;
+      color: var(--faint);
+      text-align: right;
+    }
+
+    .readout strong {
+      color: var(--cool);
+      font-weight: 750;
+    }
+
+    .controls {
+      right: 16px;
+      bottom: 16px;
+      width: min(324px, calc(100vw - 32px));
+    }
+
+    .controls .panel {
+      padding: 13px 14px 14px;
+    }
+
+    .controls-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .controls-head h2 {
+      margin: 0;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+    }
+
+    .toggle-small {
+      appearance: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      cursor: pointer;
+      font: 800 10px/1 var(--mono);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 7px 9px;
+    }
+
+    .toggle-small:hover,
+    .toggle-small:focus-visible {
+      color: var(--ink);
+      outline: none;
+    }
+
+    .controls.is-collapsed .control-grid {
+      display: none;
+    }
+
+    .controls.is-collapsed .controls-head {
+      margin-bottom: 0;
+    }
+
+    .control-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    label {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 760;
+      letter-spacing: 0.13em;
+    }
+
+    label output {
+      color: var(--accent);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      grid-column: 1 / -1;
+      appearance: none;
+      width: 100%;
+      height: 18px;
+      margin: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    input[type="range"]:focus { outline: none; }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(139, 212, 207, 0.48), rgba(215, 181, 108, 0.54));
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 4px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(139, 212, 207, 0.48), rgba(215, 181, 108, 0.54));
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 15px;
+      height: 15px;
+      margin-top: -5.5px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      background: radial-gradient(circle at 34% 28%, #fff8df, #d7b56c 68%, #695125);
+      box-shadow: 0 0 16px rgba(215, 181, 108, 0.54);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      background: radial-gradient(circle at 34% 28%, #fff8df, #d7b56c 68%, #695125);
+      box-shadow: 0 0 16px rgba(215, 181, 108, 0.54);
+    }
+
+    .loading {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font: 800 11px/1 var(--mono);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      background: radial-gradient(circle at 50% 30%, rgba(245, 240, 230, 0.07), rgba(0, 0, 0, 0.18) 62%, rgba(0, 0, 0, 0.42));
+      transition: opacity 220ms ease;
+    }
+
+    .loading.is-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    @media (max-width: 700px) {
+      .topbar {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+      }
+
+      .title { max-width: calc(100vw - 20px); }
+      h1 { white-space: normal; }
+      .readout { display: none; }
+      .controls {
+        right: 10px;
+        bottom: 10px;
+        width: calc(100vw - 20px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="raytracer" aria-label="Realtime ray traced rendering of Taiwanese embossed motifs"></canvas>
+    <div id="loading" class="loading">Loading source relief</div>
+  </div>
+
+  <div class="chrome topbar">
+    <div class="cluster">
+      <a class="button" href="/sketches">Back</a>
+      <div class="panel title">
+        <p class="eyebrow">WebGL2 relief ray tracer</p>
+        <h1>Taiwanese Motifs</h1>
+      </div>
+    </div>
+    <div class="cluster">
+      <button id="motionToggle" class="button" type="button" data-active="true">Motion</button>
+      <button id="fitToggle" class="button" type="button" data-active="false">Full Image</button>
+      <div id="readout" class="panel readout">
+        <div><strong id="fps">--</strong> fps</div>
+        <div><span id="scaleText">1.00</span>x pixel scale</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="controls" class="chrome controls">
+    <div class="panel">
+      <div class="controls-head">
+        <h2>Material</h2>
+        <button id="collapseToggle" class="toggle-small" type="button">Hide</button>
+      </div>
+      <div class="control-grid">
+        <label>
+          Relief
+          <output id="reliefValue">1.00</output>
+          <input id="relief" type="range" min="0.25" max="2.25" step="0.01" value="1.18">
+        </label>
+        <label>
+          Microsurface
+          <output id="microValue">1.00</output>
+          <input id="micro" type="range" min="0.00" max="2.00" step="0.01" value="1.12">
+        </label>
+        <label>
+          Reflectance
+          <output id="reflectValue">1.00</output>
+          <input id="reflect" type="range" min="0.00" max="1.60" step="0.01" value="1.08">
+        </label>
+        <label>
+          Exposure
+          <output id="exposureValue">1.00</output>
+          <input id="exposure" type="range" min="0.45" max="1.75" step="0.01" value="1.00">
+        </label>
+        <label>
+          Resolution
+          <output id="resolutionValue">1.00</output>
+          <input id="resolution" type="range" min="0.50" max="1.00" step="0.01" value="0.92">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -8,7 +8,7 @@ import { useBackground, BackgroundType } from '@/components/background-provider'
 type SketchKind = 'standalone' | 'background';
 
 interface Sketch {
-  id: BackgroundType | 'desert' | 'glass' | 'plant-lab' | 'itano-circus';
+  id: BackgroundType | 'desert' | 'glass' | 'plant-lab' | 'itano-circus' | 'taiwanese-raytracer';
   title: string;
   description: string;
   tech: string;
@@ -19,6 +19,16 @@ interface Sketch {
 }
 
 const sketches: Sketch[] = [
+  {
+    id: 'taiwanese-raytracer',
+    title: 'Taiwanese Motifs',
+    description: 'A realtime WebGL2 relief ray tracer built from an embossed Taiwanese motif reference. The source image drives a ray-intersected height field with reconstructed normals, groove and bead microstructure, shadow rays, Fresnel reflections, refraction, and animated strip-light glints.',
+    tech: 'WebGL2 · relief ray tracing · image-based material',
+    year: '2026',
+    kind: 'standalone',
+    href: '/sketches/taiwanese-raytracer/index.html',
+    hoverImage: { src: '/sketches/taiwanese-raytracer/assets/taiwanese-motifs.webp', width: 1848, height: 4000, alt: 'Embossed Taiwanese motifs reference' },
+  },
   {
     id: 'itano-circus',
     title: 'Itano Circus',
@@ -87,6 +97,14 @@ const sketches: Sketch[] = [
     description: 'Light rays refracting through floating glass prisms — dispersion by wavelength splits white light into a spectrum.',
     tech: 'CPU · 2D ray tracing',
     year: '2025',
+    kind: 'background',
+  },
+  {
+    id: 'mirror-grid',
+    title: 'Mirror Grid',
+    description: 'Colored beams enter from fixed points on the left and ricochet through a grid of rotatable mirrors, rendered at high resolution with Braille dots. Drag a mirror to rotate it freely, or click to snap it 45° — the whole field of light re-routes in response.',
+    tech: 'CPU · 2D ray tracing · Braille',
+    year: '2026',
     kind: 'background',
   },
   {

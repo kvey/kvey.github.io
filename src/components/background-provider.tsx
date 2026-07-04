@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type BackgroundType = 'none' | 'flocking' | 'simplex-noise' | 'fluid' | 'solids' | 'prism';
+export type BackgroundType = 'none' | 'flocking' | 'simplex-noise' | 'fluid' | 'solids' | 'prism' | 'mirror-grid';
 
 interface BackgroundContextType {
   background: BackgroundType;
@@ -31,7 +31,7 @@ export function BackgroundProvider({ children }: { children: ReactNode }) {
     if (saved) {
       setBackgroundState(saved);
     } else {
-      const options: BackgroundType[] = ['flocking', 'simplex-noise', 'fluid', 'solids', 'prism'];
+      const options: BackgroundType[] = ['flocking', 'simplex-noise', 'fluid', 'solids', 'prism', 'mirror-grid'];
       const random = options[Math.floor(Math.random() * options.length)];
       setBackgroundState(random);
       localStorage.setItem('background', random);
