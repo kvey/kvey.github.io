@@ -251,6 +251,11 @@ vec3 terrainApplyBumpMap(vec3 surfaceNormal, float height, float strength) {
 }
 
 vec3 applyTerrainNormalAndBump(vec3 surfaceNormal) {
+  float detailFade = mix(terrainMidDetailFade(), terrainNearDetailFade(), 0.55);
+  // The bump strength is scaled by detailFade, so past its fade range the
+  // perturbation is negligible — skip the whole bump-height + micro-normal
+  // computation (its own sand veins and surface-gradient noise) out there.
+  if (detailFade < 0.004) return surfaceNormal;
   vec2 p = vTerrainWorldPosition.xz;
   float wash = clamp(vTerrainDetail.x, 0.0, 1.0);
   float shoulder = clamp(vTerrainDetail.y, 0.0, 1.0);
@@ -259,7 +264,6 @@ vec3 applyTerrainNormalAndBump(vec3 surfaceNormal) {
   float gravel = terrainRockMask(wash, shoulder, slope);
   float bumpHeight = terrainBumpHeight(p, gravel, rockFace);
   vec3 mappedNormal = terrainApplyMicroNormal(surfaceNormal, p, gravel, rockFace);
-  float detailFade = mix(terrainMidDetailFade(), terrainNearDetailFade(), 0.55);
   float bumpStrength = (0.030 + gravel * 0.070 + rockFace * 0.055) * (0.22 + detailFade * 0.78);
   return terrainApplyBumpMap(mappedNormal, bumpHeight, bumpStrength);
 }
@@ -286,7 +290,6 @@ vec3 terrainSoilBaseColor(vec3 baseColor, float soilId, float wash, float basin,
 vec3 applyTerrainSurface(vec3 baseColor) {
   vec2 p = vTerrainWorldPosition.xz;
   vec2 warped = terrainDomainWarp(p);
-  vec2 detail = terrainDetailWarp(p);
   float wash = clamp(vTerrainDetail.x, 0.0, 1.0);
   float shoulder = clamp(vTerrainDetail.y, 0.0, 1.0);
   float basin = clamp(vTerrainDetail.z, 0.0, 1.0);
@@ -297,33 +300,57 @@ vec3 applyTerrainSurface(vec3 baseColor) {
   float nearDetail = terrainNearDetailFade();
   float midDetail = terrainMidDetailFade();
 
+  // Always-on base tint (cheap: a handful of fbm calls). The heavy detail
+  // (voronoi stones, sand veins, ripples) is distance-gated below — it is
+  // already multiplied to ~0 by nearDetail/midDetail past its fade range, so
+  // skipping the computation there is visually lossless but reclaims the bulk
+  // of the per-fragment ALU on the far ground that fills most of the screen.
   float macroPatch = terrainFbm(warped * 0.020 + vec2(6.0, 19.0));
   float midPatch = terrainFbm(terrainRotate(warped, 0.64) * 0.095 + vec2(-11.0, 27.0));
-  float fineGrain = terrainHash(floor(detail * 34.0 + terrainFbm(warped * 0.33) * 7.0));
-  float pebble = terrainVoronoiStone(detail, 7.6, 0.34);
-  float gravel = terrainRockMask(wash, shoulder, slope);
-  float peaGravel = terrainVoronoiStone(detail, 6.8, 0.48) +
-    terrainVoronoiStone(terrainRotate(detail + 21.0, 0.72), 13.5, 0.30) * 0.68;
-  float coarseGravel = terrainVoronoiStone(terrainRotate(detail + vec2(37.0, 9.0), -0.52), 3.5, 0.36);
-  float stonePatch = smoothstep(0.34, 0.92, terrainFbm(warped * 0.18 + 31.0));
-  float stoneField = clamp(pebble * 0.62 + peaGravel * 0.54 + coarseGravel * 0.92, 0.0, 1.0) *
-    (0.12 + gravel * 0.62 + rockCover * 0.22) * (0.58 + stonePatch * 0.52) * (0.08 + nearDetail * 0.72);
   float dust = terrainFbm(warped * 0.18);
+  float gravel = terrainRockMask(wash, shoulder, slope);
   float crust = terrainRidgedFbm(warped * 0.58 + 12.0) * basin * (1.0 - wash);
-
-  float ripplePhase = terrainRotate(warped, -0.34).x * 0.58 +
-    terrainRotate(warped, 0.46).y * 1.33 +
-    terrainFbm(warped * 0.065) * 7.5;
-  float ripple = (sin(ripplePhase) * 0.5 + 0.5) * basin * (1.0 - wash);
-  ripple = smoothstep(0.50, 0.88, ripple) * 0.14 * (0.55 + midPatch * 0.62) * midDetail;
-
-  float washStrandA = terrainSandVein(warped, -0.18, 0.74, 0.42);
-  float washStrandB = terrainSandVein(warped + vec2(43.0, -19.0), 0.23, 1.18, 0.55);
-  float washStrand = max(washStrandA * 0.72, washStrandB * 0.46) * wash * midDetail;
-
   float rockFace = smoothstep(0.20, 0.78, slope) * (shoulder * 0.72 + rockCover * 0.62);
   float fracturedRock = smoothstep(0.36, 0.88, terrainRidgedFbm(terrainRotate(warped, 0.41) * 1.58 + 8.0)) * rockFace;
   float desertVarnish = smoothstep(0.62, 0.98, terrainFbm(warped * 0.31 + vec2(120.0, 7.0))) * rockFace;
+
+  // Detail terms default to 0 so the mix sequence below is byte-for-byte the
+  // same order as before; only the values differ when a distance gate skips
+  // the computation.
+  float fineGrain = 0.0;
+  float stoneField = 0.0;
+  float ripple = 0.0;
+  float washStrand = 0.0;
+  vec3 gravelColor = terrainDustColor;
+
+  // Mid-range flow detail (sand ripples + wash veins), faded out by ~360m.
+  if (midDetail > 0.003) {
+    float ripplePhase = terrainRotate(warped, -0.34).x * 0.58 +
+      terrainRotate(warped, 0.46).y * 1.33 +
+      terrainFbm(warped * 0.065) * 7.5;
+    ripple = (sin(ripplePhase) * 0.5 + 0.5) * basin * (1.0 - wash);
+    ripple = smoothstep(0.50, 0.88, ripple) * 0.14 * (0.55 + midPatch * 0.62) * midDetail;
+    float washStrandA = terrainSandVein(warped, -0.18, 0.74, 0.42);
+    float washStrandB = terrainSandVein(warped + vec2(43.0, -19.0), 0.23, 1.18, 0.55);
+    washStrand = max(washStrandA * 0.72, washStrandB * 0.46) * wash * midDetail;
+  }
+
+  // Near-range fine stones + grain, faded out by ~145m. This block owns the
+  // second (redundant) domain warp and all four voronoi-stone lookups — the
+  // single most expensive part of the whole terrain shader.
+  if (nearDetail > 0.003) {
+    vec2 detail = terrainDetailWarp(p);
+    fineGrain = terrainHash(floor(detail * 34.0 + terrainFbm(warped * 0.33) * 7.0));
+    float pebble = terrainVoronoiStone(detail, 7.6, 0.34);
+    float peaGravel = terrainVoronoiStone(detail, 6.8, 0.48) +
+      terrainVoronoiStone(terrainRotate(detail + 21.0, 0.72), 13.5, 0.30) * 0.68;
+    float coarseGravel = terrainVoronoiStone(terrainRotate(detail + vec2(37.0, 9.0), -0.52), 3.5, 0.36);
+    float stonePatch = smoothstep(0.34, 0.92, terrainFbm(warped * 0.18 + 31.0));
+    stoneField = clamp(pebble * 0.62 + peaGravel * 0.54 + coarseGravel * 0.92, 0.0, 1.0) *
+      (0.12 + gravel * 0.62 + rockCover * 0.22) * (0.58 + stonePatch * 0.52) * (0.08 + nearDetail * 0.72);
+    gravelColor = mix(terrainPebbleColor, terrainDustColor, 0.34 + (1.0 - gravel) * 0.18);
+  }
+
   vec3 c = terrainSoilBaseColor(baseColor, soilId, wash, basin, slope, rockCover);
   vec3 warmDust = mix(terrainDustColor, vec3(0.72, 0.58, 0.37), macroPatch * 0.38);
   vec3 coolSilt = vec3(0.48, 0.45, 0.38);
@@ -332,7 +359,6 @@ vec3 applyTerrainSurface(vec3 baseColor) {
   c *= 0.78 + fineGrain * (0.04 + nearDetail * 0.18) + dust * 0.13 + macroPatch * 0.12;
   c = mix(c, terrainDustColor, crust * 0.13 + ripple * 0.08);
   c = mix(c, terrainWashColor, wash * 0.15 + washStrand * 0.14);
-  vec3 gravelColor = mix(terrainPebbleColor, terrainDustColor, 0.34 + (1.0 - gravel) * 0.18);
   c = mix(c, gravelColor, stoneField * (0.22 + gravel * 0.18));
   c = mix(c, terrainRockColor, rockFace * 0.42 + fracturedRock * 0.28);
   c = mix(c, vec3(0.23, 0.18, 0.14), desertVarnish * 0.20);
@@ -418,6 +444,6 @@ normal = applyTerrainNormalAndBump(normal);`,
       );
   };
 
-  material.customProgramCacheKey = () => 'terrain-material-v8-distance-detail';
+  material.customProgramCacheKey = () => 'terrain-material-v9-distance-gated';
   return material;
 }

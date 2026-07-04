@@ -14,8 +14,11 @@ import * as THREE from 'three';
 
 const IDENTITY = new THREE.Matrix4();
 
+// NOTE: do not declare `attribute mat4 instanceMatrix` here — three.js already
+// injects it into ShaderMaterial vertex shaders when the geometry is an
+// InstancedMesh (USE_INSTANCING). Redeclaring it fails compilation with
+// "instanceMatrix : redefinition", which silently drops every far impostor.
 const VERTEX = /* glsl */ `
-attribute mat4 instanceMatrix;
 varying vec2 vUv;
 varying float vFogDepth;
 
