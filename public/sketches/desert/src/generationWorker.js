@@ -970,8 +970,16 @@ function buildTerrainData(params, seed) {
     let bank = 0;
     let gravel = 0;
     let nearest = 1;
+    // Loop-invariant across all 15 wash/lane iterations (depend only on the
+    // vertex), so compute once instead of 15x. barNoise in particular was a
+    // simplex-noise call repeated per lane — ~2M redundant samples/terrain.
+    const barNoise = detailNoise(x * 0.45, z * 0.45) * 0.5 + 0.5;
+    const active = smoothstep(0.05, 0.92, downhill);
+    const widthDownhill = 0.7 + downhill * 1.8;
     for (const wash of washes) {
       const nearestLane = Math.round((x - wash.x0) / wash.spacing);
+      const width = wash.width * widthDownhill;
+      const cullDist = width * 3.5;
       for (let lane = nearestLane - 1; lane <= nearestLane + 1; lane++) {
         const baseX = wash.x0 + lane * wash.spacing;
         const lanePhase = wash.phase + lane * 1.713;
@@ -980,16 +988,22 @@ function buildTerrainData(params, seed) {
           washNoise(z * 0.027 + lanePhase, baseX * 0.013) * wash.amp * 0.55;
         const center = baseX + meander * (0.45 + downhill * 0.9);
         const dist = Math.abs(x - center);
-        const width = wash.width * (0.7 + downhill * 1.8);
-        const channel = Math.exp(-Math.pow(dist / width, 2));
-        const bankDist = Math.abs(dist - width * 1.35);
-        const cutBank = Math.exp(-Math.pow(bankDist / (width * 0.55), 2));
-        const barNoise = detailNoise(x * 0.45, z * 0.45) * 0.5 + 0.5;
-        const active = smoothstep(0.05, 0.92, downhill);
-        cut += channel * wash.depth * active;
-        bank += cutBank * active * (0.08 + 0.06 * barNoise);
-        gravel += channel * active * (0.4 + 0.6 * barNoise);
-        nearest = Math.min(nearest, dist / (width * 3.5));
+        nearest = Math.min(nearest, dist / cullDist);
+        // Past ~3.5 widths the gaussian channel/bank are exp(-12)~0; skip the
+        // two exp() evals for far lanes (most of them). The tributary below has
+        // its own phase gate and can still fire near a meander crest.
+        if (dist < cullDist) {
+          // exp(-t^2) gaussian falloff. Squaring by multiply (not Math.pow,
+          // ~10x slower) matters: 15 lanes x 130k terrain vertices.
+          const channelT = dist / width;
+          const channel = Math.exp(-(channelT * channelT));
+          const bankDist = Math.abs(dist - width * 1.35);
+          const cutBankT = bankDist / (width * 0.55);
+          const cutBank = Math.exp(-(cutBankT * cutBankT));
+          cut += channel * wash.depth * active;
+          bank += cutBank * active * (0.08 + 0.06 * barNoise);
+          gravel += channel * active * (0.4 + 0.6 * barNoise);
+        }
 
         const tributaryPhase = Math.sin((z + lane * wash.spacing) * 0.008 + lanePhase);
         if (tributaryPhase > -0.25) {
@@ -997,7 +1011,8 @@ function buildTerrainData(params, seed) {
           const tribCenter = center + wash.side * tribProgress * wash.spacing * 0.32;
           const tribDist = Math.abs(x - tribCenter);
           const tribWidth = width * 0.45;
-          const tributary = Math.exp(-Math.pow(tribDist / tribWidth, 2)) * tribProgress;
+          const tribT = tribDist / tribWidth;
+          const tributary = Math.exp(-(tribT * tribT)) * tribProgress;
           cut += tributary * wash.depth * 0.28;
           gravel += tributary * 0.4;
           nearest = Math.min(nearest, tribDist / (tribWidth * 4));

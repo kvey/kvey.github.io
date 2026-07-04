@@ -965,7 +965,10 @@ let controlMode = 'simple';
 let stepGenerationLimitKey = GENERATION_STEPS[GENERATION_STEPS.length - 1].key;
 const applyQueue = [];
 let applyQueueRunning = false;
-const APPLY_FRAME_BUDGET_MS = 6;
+// Per-frame time budget for applying generated chunks. Generation is a
+// one-time load, so we spend a larger slice of each frame here (still yielding
+// often enough to render the scene building up and keep the UI responsive).
+const APPLY_FRAME_BUDGET_MS = 10;
 const TERRAIN_CHUNK_LOAD_RADIUS = 1;
 const TERRAIN_CHUNK_UNLOAD_RADIUS = 2;
 const terrainChunks = new Map();
@@ -1114,22 +1117,28 @@ function processApplyQueue() {
   if (applyQueueRunning) return;
   applyQueueRunning = true;
   requestAnimationFrame(() => {
-    const task = applyQueue.shift();
     const deadline = performance.now() + APPLY_FRAME_BUDGET_MS;
-    if (task && task.generation === buildGeneration) {
+    // Drain as many tasks as fit in this frame's budget instead of one per
+    // frame — many apply tasks (debug overlays, colliders, small buckets)
+    // finish in microseconds, and giving each its own animation frame was
+    // stretching generation across ~1600 frames of mostly-idle main thread.
+    while (applyQueue.length > 0 && performance.now() < deadline) {
+      const task = applyQueue[0];
+      if (task.generation !== buildGeneration) {
+        applyQueue.shift();
+        continue;
+      }
       setGenerationProgress(task.progress, true, `Rendering ${task.phase.toLowerCase()}`);
       const applyStart = performance.now();
       const complete = runApplyTask(task.apply, deadline);
-      if (!complete) {
-        applyQueue.unshift(task);
-      } else {
-        logPerf('main-apply', {
-          generation: task.generation,
-          phase: task.phase,
-          applyMs: roundMs(performance.now() - applyStart),
-          queuedAfter: applyQueue.length,
-        });
-      }
+      if (!complete) break; // hit the deadline mid-task; keep it at the front
+      applyQueue.shift();
+      logPerf('main-apply', {
+        generation: task.generation,
+        phase: task.phase,
+        applyMs: roundMs(performance.now() - applyStart),
+        queuedAfter: applyQueue.length,
+      });
     }
     applyQueueRunning = false;
     if (applyQueue.length > 0) {
@@ -1904,27 +1913,46 @@ function createScatterLodCell(stageKey, config, bucket, lodLevels, geometryResul
 function applyDebugOverlayData(chunkKeyForOverlay, data) {
   const chunk = terrainChunks.get(chunkKeyForOverlay);
   if (!chunk) return true;
+  // Stash the raw zone data and only build the (fairly heavy — 48-segment
+  // circle per zone) line geometry when the overlay is actually switched on.
+  // The overlay defaults to 'none', so building it during every generation was
+  // pure wasted main-thread time on the hot path.
+  chunk.debugOverlayData = data;
+  if (params.debugOverlay === 'none') {
+    if (chunk.debugOverlayGroup) {
+      chunk.group.remove(chunk.debugOverlayGroup);
+      disposeDebugOverlayGroup(chunk.debugOverlayGroup);
+      chunk.debugOverlayGroup = null;
+    }
+    return true;
+  }
+  return buildChunkDebugOverlay(chunk, data);
+}
+
+function buildChunkDebugOverlay(chunk, data) {
   if (chunk.debugOverlayGroup) {
     chunk.group.remove(chunk.debugOverlayGroup);
     disposeDebugOverlayGroup(chunk.debugOverlayGroup);
   }
 
   const overlayGroup = new THREE.Group();
-  overlayGroup.name = `debug-overlay-${chunkKeyForOverlay}`;
+  overlayGroup.name = `debug-overlay-${chunk.key ?? ''}`;
   const categories = {
     nurseZones: buildDebugOverlayLines(data, type => type <= DEBUG_OVERLAY_TYPES.rockNurse),
     resourceZones: buildDebugOverlayLines(data, type => type === DEBUG_OVERLAY_TYPES.resource),
     cloneCenters: buildDebugOverlayLines(data, type => type === DEBUG_OVERLAY_TYPES.pricklyPearPatch || type === DEBUG_OVERLAY_TYPES.chollaColony),
   };
+  const active = params.debugOverlay !== 'none';
   for (const [category, line] of Object.entries(categories)) {
     if (!line) continue;
     line.userData.debugOverlayCategory = category;
     line.renderOrder = 12;
+    line.visible = active && (params.debugOverlay === 'all' || category === params.debugOverlay);
     overlayGroup.add(line);
   }
+  overlayGroup.visible = active;
   chunk.debugOverlayGroup = overlayGroup;
   chunk.group.add(overlayGroup);
-  updateDebugOverlayMode();
   markVisibilityCullingDirty();
   return true;
 }
@@ -1985,10 +2013,16 @@ function disposeDebugOverlayGroup(group) {
 }
 
 function updateDebugOverlayMode() {
+  const active = params.debugOverlay !== 'none';
   for (const chunk of terrainChunks.values()) {
+    // Lazily materialize the overlay lines the first time the overlay is
+    // enabled — they are skipped during generation (see applyDebugOverlayData).
+    if (active && !chunk.debugOverlayGroup && chunk.debugOverlayData) {
+      buildChunkDebugOverlay(chunk, chunk.debugOverlayData);
+    }
     const group = chunk.debugOverlayGroup;
     if (!group) continue;
-    group.visible = params.debugOverlay !== 'none';
+    group.visible = active;
     group.traverse(object => {
       if (!object.userData?.debugOverlayCategory) return;
       object.visible = params.debugOverlay === 'all' || object.userData.debugOverlayCategory === params.debugOverlay;
