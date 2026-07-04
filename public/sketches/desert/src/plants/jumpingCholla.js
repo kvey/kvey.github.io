@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../three-shim.js';
 import { mergeGeometries, paintCactusSpines, paintGeometry, resolveDetailScale, resolvePlantAge, scaledSegments, sweepRibbedTube } from './common.js';
 import { buildChollaSpineBlades, sampleChollaJointAreoles } from './chollaSpineBlades.js';
 import { rngChance, rngInt, rngRange } from '../random.js';

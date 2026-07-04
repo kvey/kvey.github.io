@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../three-shim.js';
 import { sweepRibbedTube, mergeGeometries, colorRamp, paintCactusSpines, paintGeometry, resolveDetailScale, scaledSegments } from './common.js';
 import { buildCactusSpineBlades, sampleColumnAreoles, ensureCactusBillboardAttribute } from './cactusSpineBlades.js';
 import { rngRange, rngInt, rngChance } from '../random.js';

@@ -548,7 +548,11 @@ registerEnvironmentMaterial(creosoteMaterial, 0.26);
 registerEnvironmentMaterial(rockMaterial, 0.62);
 registerEnvironmentMaterial(deadwoodMaterial, 0.42);
 registerEnvironmentMaterial(ephemeralMaterial, 0.34);
-const SCATTER_GEOMETRY_CACHE_LIMIT = 192;
+// Comfortably above the ~330 distinct geometries a full generation references,
+// so the geometry worker can deliver variants ahead of the apply loop without
+// the LRU prune evicting them (unreferenced) before they're consumed. These are
+// RAM-side BufferGeometries (uploaded to the GPU only when first rendered).
+const SCATTER_GEOMETRY_CACHE_LIMIT = 512;
 const PERF_LOG_PREFIX = '[desert-perf]';
 const DEBUG_LOG_PREFIX = '[desert-debug]';
 const scatterGeometryCache = new Map();
@@ -1041,6 +1045,10 @@ async function regenerate() {
   });
   setGenerationProgress(0, true, 'Starting generation worker');
 
+  ensureGeometryWorker();
+  requestedGeometryKeys.clear();
+  geometryWorker.postMessage({ type: 'reset', generation });
+
   generationWorker = new Worker(new URL('./generationWorker.js', import.meta.url), { type: 'module' });
   generationWorker.onmessage = (event) => {
     const message = event.data;
@@ -1055,6 +1063,9 @@ async function regenerate() {
       return;
     }
     if (message.type === 'scatter') {
+      // Kick off off-thread geometry generation for the expensive stages before
+      // enqueuing the apply, so the worker has a head start on filling the cache.
+      forwardGeometryRequests(message.stage);
       enqueueApply(generation, message.phase, message.progress, createScatterApplyTask(message.chunkKey, message.stage, generationProportions));
       return;
     }
@@ -1128,6 +1139,7 @@ function processApplyQueue() {
     // frame — many apply tasks (debug overlays, colliders, small buckets)
     // finish in microseconds, and giving each its own animation frame was
     // stretching generation across ~1600 frames of mostly-idle main thread.
+    let waitingRotations = 0;
     while (applyQueue.length > 0 && performance.now() < deadline) {
       const task = applyQueue[0];
       if (task.generation !== buildGeneration) {
@@ -1136,8 +1148,16 @@ function processApplyQueue() {
       }
       setGenerationProgress(task.progress, true, `Rendering ${task.phase.toLowerCase()}`);
       const applyStart = performance.now();
-      const complete = runApplyTask(task.apply, deadline);
-      if (!complete) break; // hit the deadline mid-task; keep it at the front
+      const result = runApplyTask(task.apply, deadline);
+      if (result === APPLY_WAITING) {
+        // Blocked on the geometry worker — move to the back and run other tasks
+        // (terrain, colliders, other stages) instead of stalling the queue.
+        applyQueue.push(applyQueue.shift());
+        if (++waitingRotations >= applyQueue.length) break; // all waiting; yield frame
+        continue;
+      }
+      waitingRotations = 0;
+      if (result === false) break; // hit the deadline mid-task; keep it at the front
       applyQueue.shift();
       logPerf('main-apply', {
         generation: task.generation,
@@ -1155,13 +1175,17 @@ function processApplyQueue() {
   });
 }
 
+// runApplyTask return values: true = done, false = hit the frame deadline
+// mid-task (resume at front next slice), APPLY_WAITING = blocked waiting for the
+// geometry worker (rotate to the back so other apply work runs meanwhile).
 function runApplyTask(apply, deadline) {
   if (typeof apply === 'function') {
     apply();
     return true;
   }
   if (apply && typeof apply.run === 'function') {
-    return apply.run(deadline) !== false;
+    const result = apply.run(deadline);
+    return result === false || result === APPLY_WAITING ? result : true;
   }
   return true;
 }
@@ -1677,6 +1701,7 @@ function createScatterApplyTask(chunkKeyForStage, stage, proportions) {
   };
   let bucketIndex = 0;
   let activeBucket = null;
+  const bucketGeometryWaitStart = new Map(); // bucketIndex -> first wait timestamp
 
   return {
     run(deadline = Infinity) {
@@ -1685,12 +1710,32 @@ function createScatterApplyTask(chunkKeyForStage, stage, proportions) {
 
       while (bucketIndex < stage.buckets.length || activeBucket) {
         if (!activeBucket) {
-          const bucket = stage.buckets[bucketIndex++];
+          const bucket = stage.buckets[bucketIndex]; // peek; advance once committed
           const instanceCount = bucket.matrices.length / 16;
-          if (instanceCount === 0) continue;
+          if (instanceCount === 0) { bucketIndex++; continue; }
 
           const lodLevels = bucketLodLevels(bucket);
           const useImpostors = IMPOSTOR_STAGE_KEYS.has(stage.key);
+
+          // For worker-generated stages, prefer waiting for the geometry worker
+          // to deliver (keeping the 50-150ms generators off the main thread)
+          // over generating synchronously here. Yield until the geometry lands
+          // in the cache or the wait budget elapses (worker stalled → fall
+          // through to main-thread generation as a safety net).
+          if (GEOMETRY_WORKER_STAGES.has(stage.key)) {
+            const pending = lodLevels.some(level =>
+              !(useImpostors && level.name === 'far')
+              && !scatterGeometryReady(stage.key, bucket, level, proportions));
+            if (pending) {
+              const waited = bucketGeometryWaitStart.get(bucketIndex)
+                ?? (bucketGeometryWaitStart.set(bucketIndex, performance.now()), performance.now());
+              if (performance.now() - waited < GEOMETRY_WORKER_WAIT_MS) {
+                return APPLY_WAITING; // rotate to back; other apply tasks run meanwhile
+              }
+              // else: worker too slow — fall through and generate on main.
+            }
+          }
+          bucketIndex++;
           const generateLevel = level => getScatterGeometry(stage.key, config, {
             ...bucket,
             lodName: level.name,
@@ -2260,6 +2305,89 @@ function scatterGeometryCacheKey(stageKey, bucket, proportions) {
     root: proportions.rootMeasurement,
     opts: bucket.variantOpts,
   });
+}
+
+// The expensive generators (50-150ms each) whose geometry is built off the main
+// thread by geometryWorker.js to keep the apply loop from hitching. Their `far`
+// LOD is a baked impostor, so only near/mid are worth generating.
+const GEOMETRY_WORKER_STAGES = new Set([
+  'saguaro', 'mesquite', 'jumpingCholla', 'paloVerde', 'creosote', 'ocotillo', 'barrel', 'pricklyPear',
+]);
+// How long the apply loop will wait for the geometry worker to deliver a
+// variant before giving up and generating it on the main thread. The wait only
+// applies to the first request of each variant (later chunks are cache hits),
+// and the loop yields to other apply work meanwhile, so this is not idle time —
+// it just keeps the expensive generators off the UI thread. Generous, because
+// it only actually elapses if the worker stalls or errors.
+const GEOMETRY_WORKER_WAIT_MS = 4000;
+const APPLY_WAITING = 'apply-waiting';
+
+function scatterGeometryReady(stageKey, bucket, level, proportions) {
+  return scatterGeometryCache.has(scatterGeometryCacheKey(stageKey, {
+    ...bucket,
+    lodName: level.name,
+    variantOpts: level.variantOpts,
+  }, proportions));
+}
+let geometryWorker = null;
+const requestedGeometryKeys = new Set();
+
+function ensureGeometryWorker() {
+  if (geometryWorker) return geometryWorker;
+  geometryWorker = new Worker(new URL('./geometryWorker.js', import.meta.url), { type: 'module' });
+  geometryWorker.onmessage = (event) => {
+    const msg = event.data;
+    if (!msg || msg.generation !== buildGeneration) return;
+    if (msg.type === 'geometryError') {
+      // Non-fatal: main-thread fallback in getScatterGeometry still covers it.
+      return;
+    }
+    if (msg.type !== 'geometry') return;
+    if (scatterGeometryCache.has(msg.cacheKey)) return; // main already built it
+    const geometry = deserializeWorkerGeometry(msg);
+    scatterGeometryCache.set(msg.cacheKey, geometry);
+    cachedScatterGeometries.add(geometry);
+  };
+  return geometryWorker;
+}
+
+function deserializeWorkerGeometry(msg) {
+  const geometry = new THREE.BufferGeometry();
+  for (const name in msg.attributes) {
+    const a = msg.attributes[name];
+    geometry.setAttribute(name, new THREE.BufferAttribute(a.array, a.itemSize, a.normalized));
+  }
+  if (msg.index) geometry.setIndex(new THREE.BufferAttribute(msg.index.array, 1));
+  if (msg.userData) geometry.userData = msg.userData;
+  return geometry;
+}
+
+function forwardGeometryRequests(stage) {
+  if (!stage || !GEOMETRY_WORKER_STAGES.has(stage.key) || !geometryWorker || !generationProportions) return;
+  const rootMeasurement = generationProportions.rootMeasurement;
+  const requests = [];
+  for (const bucket of stage.buckets ?? []) {
+    for (const level of bucket.lodLevels ?? []) {
+      if (level.name === 'far') continue; // baked impostor, not generated
+      const cacheKey = scatterGeometryCacheKey(stage.key, {
+        variantSeed: bucket.variantSeed,
+        lodName: level.name,
+        variantOpts: level.variantOpts,
+      }, generationProportions);
+      if (requestedGeometryKeys.has(cacheKey) || scatterGeometryCache.has(cacheKey)) continue;
+      requestedGeometryKeys.add(cacheKey);
+      requests.push({
+        cacheKey,
+        stageKey: stage.key,
+        variantSeed: bucket.variantSeed,
+        variantOpts: level.variantOpts,
+        rootMeasurement,
+      });
+    }
+  }
+  if (requests.length) {
+    geometryWorker.postMessage({ type: 'generate', generation: buildGeneration, requests });
+  }
 }
 
 function pruneScatterGeometryCache() {

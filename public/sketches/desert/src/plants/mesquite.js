@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../three-shim.js';
 import { mergeGeometries, resolveDetailScale, resolvePlantAge, resolveStructureScale, scaledSegments } from './common.js';
 import {
   makeBranchSegment,

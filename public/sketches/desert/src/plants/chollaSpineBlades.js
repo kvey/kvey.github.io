@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../three-shim.js';
 
 // Mode flag the cactus spine material switches into for cholla-specific spine
 // blades. Mode 10 belongs to saguaro/barrel; cholla gets its own band so the

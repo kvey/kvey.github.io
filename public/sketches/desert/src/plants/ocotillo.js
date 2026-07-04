@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../three-shim.js';
 import { sweepRibbedTube, mergeGeometries, resolveDetailScale, resolvePlantAge, resolveStructureScale, scaledSegments, paintGeometry } from './common.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 import { resolveProportionOracle } from '../proportions.js';

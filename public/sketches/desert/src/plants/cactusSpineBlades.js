@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../three-shim.js';
 
 // Mode flag the cactus spine material uses to switch into bezier-bend mode.
 // Stays out of the band used by other spine modes (1, 2, 5, 6, 8+age).

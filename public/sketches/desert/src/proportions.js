@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from './three-shim.js';
 
 export const DEFAULT_ROOT_MEASUREMENT = 7.0;
 

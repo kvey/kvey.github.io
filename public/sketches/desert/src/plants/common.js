@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../three-shim.js';
 
 export function resolveDetailScale(opts = {}, min = 0.45) {
   return THREE.MathUtils.clamp(opts.detailScale ?? 1, min, 1);

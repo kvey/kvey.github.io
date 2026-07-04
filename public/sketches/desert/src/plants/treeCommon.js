@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../three-shim.js';
 import { sweepRibbedTube, mergeGeometries, paintGeometry, scaledSegments } from './common.js';
 import { rngRange, rngInt, rngChance } from '../random.js';
 
