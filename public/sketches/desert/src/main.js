@@ -1003,7 +1003,9 @@ function clearWorld() {
   world = new THREE.Group();
   scene.add(world);
   terrain = null;
-  for (const chunk of terrainChunks.values()) chunk.impostorAtlas?.dispose();
+  // The world.traverse above already released the shared impostor quads
+  // (they live in cachedScatterGeometries); now free them and the atlas.
+  disposeScatterImpostors();
   terrainChunks.clear();
   pendingChunkKeys.clear();
   desiredChunkKeys.clear();
@@ -1351,7 +1353,6 @@ function unloadTerrainChunk(key) {
     }
   });
   world.remove(chunk.group);
-  chunk.impostorAtlas?.dispose();
   terrainChunks.delete(key);
   pendingChunkKeys.delete(key);
   removeChunkCameraColliders(key);
@@ -1701,18 +1702,35 @@ function createScatterApplyTask(chunkKeyForStage, stage, proportions) {
           });
           for (const result of geometryResults) {
             if (!result.impostor) continue;
-            // Bake the impostor from the mid LOD — near carries mesh spines
-            // the sprite doesn't need, and mid is already generated.
-            const source = geometryResults.find(r => r.geometry && r.level.name !== 'near')
-              ?? geometryResults.find(r => r.geometry);
-            const atlas = ensureChunkImpostorAtlas(chunk);
-            const bakeStart = performance.now();
-            const quad = source && atlas ? atlas.bake(source.geometry, config.material) : null;
+            // One baked sprite per (stage, variant) shared across all chunks —
+            // key it the same way the geometry cache is keyed and bake only on
+            // a miss.
+            const quadKey = scatterGeometryCacheKey(stage.key, {
+              ...bucket,
+              lodName: result.level.name,
+              variantOpts: result.level.variantOpts,
+            }, proportions);
+            let quad = impostorQuadCache.get(quadKey);
+            let bakeMs = 0;
+            if (!quad) {
+              // Bake from the mid LOD — near carries mesh spines the sprite
+              // doesn't need, and mid is already generated.
+              const source = geometryResults.find(r => r.geometry && r.level.name !== 'near')
+                ?? geometryResults.find(r => r.geometry);
+              const atlas = ensureScatterImpostorAtlas();
+              const bakeStart = performance.now();
+              quad = source && atlas ? atlas.bake(source.geometry, config.material) : null;
+              bakeMs = performance.now() - bakeStart;
+              if (quad) {
+                impostorQuadCache.set(quadKey, quad);
+                cachedScatterGeometries.add(quad);
+              }
+            }
             if (quad) {
               result.geometry = quad;
-              result.material = atlas.material;
-              result.cacheHit = false;
-              result.generateMs = performance.now() - bakeStart;
+              result.material = scatterImpostorAtlas.material;
+              result.cacheHit = bakeMs === 0;
+              result.generateMs = bakeMs;
             } else {
               // Atlas exhausted (or nothing to bake from): fall back to the
               // real far geometry rather than dropping the LOD level.
@@ -1839,32 +1857,59 @@ function estimatePlantLight(target) {
   return target;
 }
 
-function ensureChunkImpostorAtlas(chunk) {
-  if (!chunk.impostorAtlas) {
-    chunk.impostorAtlas = new ChunkImpostorAtlas(renderer, {
+// A baked impostor sprite depends only on (stage, variant, lighting) — not on
+// which chunk it lands in — so one atlas is shared across all chunks of a
+// generation and each variant is baked exactly once. Previously every chunk
+// baked its own copy (~9x redundant render-to-texture passes and ~9x the atlas
+// texture memory). The atlas + quad cache are torn down and rebaked per
+// generation (in clearWorld), which also keeps the append-only tile allocator
+// from exhausting across reseeds.
+let scatterImpostorAtlas = null;
+let scatterImpostorBakeLight = null;
+const impostorQuadCache = new Map();
+
+function ensureScatterImpostorAtlas() {
+  if (!scatterImpostorAtlas) {
+    scatterImpostorAtlas = new ChunkImpostorAtlas(renderer, {
+      tilesPerSide: 10, // 100 tiles; impostor stages need ~52 variant sprites
       lights: snapshotSceneLighting(),
       fog: scene.fog,
     });
-    chunk.impostorBakeLight = estimatePlantLight(new THREE.Color());
+    scatterImpostorBakeLight = estimatePlantLight(new THREE.Color());
+    // Shared across chunks, so the per-chunk unload/clearWorld material sweep
+    // must not dispose it — disposeScatterImpostors owns its lifecycle.
+    sharedMaterials.add(scatterImpostorAtlas.material);
   }
-  return chunk.impostorAtlas;
+  return scatterImpostorAtlas;
+}
+
+function disposeScatterImpostors() {
+  for (const quad of impostorQuadCache.values()) {
+    cachedScatterGeometries.delete(quad);
+    scatterGeometryRefs.delete(quad);
+    quad.dispose();
+  }
+  impostorQuadCache.clear();
+  if (scatterImpostorAtlas) {
+    sharedMaterials.delete(scatterImpostorAtlas.material);
+    scatterImpostorAtlas.dispose();
+  }
+  scatterImpostorAtlas = null;
+  scatterImpostorBakeLight = null;
 }
 
 const impostorLightNowScratch = new THREE.Color();
 const impostorTintScratch = new THREE.Color();
 function updateImpostorLightTints() {
-  let estimated = null;
-  for (const chunk of terrainChunks.values()) {
-    if (!chunk.impostorAtlas) continue;
-    if (!estimated) estimated = estimatePlantLight(impostorLightNowScratch);
-    const base = chunk.impostorBakeLight;
-    impostorTintScratch.setRGB(
-      base.r > 1e-4 ? THREE.MathUtils.clamp(estimated.r / base.r, 0, 6) : 1,
-      base.g > 1e-4 ? THREE.MathUtils.clamp(estimated.g / base.g, 0, 6) : 1,
-      base.b > 1e-4 ? THREE.MathUtils.clamp(estimated.b / base.b, 0, 6) : 1,
-    );
-    chunk.impostorAtlas.setLightTint(impostorTintScratch);
-  }
+  if (!scatterImpostorAtlas || !scatterImpostorBakeLight) return;
+  const estimated = estimatePlantLight(impostorLightNowScratch);
+  const base = scatterImpostorBakeLight;
+  impostorTintScratch.setRGB(
+    base.r > 1e-4 ? THREE.MathUtils.clamp(estimated.r / base.r, 0, 6) : 1,
+    base.g > 1e-4 ? THREE.MathUtils.clamp(estimated.g / base.g, 0, 6) : 1,
+    base.b > 1e-4 ? THREE.MathUtils.clamp(estimated.b / base.b, 0, 6) : 1,
+  );
+  scatterImpostorAtlas.setLightTint(impostorTintScratch);
 }
 
 function bucketLodLevels(bucket) {
