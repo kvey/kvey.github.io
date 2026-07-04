@@ -961,6 +961,8 @@ let progressHideTimer = 0;
 let generationWorker = null;
 let generationProportions = null;
 let generationStartedAt = 0;
+let generationActive = false;
+let shadowUpdateDeferred = false;
 let controlMode = 'simple';
 let stepGenerationLimitKey = GENERATION_STEPS[GENERATION_STEPS.length - 1].key;
 const applyQueue = [];
@@ -1016,6 +1018,8 @@ function clearWorld() {
 async function regenerate() {
   const generation = ++buildGeneration;
   generationStartedAt = performance.now();
+  generationActive = true;
+  shadowUpdateDeferred = false;
   if (generationWorker) {
     generationWorker.terminate();
     generationWorker = null;
@@ -1162,6 +1166,13 @@ function runApplyTask(apply, deadline) {
 
 function maybeFinishGeneration(generation) {
   if (generation !== buildGeneration || pendingChunkKeys.size > 0 || applyQueue.length > 0 || applyQueueRunning) return;
+  // Generation done: run the one shadow-map update we deferred through the
+  // whole build (see markShadowMapDirty).
+  generationActive = false;
+  if (shadowUpdateDeferred) {
+    shadowUpdateDeferred = false;
+    renderer.shadowMap.needsUpdate = true;
+  }
   setGenerationProgress(1, true, 'Generation complete');
   hideGenerationProgress(generation);
   const t1 = performance.now();
@@ -1182,9 +1193,12 @@ function roundMs(value) {
 }
 
 function freezeStaticTransform(object) {
+  // One recursive world-matrix pass over the whole subtree, then just flip the
+  // auto-update flags. The old form called updateMatrixWorld(true) on every
+  // node during the traverse, but force=true already recurses into that node's
+  // descendants — so each subtree was re-updated once per ancestor (O(n*depth)).
+  object.updateMatrixWorld(true);
   object.traverse(child => {
-    child.updateMatrix();
-    child.updateMatrixWorld(true);
     child.matrixAutoUpdate = false;
     child.matrixWorldAutoUpdate = false;
   });
@@ -2985,6 +2999,14 @@ function updateShadowCameraFootprint() {
 }
 
 function markShadowMapDirty() {
+  // During generation the scene grows every frame and each apply marks the
+  // shadow map dirty, which re-renders every shadow caster into the 2048^2 map
+  // hundreds of times over a growing scene. Defer to a single update when
+  // generation finishes (shadows simply pop in at the end of the load).
+  if (generationActive) {
+    shadowUpdateDeferred = true;
+    return;
+  }
   renderer.shadowMap.needsUpdate = true;
 }
 
