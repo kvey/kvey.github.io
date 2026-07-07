@@ -8,7 +8,7 @@ import { useBackground, BackgroundType } from '@/components/background-provider'
 type SketchKind = 'standalone' | 'background';
 
 interface Sketch {
-  id: BackgroundType | 'desert' | 'glass' | 'plant-lab' | 'itano-circus' | 'taiwanese-raytracer';
+  id: BackgroundType | 'desert' | 'glass' | 'plant-lab' | 'itano-circus' | 'taiwanese-raytracer' | 'magic-ink';
   title: string;
   description: string;
   tech: string;
@@ -19,6 +19,15 @@ interface Sketch {
 }
 
 const sketches: Sketch[] = [
+  {
+    id: 'magic-ink',
+    title: 'Magic Ink',
+    description: 'A shorthand drawing surface where writing is decoded as you draw. Every letter is a single stroke made of unit segments along the 8 compass directions, and each direction maps onto the hue wheel — so a letter is encoded by both its shape and the colors that appear where it turns. Letters are assigned by English frequency, so common words are cheaper to draw than to handwrite. Includes a live decoded readout, an on-demand guide overlay, and a Speed Draw game.',
+    tech: 'TypeScript · Canvas · stroke recognition',
+    year: '2026',
+    kind: 'standalone',
+    href: '/sketches/magic-ink/index.html',
+  },
   {
     id: 'taiwanese-raytracer',
     title: 'Taiwanese Motifs',

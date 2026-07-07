@@ -1,0 +1,697 @@
+:root {
+  color: #172033;
+  background: #f5f2ea;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  min-height: 40px;
+  border: 1px solid #c9c3b8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #172033;
+  cursor: pointer;
+  padding: 0 14px;
+}
+
+button:hover {
+  background: #f7f9fb;
+  border-color: #9fa9b7;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+.ink-app {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(89, 107, 130, 0.08), transparent 32%),
+    #f5f2ea;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #d8d2c7;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: max-content;
+  margin-right: auto;
+  color: #172033;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 36%, #ffffff 0 16%, transparent 17%),
+    conic-gradient(from 20deg, #111827, #0f766e, #b45309, #111827);
+  box-shadow: 0 0 0 1px rgba(23, 32, 51, 0.15);
+}
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: #4c5566;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.control-wide {
+  min-width: 190px;
+}
+
+input[type='color'] {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #c9c3b8;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  padding: 3px;
+}
+
+input[type='range'] {
+  width: 126px;
+  accent-color: #0f766e;
+}
+
+output {
+  min-width: 2ch;
+  color: #172033;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-frame {
+  display: flex;
+  min-height: 0;
+  padding: 18px;
+}
+
+.canvas-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #d4cec2;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 46px rgba(63, 72, 88, 0.16);
+  overflow: hidden;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* Radial hints around the cursor while drawing */
+.radial-hints {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 90ms ease;
+  z-index: 3;
+}
+
+.radial-hints.is-visible {
+  opacity: 1;
+}
+
+.radial-spoke {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%) translate(var(--x), var(--y));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 4px rgba(23, 32, 51, 0.22);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Two-strokes-away letters: smaller and faded, hanging off their first spoke. */
+.radial-spoke--far {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  opacity: 0.32;
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.16);
+}
+
+/* Rightward "submit & start new character" advance hint. */
+.radial-spoke--advance {
+  color: #8a8578;
+  font-weight: 900;
+  border: 1px dashed #cfc9bd;
+}
+
+/* Leftward reserved no-op hint: a hollow ring, no glyph. */
+.radial-spoke--noop {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: 2px solid #cfc9bd;
+  box-shadow: none;
+}
+
+/* The letter that would be selected if the pointer lifts now. */
+.radial-spoke--selected {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  font-size: 0.95rem;
+  color: #ffffff;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.92),
+    0 3px 10px rgba(23, 32, 51, 0.4);
+  z-index: 1;
+}
+
+.radial-spoke[hidden] {
+  display: none;
+}
+
+/* Speed Draw: the hint that leads to the letter you need pulses with a glow.
+   Overrides the faded "far" state so a two-away target still stands out. */
+.radial-spoke--target {
+  opacity: 1;
+  z-index: 2;
+  animation: radial-target-glow 900ms ease-in-out infinite;
+}
+
+@keyframes radial-target-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(15, 118, 110, 0.55),
+      0 0 8px 2px rgba(15, 118, 110, 0.5);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(15, 118, 110, 0.95),
+      0 0 18px 6px rgba(15, 118, 110, 0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radial-spoke--target {
+    animation: none;
+    box-shadow:
+      0 0 0 3px rgba(15, 118, 110, 0.9),
+      0 0 14px 4px rgba(15, 118, 110, 0.7);
+  }
+}
+
+/* Decoded-text readout */
+.readout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 18px;
+  border-bottom: 1px solid #e2ddd2;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.readout-label {
+  color: #7a8091;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.decoded {
+  flex: 1;
+  min-height: 1.4em;
+  color: #172033;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  font-variant-numeric: tabular-nums;
+}
+
+.readout button {
+  min-height: 34px;
+  min-width: 44px;
+  padding: 0 10px;
+}
+
+/* Alphabet guide side panel — shown alongside the canvas */
+/* Alphabet guide — a horizontal strip below the decode bar */
+.guide-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-height: 30vh;
+  padding: 8px 18px;
+  border-bottom: 1px solid #e2ddd2;
+  background: rgba(255, 255, 255, 0.55);
+  overflow: auto;
+}
+
+.guide-strip.is-collapsed {
+  display: none;
+}
+
+/* Type-to-preview translator sits at the left of the strip */
+.translator {
+  flex: 0 0 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.phrase-input {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid #c9c3b8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.phrase-input:focus {
+  outline: 2px solid #0f766e;
+  outline-offset: 1px;
+}
+
+.phrase-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.phrase-preview:empty {
+  display: none;
+}
+
+.phrase-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid #eee7db;
+  background: #ffffff;
+}
+
+.phrase-cell .glyph {
+  width: 100%;
+  height: 100%;
+}
+
+.phrase-cell--unknown {
+  color: #b3b8c2;
+  border-style: dashed;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.phrase-space {
+  width: 14px;
+  height: 34px;
+}
+
+.guide-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 5px;
+}
+
+.guide-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  align-items: center;
+  justify-items: center;
+  padding: 4px 3px 2px;
+  border: 1px solid #e7e2d7;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.guide-card .glyph {
+  width: 100%;
+  height: 30px;
+}
+
+.guide-letter {
+  grid-row: 2;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #172033;
+}
+
+.guide-meta {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  color: #b7bcc6;
+  font-size: 0.5rem;
+  font-weight: 700;
+}
+
+/* ---- Speed Draw game mode ---- */
+
+/* HUD bar: countdown, live WPM, accuracy, sentences completed, plus the target
+   sentence with a per-letter cursor. Sits directly under the decoded readout. */
+.game-hud {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #e2ddd2;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.game-hud[hidden] {
+  display: none;
+}
+
+/* Hide the free-draw readout while a game is running to avoid confusion. */
+.ink-app.is-gaming .readout {
+  display: none;
+}
+
+.game-stats {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.game-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.1;
+}
+
+.game-stat-label {
+  color: #7a8091;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.game-stat-value {
+  color: #172033;
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-stat--time .game-stat-value {
+  color: #0f766e;
+}
+
+.game-stat-value.is-low {
+  color: #b91c1c;
+}
+
+.game-quit {
+  margin-left: auto;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+/* A quick red pulse on the timer whenever a wrong letter docks the clock. */
+.game-penalty {
+  animation: game-penalty-flash 420ms ease;
+}
+
+@keyframes game-penalty-flash {
+  0% {
+    color: #b91c1c;
+    transform: scale(1.25);
+  }
+  100% {
+    color: inherit;
+    transform: scale(1);
+  }
+}
+
+.game-sentence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1px 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.game-char {
+  position: relative;
+  padding: 0 1px;
+  border-radius: 3px;
+  transition: color 80ms ease, background 80ms ease;
+}
+
+.game-char--pending {
+  color: #b0b5c0;
+}
+
+.game-char--correct {
+  color: #0f766e;
+}
+
+.game-char--wrong {
+  color: #ffffff;
+  background: #dc2626;
+}
+
+.game-char--space {
+  width: 0.5ch;
+}
+
+.game-char.is-current {
+  color: #172033;
+  box-shadow: inset 0 -3px 0 #0f766e;
+}
+
+.game-char.is-current.game-char--wrong {
+  box-shadow: inset 0 -3px 0 #7f1d1d;
+}
+
+/* Start / results overlay, layered over the canvas stage. */
+.game-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(245, 242, 234, 0.86);
+  backdrop-filter: blur(4px);
+}
+
+.game-overlay[hidden] {
+  display: none;
+}
+
+.game-panel {
+  max-width: 440px;
+  width: 100%;
+  padding: 26px;
+  border: 1px solid #d4cec2;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 20px 50px rgba(63, 72, 88, 0.22);
+  text-align: center;
+}
+
+.game-panel h2 {
+  margin: 0 0 10px;
+  font-size: 1.6rem;
+}
+
+.game-panel p {
+  margin: 0 0 18px;
+  color: #4c5566;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.game-primary {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+  font-weight: 700;
+  padding: 0 22px;
+  min-height: 44px;
+}
+
+.game-primary:hover {
+  background: #0b5f58;
+  border-color: #0b5f58;
+}
+
+.game-panel-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.game-results {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px 26px;
+  margin: 4px 0 22px;
+}
+
+.game-result {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+}
+
+.game-result span {
+  color: #0f766e;
+  font-size: 1.9rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-result label {
+  color: #7a8091;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ---- Responsive / mobile ---- */
+
+@media (max-width: 720px) {
+  .ink-app {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .brand {
+    flex-basis: 100%;
+  }
+
+  .control-wide {
+    flex: 1 1 190px;
+  }
+
+  /* Without an explicit height the flex canvas collapses to nothing once the
+     app stops being a full-height grid — pin a usable drawing area. */
+  .canvas-frame {
+    padding: 12px;
+    min-height: 58vh;
+  }
+
+  .canvas-stage {
+    min-height: 58vh;
+  }
+
+  .translator {
+    flex-basis: 130px;
+  }
+
+  .game-sentence {
+    font-size: 1.2rem;
+  }
+
+  .game-stats {
+    gap: 12px;
+  }
+
+  .game-stat-value {
+    font-size: 1rem;
+  }
+}
+
+/* Coarse-pointer (touch) devices: bigger tap targets regardless of width. */
+@media (pointer: coarse) {
+  button {
+    min-height: 44px;
+  }
+
+  .readout button {
+    min-height: 40px;
+    min-width: 48px;
+  }
+}

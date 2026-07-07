@@ -1,0 +1,93 @@
+(function(){let e=document.createElement(`link`).relList;if(e&&e.supports&&e.supports(`modulepreload`))return;for(let e of document.querySelectorAll(`link[rel="modulepreload"]`))n(e);new MutationObserver(e=>{for(let t of e)if(t.type===`childList`)for(let e of t.addedNodes)e.tagName===`LINK`&&e.rel===`modulepreload`&&n(e)}).observe(document,{childList:!0,subtree:!0});function t(e){let t={};return e.integrity&&(t.integrity=e.integrity),e.referrerPolicy&&(t.referrerPolicy=e.referrerPolicy),e.crossOrigin===`use-credentials`?t.credentials=`include`:e.crossOrigin===`anonymous`?t.credentials=`omit`:t.credentials=`same-origin`,t}function n(e){if(e.ep)return;e.ep=!0;let n=t(e);fetch(e.href,n)}})();var e=e=>e*45*Math.PI/180,t=e=>e*45%360,n=e=>`hsl(${t(e)}, 85%, 50%)`,r=t=>({x:Math.cos(e(t)),y:Math.sin(e(t))}),i=1,a=2,o=3,s=4,c=5,l=6,u=7,d={E:[u],T:[i],A:[l],O:[a],I:[c],N:[o],S:[o,l],R:[c,o],H:[a,s],D:[s,a],L:[o,i],C:[l,s],U:[s,l],M:[u,c],W:[c,u],F:[i,o],G:[o,c],Y:[i,u],P:[u,i],B:[a,c],V:[l,i],K:[s,u],Z:[a,l],J:[l,a],X:[i,c],Q:[o,u]},ee=(e,t)=>e.length<=t.length&&e.every((e,n)=>e===t[n]),f=e=>{let t=[];for(let[n,r]of Object.entries(d))ee(e,r)&&t.push({letter:n,ext:r.slice(e.length),complete:r.length===e.length});return t};Math.cos(3*Math.PI/8);var p=(e,t)=>{let n=Math.abs(e-t)%8;return Math.min(n,8-n)},m=(e,t)=>{let n=e.length,r=t.length,i=Array.from({length:n+1},()=>Array(r+1).fill(0));for(let e=0;e<=n;e+=1)i[e][0]=e;for(let e=0;e<=r;e+=1)i[0][e]=e;for(let a=1;a<=n;a+=1)for(let n=1;n<=r;n+=1){let r=p(e[a-1],t[n-1])/4;i[a][n]=Math.min(i[a-1][n]+1,i[a][n-1]+1,i[a-1][n-1]+r)}return i[n][r]},h=e=>{if(e.length<4)return!1;let t=0;for(let n=1;n<e.length;n+=1)p(e[n-1],e[n])>=3&&(t+=1);return t>=3},g=e=>{if(e.length===0||e.length===1&&e[0]===s)return null;if(h(e))return{kind:`command`,command:`backspace`};let t=null,n=1/0;for(let[r,i]of Object.entries(d)){let a=m(e,i);a<n&&(n=a,t=r)}return t===null?null:{kind:`letter`,letter:t,distance:n}},_=`http://www.w3.org/2000/svg`,v=100,y=14,b=26,x=36,S=(e,t)=>({x1:e.x,y1:e.y,x2:t.x,y2:t.y}),te=(e,t)=>(e+4)%8===t,C=(e,t,n)=>{let r=e.flatMap(e=>[e.x1,e.x2]).concat(t.x),i=e.flatMap(e=>[e.y1,e.y2]).concat(t.y),a=Math.min(...r),o=Math.min(...i),s=Math.max(...r)-a||1,c=Math.max(...i)-o||1,l=document.createElementNS(_,`svg`);l.setAttribute(`class`,`glyph`),l.setAttribute(`viewBox`,`${a-b} ${o-b} ${s+b*2} ${c+b*2}`);for(let t of e){let e=document.createElementNS(_,`line`);e.setAttribute(`x1`,String(t.x1)),e.setAttribute(`y1`,String(t.y1)),e.setAttribute(`x2`,String(t.x2)),e.setAttribute(`y2`,String(t.y2)),e.setAttribute(`stroke`,t.color),e.setAttribute(`stroke-width`,String(t.width)),e.setAttribute(`stroke-linecap`,`round`),l.appendChild(e)}let u=document.createElementNS(_,`circle`);return u.setAttribute(`cx`,String(t.x)),u.setAttribute(`cy`,String(t.y)),u.setAttribute(`r`,String(y*.7)),u.setAttribute(`fill`,n),l.appendChild(u),l},ne=(e,t)=>{let i=[],a={x:0,y:0},o=a;for(let t=0;t<e.length;t+=1){let o=r(e[t]);if(t>0&&te(e[t],e[t-1])){let e={x:-o.y,y:o.x},t={x:a.x+e.x*x,y:a.y+e.y*x};i.push({...S(a,t),color:`rgba(23,32,51,0.16)`,width:y*.45}),a=t}let s={x:a.x+o.x*v,y:a.y+o.y*v};i.push({...S(a,s),color:n(e[t]),width:y}),a=s}return C(i,o,t)},re=e=>{let t=[{x:0,y:0},{x:16,y:100},{x:32,y:0},{x:48,y:100},{x:64,y:0}],r=[];for(let e=1;e<t.length;e+=1){let i=t[e].y>t[e-1].y?2:6;r.push({...S(t[e-1],t[e]),color:n(i),width:y})}return C(r,t[0],e)},w=e=>C([{x1:0,y1:0,x2:100,y2:0,color:`#a39d90`,width:y}],{x:0,y:0},e),ie=(e,t)=>{let n=d[e];return n?ne(n,t):null},T=(e,t,n,r=``)=>{let i=document.createElement(`div`);i.className=`guide-card${r?` ${r}`:``}`,i.appendChild(e);let a=document.createElement(`div`);a.className=`guide-letter`,a.textContent=t,i.appendChild(a);let o=document.createElement(`div`);return o.className=`guide-meta`,o.textContent=n,i.appendChild(o),i},E=e=>{let t=document.createElement(`div`);t.className=`guide-grid`;for(let n of Object.keys(d).sort()){let r=d[n];t.appendChild(T(ne(r,e),n,`${r.length} seg`))}return t.appendChild(T(w(e),`→`,`next char`,`guide-card--command`)),t.appendChild(T(re(e),`⌫`,`scratch out`,`guide-card--command`)),t},D=e=>e.toUpperCase().replace(/[^A-Z ]/g,``).replace(/\s+/g,` `).trim(),O=(e,t)=>{let n=Math.max(0,t);for(;n<e.length&&e[n]===` `;)n+=1;return n},k=(e,t)=>{let n=Math.min(t,e.length-1);for(;n>=0&&e[n]===` `;)--n;return n},A=e=>{let t=e.length>0?e:[``],n=0,r=``,i=[],a=0,o=0,s=0,c=0,l=()=>{r=t[n%t.length],n+=1,i=Array.from(r,()=>`pending`),a=O(r,0)},u=()=>{n=0,o=0,s=0,c=0,l()},d=e=>e>=0&&e<r.length&&r[e]!==` `;return u(),{target:()=>r,statuses:()=>i,cursor:()=>a,correctLetters:()=>o,wrongLetters:()=>s,sentencesDone:()=>c,reset:u,input:e=>{if(!d(a))return{correct:!1,sentenceComplete:!1};let t=e===r[a];return t?(i[a]=`correct`,o+=1):(i[a]=`wrong`,s+=1),a=O(r,a+1),a>=r.length?(c+=1,l(),{correct:t,sentenceComplete:!0}):{correct:t,sentenceComplete:!1}},backspace:()=>{let e=k(r,a-1);e<0||(i[e]===`correct`?o=Math.max(0,o-1):i[e]===`wrong`&&(s=Math.max(0,s-1)),i[e]=`pending`,a=e)}}},ae=60,oe=1,se=5,ce=[`The quick brown fox jumps over the lazy dog`,`Pack my box with five dozen liquor jugs`,`A journey of a thousand miles begins with a single step`,`Practice makes perfect so keep drawing every day`,`She sells sea shells by the sea shore`,`Never put off until tomorrow what you can do today`,`The early bird catches the worm at dawn`,`All that glitters is not gold my friend`,`How vexingly quick daft zebras jump`,`The five boxing wizards jump quickly`,`Actions speak louder than words every time`,`Better late than never but never late is better`],le=e=>{let t=e.slice();for(let e=t.length-1;e>0;--e){let n=Math.floor(Math.random()*(e+1));[t[e],t[n]]=[t[n],t[e]]}return t},ue=()=>A(le(ce).map(D)),de=e=>{let{app:t,hudAnchor:n,stage:r,onClearCanvas:i,onActiveChange:a}=e,o=document.createElement(`section`);o.className=`game-hud`,o.hidden=!0,o.setAttribute(`aria-label`,`Speed Draw status`),o.innerHTML=`
+    <div class="game-stats">
+      <div class="game-stat game-stat--time">
+        <span class="game-stat-label">Time</span>
+        <span class="game-stat-value" data-stat="time">60</span>
+      </div>
+      <div class="game-stat">
+        <span class="game-stat-label">WPM</span>
+        <span class="game-stat-value" data-stat="wpm">0</span>
+      </div>
+      <div class="game-stat">
+        <span class="game-stat-label">Accuracy</span>
+        <span class="game-stat-value" data-stat="acc">100%</span>
+      </div>
+      <div class="game-stat">
+        <span class="game-stat-label">Done</span>
+        <span class="game-stat-value" data-stat="done">0</span>
+      </div>
+      <button class="game-quit" type="button">Quit</button>
+    </div>
+    <div class="game-sentence" data-el="sentence" aria-live="polite"></div>
+  `,n.insertAdjacentElement(`afterend`,o);let s=o.querySelector(`[data-stat="time"]`),c=o.querySelector(`[data-stat="wpm"]`),l=o.querySelector(`[data-stat="acc"]`),u=o.querySelector(`[data-stat="done"]`),d=o.querySelector(`[data-el="sentence"]`),ee=o.querySelector(`.game-quit`),f=document.createElement(`div`);f.className=`game-overlay`,f.hidden=!0,r.appendChild(f);let p=ue(),m=!1,h=0,g=0,_=null,v=()=>{let e=p.correctLetters()+p.wrongLetters();return e===0?1:p.correctLetters()/e},y=()=>{let e=Math.max((Date.now()-g)/6e4,1/6e3);return p.correctLetters()/se/e},b=()=>{let e=p.target(),t=p.statuses(),n=p.cursor();d.replaceChildren();for(let r=0;r<e.length;r+=1){let i=e[r],a=document.createElement(`span`);i===` `?(a.className=`game-char game-char--space`,a.innerHTML=`&nbsp;`):(a.className=`game-char game-char--${t[r]}`,r===n&&a.classList.add(`is-current`),a.textContent=i),d.appendChild(a)}},x=()=>{let e=Math.max(0,(h-Date.now())/1e3);s.textContent=String(Math.ceil(e)),s.classList.toggle(`is-low`,m&&e<=10),c.textContent=String(Math.round(y())),l.textContent=`${Math.round(v()*100)}%`,u.textContent=String(p.sentencesDone())},S=()=>{s.classList.remove(`game-penalty`),s.offsetWidth,s.classList.add(`game-penalty`)},te=()=>{if(m){if(Date.now()>=h){E();return}x()}},C=e=>{m&&(p.input(e).correct||(h-=oe*1e3,S()),b(),x(),Date.now()>=h&&E())},ne=()=>{m&&(p.backspace(),b(),x())},re=e=>{f.innerHTML=e,f.hidden=!1},w=()=>{f.hidden=!0,f.replaceChildren()},ie=()=>{A(!0),m=!1,k(),p=ue(),g=Date.now(),h=g+ae*1e3,b(),x(),re(`
+      <div class="game-panel">
+        <h2>Speed Draw</h2>
+        <p>Draw each letter of the sentence before time runs out. Correct letters
+        advance the cursor; a wrong letter costs <strong>${oe}s</strong>.
+        Spaces are free. You have <strong>${ae} seconds</strong>.</p>
+        <button class="game-primary" type="button" data-action="begin">Start</button>
+      </div>
+    `),f.querySelector(`[data-action="begin"]`)?.addEventListener(`click`,T)},T=()=>{w(),i(),p=ue(),g=Date.now(),h=g+ae*1e3,m=!0,b(),x(),O()},E=()=>{m=!1,k(),s.textContent=`0`;let e=Math.round(v()*100),t=Math.round(y());re(`
+      <div class="game-panel">
+        <h2>Time!</h2>
+        <div class="game-results">
+          <div class="game-result"><span>${t}</span><label>WPM</label></div>
+          <div class="game-result"><span>${p.sentencesDone()}</span><label>Sentences</label></div>
+          <div class="game-result"><span>${p.correctLetters()}</span><label>Correct</label></div>
+          <div class="game-result"><span>${p.wrongLetters()}</span><label>Errors</label></div>
+          <div class="game-result"><span>${e}%</span><label>Accuracy</label></div>
+        </div>
+        <div class="game-panel-actions">
+          <button class="game-primary" type="button" data-action="again">Play again</button>
+          <button type="button" data-action="exit">Done</button>
+        </div>
+      </div>
+    `),f.querySelector(`[data-action="again"]`)?.addEventListener(`click`,T),f.querySelector(`[data-action="exit"]`)?.addEventListener(`click`,D)},D=()=>{m=!1,k(),w(),A(!1)},O=()=>{k(),_=window.setInterval(te,100)},k=()=>{_!==null&&(window.clearInterval(_),_=null)},A=e=>{o.hidden=!e,t.classList.toggle(`is-gaming`,e),a?.(e)};return ee.addEventListener(`click`,D),{active:()=>!o.hidden,input:C,backspace:ne,open:ie,targetLetter:()=>{if(!m)return null;let e=p.target()[p.cursor()];return e&&e!==` `?e:null}}},fe=document.querySelector(`#app`);if(!fe)throw Error(`App root was not found.`);fe.innerHTML=`
+  <main class="ink-app" aria-label="Magic Ink drawing app">
+    <header class="toolbar" aria-label="Drawing tools">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Magic Ink</span>
+      </div>
+      <label class="control">
+        <span>Color</span>
+        <input id="colorPicker" type="color" value="#111827" aria-label="Brush color" />
+      </label>
+      <label class="control control-wide">
+        <span>Size</span>
+        <input id="brushSize" type="range" min="1" max="48" value="8" aria-label="Brush size" />
+        <output id="brushSizeValue" for="brushSize">8</output>
+      </label>
+      <button id="playGame" type="button">Speed Draw</button>
+      <button id="toggleGuide" type="button">Guide</button>
+      <button id="clearCanvas" type="button">Clear</button>
+      <button id="downloadCanvas" type="button">Download</button>
+    </header>
+    <div class="readout" aria-label="Decoded text">
+      <span class="readout-label">Decoded</span>
+      <output id="decoded" class="decoded"></output>
+      <button id="backspace" type="button" aria-label="Delete last letter">⌫</button>
+    </div>
+    <aside id="guidePanel" class="guide-strip" aria-label="Alphabet guide">
+      <div class="translator">
+        <input
+          id="phraseInput"
+          class="phrase-input"
+          type="text"
+          placeholder="Type to preview…"
+          aria-label="Type text to preview in shorthand"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+        />
+        <div id="phrasePreview" class="phrase-preview" aria-hidden="true"></div>
+      </div>
+    </aside>
+    <section class="canvas-frame" aria-label="Drawing area">
+      <div class="canvas-stage">
+        <canvas id="drawingCanvas" aria-label="Blank drawing canvas"></canvas>
+        <div id="radialHints" class="radial-hints" aria-hidden="true"></div>
+      </div>
+    </section>
+  </main>
+`;var pe=document.querySelector(`.canvas-frame`),j=document.querySelector(`#drawingCanvas`),M=document.querySelector(`#colorPicker`),N=document.querySelector(`#brushSize`),me=document.querySelector(`#brushSizeValue`),he=document.querySelector(`#clearCanvas`),ge=document.querySelector(`#downloadCanvas`),P=document.querySelector(`#toggleGuide`),_e=document.querySelector(`#playGame`),ve=document.querySelector(`#backspace`),ye=document.querySelector(`#decoded`),F=document.querySelector(`#guidePanel`),I=document.querySelector(`.canvas-stage`),L=document.querySelector(`#phraseInput`),R=document.querySelector(`#phrasePreview`),z=document.querySelector(`#radialHints`);if(!pe||!j||!I||!M||!N||!me||!he||!ge||!P||!_e||!ve||!ye||!F||!L||!R||!z)throw Error(`A drawing control was not found.`);F.appendChild(E(M.value));var B=``,V=()=>{ye.value=B},be=()=>{if($.active()){$.backspace();return}B=B.slice(0,-1),V()},xe=()=>{let e=g(Y);if(e){if($.active()){e.kind===`command`?$.backspace():$.input(e.letter);return}e.kind===`command`?B=B.slice(0,-1):B+=e.letter,V()}},Se=e=>{F.classList.toggle(`is-collapsed`,!e),P.setAttribute(`aria-pressed`,String(e))},Ce=()=>{let e=L.value.toUpperCase(),t=M.value;R.replaceChildren();for(let n of e){if(n===` `){let e=document.createElement(`span`);e.className=`phrase-space`,R.appendChild(e);continue}let e=ie(n,t),r=document.createElement(`span`);r.className=`phrase-cell`,e?r.appendChild(e):(r.classList.add(`phrase-cell--unknown`),r.textContent=n),R.appendChild(r)}},H=j.getContext(`2d`);if(!H)throw Error(`Canvas 2D rendering is not supported.`);var we=Math.PI/4,Te=6,U=!1,W=null,Ee=window.devicePixelRatio||1,G=[],K=null,De=`rgba(60, 60, 60, 0.14)`,q=M.value,Oe=null,J=null,Y=[],X=!1,ke=e=>{let t=j.getBoundingClientRect();return{x:e.clientX-t.left,y:e.clientY-t.top}},Ae=e=>`hsl(${(e*180/Math.PI%360+360)%360}, 85%, 50%)`,je=e=>{let t=(e*180/Math.PI%360+360)%360;return Math.round(t/45)%8},Z=88,Me=20,Ne=4,Pe=null,Fe=t=>{let r=e(t[0]),i=Math.cos(r)*Z,a=Math.sin(r)*Z,o=n(t[0]),s=t.length>=2;if(s){let r=e(t[1]);i+=Math.cos(r)*Me,a+=Math.sin(r)*Me,o=n(t[1])}return{x:i,y:a,color:o,far:s}},Ie=t=>{z.replaceChildren();let n=$.active()?$.targetLetter():null,r=g(t),i=r?.kind===`letter`?r.letter:null,a=!1;for(let{letter:e,ext:r}of f(t)){let{x:o,y:s,color:c,far:l}=Fe(t.concat(r)),u=document.createElement(`span`);e===i?(u.className=`radial-spoke radial-spoke--selected`,u.style.background=c,a=!0):(u.className=l?`radial-spoke radial-spoke--far`:`radial-spoke`,u.style.color=c),e===n&&u.classList.add(`radial-spoke--target`),u.textContent=e,u.style.setProperty(`--x`,`${o}px`),u.style.setProperty(`--y`,`${s}px`),z.appendChild(u)}if(i&&!a&&d[i]){let{x:e,y:t,color:r}=Fe(d[i]),a=document.createElement(`span`);a.className=`radial-spoke radial-spoke--selected`,a.style.background=r,i===n&&a.classList.add(`radial-spoke--target`),a.textContent=i,a.style.setProperty(`--x`,`${e}px`),a.style.setProperty(`--y`,`${t}px`),z.appendChild(a)}let o=document.createElement(`span`);if(o.className=`radial-spoke radial-spoke--advance`,o.textContent=`→`,o.style.setProperty(`--x`,`${Math.cos(e(0))*Z}px`),o.style.setProperty(`--y`,`${Math.sin(e(0))*Z}px`),z.appendChild(o),t.length===0){let t=document.createElement(`span`);t.className=`radial-spoke radial-spoke--noop`,t.style.setProperty(`--x`,`${Math.cos(e(Ne))*Z}px`),t.style.setProperty(`--y`,`${Math.sin(e(Ne))*Z}px`),z.appendChild(t)}},Q=null,Le=()=>{if(!Q)return;let e=Y.join(`,`);e!==Pe&&(Ie(Y),Pe=e),z.style.left=`${Q.x}px`,z.style.top=`${Q.y}px`,z.classList.add(`is-visible`)},Re=()=>{z.classList.remove(`is-visible`),Pe=null,Q=null},ze=()=>{H.lineCap=`round`,H.lineJoin=`round`,H.strokeStyle=q,H.lineWidth=Number(N.value)},Be=()=>{H.save(),H.globalCompositeOperation=`destination-over`,H.fillStyle=`#ffffff`,H.fillRect(0,0,j.width/Ee,j.height/Ee),H.restore()},Ve=e=>{let{points:t,colors:n,size:r}=e;H.lineCap=`round`,H.lineJoin=`round`,H.lineWidth=r,H.beginPath(),H.fillStyle=n[0],H.arc(t[0].x,t[0].y,r/2,0,Math.PI*2),H.fill();for(let e=1;e<t.length;e+=1)H.beginPath(),H.strokeStyle=n[e],H.moveTo(t[e-1].x,t[e-1].y),H.lineTo(t[e].x,t[e].y),H.stroke()},He=()=>{H.save(),H.setTransform(1,0,0,1,0,0),H.clearRect(0,0,j.width,j.height),H.restore()},Ue=()=>{He();for(let e of G)Ve(e);Be()},We=()=>{let e=j.getBoundingClientRect(),t=e.width,n=e.height,r=window.devicePixelRatio||1,i=Math.max(1,Math.round(t*r)),a=Math.max(1,Math.round(n*r));i===j.width&&a===j.height||(j.width=i,j.height=a,Ee=i/t,H.setTransform(i/t,0,0,a/n,0,0),Ue())},Ge=(e,t)=>{ze(),H.beginPath(),H.moveTo(e.x,e.y),H.lineTo(t.x,t.y),H.stroke()},Ke=e=>{ze(),H.beginPath(),H.arc(e.x,e.y,Number(N.value)/2,0,Math.PI*2),H.fillStyle=q,H.fill()},qe=e=>{U=!0,j.setPointerCapture(e.pointerId),$.active()&&Qe(),q=M.value,Oe=null,Y=[],X=!1,W=ke(e),J=W,Q=W,K={size:Number(N.value),points:[W],colors:[q]},G.push(K),Ke(W),Le()},Je=e=>{if(!U||!W||!K)return;let t=ke(e);if(J){let e=t.x-J.x,n=t.y-J.y;if(Math.hypot(e,n)>=Te){let r=Math.atan2(n,e),i=je(r);if(i===0)X||(xe(),Y=[],X=!0,q=De);else if(X)X=!1,Y=[i],q=Ae(r),Q=t;else if(Y.length===0)Y=[i],q=Ae(r);else{let e=Math.abs(r-(Oe??r));e>Math.PI&&(e=2*Math.PI-e),e>we&&(Y.push(i),q=Ae(r))}Oe=r,J=t}}Ge(W,t),K.points.push(t),K.colors.push(q),W=t,Le()},Ye=e=>{U=!1,Re(),j.hasPointerCapture(e.pointerId)&&j.releasePointerCapture(e.pointerId),X||xe(),Y=[],X=!1,K=null,W=null},Xe=()=>{G.length=0,K=null,Y=[],X=!1,B=``,V(),Ue()},Ze=()=>{Be();let e=document.createElement(`a`);e.download=`magic-ink-drawing.png`,e.href=j.toDataURL(`image/png`),e.click()},Qe=()=>{G.length=0,K=null,He(),Be()},$=de({app:document.querySelector(`.ink-app`),hudAnchor:document.querySelector(`.readout`),stage:I,onClearCanvas:Qe});_e.addEventListener(`click`,()=>$.open()),N.addEventListener(`input`,()=>{me.value=N.value}),P.addEventListener(`click`,()=>{Se(F.classList.contains(`is-collapsed`))}),ve.addEventListener(`click`,be),L.addEventListener(`input`,Ce),he.addEventListener(`click`,Xe),ge.addEventListener(`click`,Ze),j.addEventListener(`pointerdown`,qe),j.addEventListener(`pointermove`,Je),j.addEventListener(`pointerup`,Ye),j.addEventListener(`pointercancel`,Ye),Se(!window.matchMedia(`(max-width: 720px)`).matches),V(),new ResizeObserver(We).observe(I),We();var $e=()=>{window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener(`change`,()=>{We(),$e()},{once:!0})};$e();
