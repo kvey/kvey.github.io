@@ -1,6 +1,7 @@
 import './style.css';
 import {
   recognizeWord,
+  strokeToWord,
   reachableLetters,
   dirAngle,
   dirColor,
@@ -204,10 +205,20 @@ if (!context) {
   throw new Error('Canvas 2D rendering is not supported.');
 }
 
+// Touch/pen ("coarse") pointers are shakier and less precise than a mouse, so
+// they get more generous jitter and gesture thresholds.
+const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+
 // Change the ink color whenever the drawing direction turns by more than this.
 const TURN_THRESHOLD = Math.PI / 4; // 45 degrees
 // Ignore tiny pointer jitter when measuring direction (CSS pixels).
-const MIN_SEGMENT = 6;
+const MIN_SEGMENT = coarsePointer ? 8 : 6;
+// The rightward "advance to next character" gesture must be a SUSTAINED glide,
+// not a single stray eastward sample — otherwise a finger drawing a slightly
+// flat E/T/P (all diagonals that border due-east) gets read as an advance and
+// the letter is lost. This is how much continuous rightward travel (CSS pixels)
+// is required before the current character is committed and a new one begins.
+const ADVANCE_TRAVEL = coarsePointer ? 26 : 20;
 
 let isDrawing = false;
 let lastPoint: Point | null = null;
@@ -227,6 +238,15 @@ let lastDirection: number | null = null;
 let directionAnchor: Point | null = null;
 // The sequence of dominant directions drawn so far in the CURRENT character.
 let currentWord: number[] = [];
+// The raw points of the current character (excluding the rightward connector
+// glide between characters). This is fed through the same smoothing/averaging
+// recognizer the offline path uses — `strokeToWord` — so a shaky finger stroke
+// self-corrects instead of being binned sample-by-sample.
+let charPoints: Point[] = [];
+// Accumulated sustained rightward travel toward an "advance" gesture (CSS px).
+// Resets to 0 the moment motion stops heading due-east, so a brief eastward
+// wobble inside a letter (or a rounded corner) never reaches ADVANCE_TRAVEL.
+let eastRun = 0;
 // True while moving rightward between characters (not part of any letter).
 let traveling = false;
 
@@ -496,9 +516,11 @@ const startDrawing = (event: PointerEvent) => {
   currentColor = colorPicker.value;
   lastDirection = null;
   currentWord = [];
+  eastRun = 0;
   traveling = false;
 
   lastPoint = getCanvasPoint(event);
+  charPoints = [lastPoint];
   directionAnchor = lastPoint;
   // Anchor the hint tree where this character begins; it stays put until the
   // next character starts.
@@ -533,38 +555,55 @@ const continueDrawing = (event: PointerEvent) => {
       const direction = Math.atan2(dy, dx);
       const index = directionIndex(direction);
 
-      if (index === EAST) {
-        // Rightward motion = submit the current character, begin a new one.
-        if (!traveling) {
+      if (traveling) {
+        // Gliding rightward toward the next character. The first clearly
+        // non-eastward motion starts it; until then, stay in the connector.
+        if (index !== EAST) {
+          traveling = false;
+          eastRun = 0;
+          // Anchor the new character's shape at the connector's end and treat
+          // this segment as its opening stroke (colored, not the faint gray).
+          charPoints = [directionAnchor, currentPoint];
+          currentWord = strokeToWord(charPoints);
+          currentColor = colorForDirection(direction);
+          lastDirection = direction;
+          // Re-anchor the hint tree where this new character begins.
+          radialAnchor = currentPoint;
+        }
+      } else if (index === EAST) {
+        // Rightward travel accrues toward an advance. A single stray eastward
+        // sample isn't enough — only a sustained glide past ADVANCE_TRAVEL
+        // commits the character. These connector points are deliberately NOT
+        // added to charPoints, so the letter's recognized shape excludes the
+        // glide toward the next character.
+        eastRun += dx;
+        if (eastRun >= ADVANCE_TRAVEL) {
           commitCharacter();
+          charPoints = [];
           currentWord = [];
           traveling = true;
           currentColor = SEPARATOR_COLOR;
         }
-      } else if (traveling) {
-        // First segment of the next character after advancing — re-anchor the
-        // hint tree here so it stays fixed for this new character.
-        traveling = false;
-        currentWord = [index];
-        currentColor = colorForDirection(direction);
-        radialAnchor = currentPoint;
-      } else if (currentWord.length === 0) {
-        // First segment of the very first character.
-        currentWord = [index];
-        currentColor = colorForDirection(direction);
       } else {
+        // Ordinary letter motion. Feed the accumulated character points through
+        // the smoothing recognizer so the live word (used for both the hints and
+        // the eventual commit) is the robust one, not a raw per-sample binning.
+        eastRun = 0;
+        charPoints.push(currentPoint);
+        currentWord = strokeToWord(charPoints);
+
+        // Recolor the ink on a real turn, same rule as before.
         const previous = lastDirection ?? direction;
         let turn = Math.abs(direction - previous);
         if (turn > Math.PI) {
           turn = 2 * Math.PI - turn;
         }
-        if (turn > TURN_THRESHOLD) {
-          currentWord.push(index);
+        if (lastDirection === null || turn > TURN_THRESHOLD) {
           currentColor = colorForDirection(direction);
         }
+        lastDirection = direction;
       }
 
-      lastDirection = direction;
       directionAnchor = currentPoint;
     }
   }
@@ -593,6 +632,8 @@ const stopDrawing = (event: PointerEvent) => {
   }
 
   currentWord = [];
+  charPoints = [];
+  eastRun = 0;
   traveling = false;
   currentStroke = null;
   lastPoint = null;
@@ -602,6 +643,8 @@ const clearDrawing = () => {
   strokes.length = 0;
   currentStroke = null;
   currentWord = [];
+  charPoints = [];
+  eastRun = 0;
   traveling = false;
   decodedText = '';
   renderDecoded();
