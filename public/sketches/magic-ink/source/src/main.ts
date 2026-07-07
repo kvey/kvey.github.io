@@ -223,6 +223,10 @@ const ADVANCE_TRAVEL = coarsePointer ? 26 : 20;
 let isDrawing = false;
 let lastPoint: Point | null = null;
 let backingScale = window.devicePixelRatio || 1;
+// True while the in-progress stroke is being drawn with a finger. Touch strokes
+// get the radial hints shifted off the contact point so the thumb doesn't cover
+// them (see TOUCH_HINT_OFFSET_* / showRadialHints).
+let activePointerIsTouch = false;
 
 // Every completed stroke is retained here; the canvas is a view of this list.
 const strokes: Stroke[] = [];
@@ -281,6 +285,13 @@ const directionIndex = (angle: number): number => {
 // letter stays clearly radial to its OWN first-stroke hint, not a neighbor.
 const RADIAL_R1 = 88;
 const RADIAL_R2 = 20;
+// On touch, the anchor sits directly under the drawing thumb, so the hint tree
+// would be hidden behind it. Shift the whole tree up and to the left — by about
+// a full menu radius each way — so it clears the finger entirely and reads as a
+// heads-up map above the stroke. (A right thumb occludes down-and-right of the
+// contact point, so up-left is the direction that uncovers it.)
+const TOUCH_HINT_OFFSET_X = -RADIAL_R1;
+const TOUCH_HINT_OFFSET_Y = -(RADIAL_R1 + 24);
 // Directly-left direction (index 4). A lone leftward stroke is reserved as a
 // no-op, so it gets an empty-circle hint rather than a letter.
 const WEST = 4;
@@ -391,8 +402,10 @@ const showRadialHints = () => {
     rebuildRadialChips(currentWord);
     renderedWordKey = key;
   }
-  radialEl.style.left = `${radialAnchor.x}px`;
-  radialEl.style.top = `${radialAnchor.y}px`;
+  const offsetX = activePointerIsTouch ? TOUCH_HINT_OFFSET_X : 0;
+  const offsetY = activePointerIsTouch ? TOUCH_HINT_OFFSET_Y : 0;
+  radialEl.style.left = `${radialAnchor.x + offsetX}px`;
+  radialEl.style.top = `${radialAnchor.y + offsetY}px`;
   radialEl.classList.add('is-visible');
 };
 
@@ -504,6 +517,7 @@ const startDrawing = (event: PointerEvent) => {
   // gesture on the surrounding page while a stroke is in progress.
   event.preventDefault();
   isDrawing = true;
+  activePointerIsTouch = event.pointerType === 'touch';
   canvas.setPointerCapture(event.pointerId);
 
   // In Speed Draw, each pen stroke gets a fresh surface so glyphs don't pile up.
