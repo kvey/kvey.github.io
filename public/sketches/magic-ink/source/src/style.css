@@ -51,6 +51,21 @@ button:active {
   background:
     linear-gradient(135deg, rgba(89, 107, 130, 0.08), transparent 32%),
     #f5f2ea;
+  /* Drawing means long presses and drags all over the surface. On iOS those
+     would otherwise trigger text selection, the callout menu ("Copy" / "Save
+     Image"), the selection magnifier, and grey tap highlights. Suppress them
+     app-wide; text fields opt back in below. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Keep real text inputs (and any explicitly selectable text) usable. */
+.ink-app input,
+.ink-app textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
 }
 
 .toolbar {
@@ -144,6 +159,11 @@ canvas {
   height: 100%;
   cursor: crosshair;
   touch-action: none;
+  /* A long press on a <canvas> in iOS Safari otherwise offers "Save Image" and
+     fires the selection magnifier — kill both on the drawing surface itself. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Radial hints around the cursor while drawing */

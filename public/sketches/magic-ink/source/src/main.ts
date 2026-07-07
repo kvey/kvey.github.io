@@ -480,6 +480,9 @@ const drawDot = (point: Point) => {
 };
 
 const startDrawing = (event: PointerEvent) => {
+  // Stop iOS from treating the press-and-hold as a text selection / callout
+  // gesture on the surrounding page while a stroke is in progress.
+  event.preventDefault();
   isDrawing = true;
   canvas.setPointerCapture(event.pointerId);
 
@@ -646,10 +649,12 @@ phraseInput.addEventListener('input', renderPhrase);
 
 clearCanvas.addEventListener('click', clearDrawing);
 downloadCanvas.addEventListener('click', downloadDrawing);
-canvas.addEventListener('pointerdown', startDrawing);
+canvas.addEventListener('pointerdown', startDrawing, { passive: false });
 canvas.addEventListener('pointermove', continueDrawing);
 canvas.addEventListener('pointerup', stopDrawing);
 canvas.addEventListener('pointercancel', stopDrawing);
+// Long-press on the canvas (iOS especially) pops the callout menu — block it.
+canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
 // Default the guide open on desktop, but collapsed on small/mobile screens
 // where it would otherwise crowd out the drawing area.
